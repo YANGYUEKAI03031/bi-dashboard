@@ -1,0 +1,312 @@
+/* File: e:\bi-dashboard\frontend\bi-dashboard\src\pages\NodeAnalysisModal.css */
+
+.node-analysis-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.node-analysis-modal-content {
+  width: 90%;
+  max-width: 1400px;
+  height: 85%;
+  max-height: 900px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  color: #333;
+  background-color: #eee;
+}
+
+.modal-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* NodePalette 样式调整 */
+.node-palette {
+  width: 280px;
+  background-color: #f8f9fa;
+  border-right: 1px solid #ddd;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.palette-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.palette-header p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.node-types {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.node-type-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: grab;
+  transition: all 0.2s ease;
+}
+
+.node-type-item:hover {
+  border-color: #007bff;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.15);
+}
+
+.node-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-right: 12px;
+  color: white;
+}
+
+.node-info {
+  flex: 1;
+}
+
+.node-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.node-description {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Canvas 容器样式 */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* NodeCanvas 样式调整 */
+.node-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-color: #fafafa;
+  overflow: auto;
+}
+
+.canvas-node {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  cursor: move;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.canvas-node:hover {
+  border-color: #007bff;
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.2);
+}
+
+.canvas-node.selected {
+  border-color: #28a745;
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.3);
+}
+
+.canvas-node.connecting {
+  border-color: #ffc107;
+  box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.3);
+}
+
+.node-content {
+  font-size: 20px;
+}
+
+.node-label {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.connections-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.connection-hint {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #007bff;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  background-color: #f5f5f5;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-info {
+  font-size: 14px;
+  color: #666;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.analyze-btn,
+.execute-btn,
+.save-btn,
+.cancel-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.analyze-btn {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.analyze-btn:hover:not(:disabled) {
+  background-color: #138496;
+}
+
+.analyze-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.execute-btn {
+  background-color: #007bff;
+  color: white;
+}
+
+.execute-btn:hover {
+  background-color: #0056b3;
+}
+
+.save-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+.save-btn:hover {
+  background-color: #218838;
+}
+
+.cancel-btn {
+  background-color: #6c757d;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background-color: #545b62;
+}
+
+/* 滚动条样式 */
+.node-palette::-webkit-scrollbar {
+  width: 6px;
+}
+
+.node-palette::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.node-palette::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.node-palette::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
