@@ -1,141 +1,111 @@
-// frontend/bi-dashboard/src/components/NodeConfigModal/NodeConfigModal.tsx
+// src/components/NodeConfigModal/NodeConfigModal.tsx
+
 import React, { useState, useEffect } from 'react';
-import { DataNodeConfig, DataFilterConfig } from '../NodeConfig';
 import './NodeConfigModal.css';
 
+// 定义配置接口
 interface NodeConfig {
-  id: string;
-  type: string;
-  name: string;
-  description?: string;
   [key: string]: any;
 }
 
+// 定义节点接口（如果需要）
+interface Node {
+  id: string;
+  type: string;
+  config: NodeConfig;
+  // 其他节点属性...
+}
+
+// 定义组件属性接口
 interface NodeConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  node: NodeConfig | null;
+  config?: NodeConfig; // 改为可选
   onSave: (config: NodeConfig) => void;
+  // 可选：添加 node 属性
+  node?: Node | null; // 修改为接受 null 值
 }
 
 const NodeConfigModal: React.FC<NodeConfigModalProps> = ({ 
   isOpen, 
   onClose, 
-  node, 
-  onSave 
+  config: externalConfig, // 重命名外部传入的config
+  onSave,
+  node // 接收 node 属性
 }) => {
-  const [config, setConfig] = useState<NodeConfig>({ 
-    id: '', 
-    type: '', 
-    name: '',
-    description: ''
-  });
+  // 优先使用 node.config，如果没有则使用外部传入的 config
+  const initialConfig = node?.config || externalConfig || {};
+  const [currentConfig, setCurrentConfig] = useState<NodeConfig>(initialConfig);
 
+  // 当 node 或 externalConfig 变化时更新 currentConfig
   useEffect(() => {
-    if (node) {
-      setConfig({ ...node });
-    }
-  }, [node]);
+    const newConfig = node?.config || externalConfig || {};
+    setCurrentConfig(newConfig);
+  }, [node, externalConfig]);
 
-  if (!isOpen || !node) return null;
+  // 处理输入变化
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    setCurrentConfig((prev: NodeConfig) => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
+  // 处理保存操作
   const handleSave = () => {
-    // 确保保存时包含节点的 ID
-    onSave({ ...config, id: node.id });
+    onSave(currentConfig);
     onClose();
   };
 
-  const handleConfigChange = (newConfig: any) => {
-    setConfig({ ...config, ...newConfig });
+  // 处理取消操作
+  const handleCancel = () => {
+    onClose();
   };
 
-  const renderConfigForm = () => {
-    switch (node.type) {
-      case 'data_source':
-        return (
-          <DataNodeConfig 
-            config={config}
-            onChange={handleConfigChange}
-          />
-        );
-      
-      case 'data_filter':
-        return (
-          <DataFilterConfig 
-            config={config}
-            onChange={handleConfigChange}
-            // 可以从外部传入可用的表列表
-            availableTables={['pinjia', 'users', 'orders', 'products']}
-          />
-        );
-
-      default:
-        return (
-          <div className="config-section">
-            <h3>基础配置</h3>
-            <div className="form-group">
-              <label>节点名称:</label>
-              <input
-                type="text"
-                value={config.name || ''}
-                onChange={(e) => setConfig({...config, name: e.target.value})}
-                placeholder="输入节点名称"
-              />
-            </div>
-            <div className="form-group">
-              <label>描述:</label>
-              <textarea
-                value={config.description || ''}
-                onChange={(e) => setConfig({...config, description: e.target.value})}
-                placeholder="节点功能描述"
-                rows={3}
-              />
-            </div>
-          </div>
-        );
-    }
-  };
+  // 如果模态框未打开，返回 null
+  if (!isOpen) return null;
 
   return (
-    <div className="node-config-modal-overlay">
-      <div className="node-config-modal-content">
+    <div className="modal-overlay">
+      <div className="modal-content">
         <div className="modal-header">
-          <h2>配置节点 - {getNodeTypeDisplayName(node.type)}</h2>
-          <button className="close-button" onClick={onClose}>×</button>
+          <h3>节点配置</h3>
+          <button onClick={handleCancel} className="close-button">×</button>
         </div>
         
         <div className="modal-body">
-          <div className="config-form">
-            {renderConfigForm()}
-          </div>
+          {/* 配置表单 */}
+          <form>
+            {/* 动态生成配置项 */}
+            {Object.keys(currentConfig).map(key => (
+              <div key={key} className="form-group">
+                <label htmlFor={key}>{key}</label>
+                <input
+                  type="text"
+                  id={key}
+                  name={key}
+                  value={currentConfig[key]}
+                  onChange={handleChange}
+                  className="config-input"
+                />
+              </div>
+            ))}
+          </form>
         </div>
         
         <div className="modal-footer">
-          <button className="cancel-btn" onClick={onClose}>
+          <button onClick={handleCancel} className="cancel-button">
             取消
           </button>
-          <button className="save-btn" onClick={handleSave}>
-            保存配置
+          <button onClick={handleSave} className="save-button">
+            保存
           </button>
         </div>
       </div>
     </div>
   );
-};
-
-// 辅助函数
-const getNodeTypeDisplayName = (nodeType: string): string => {
-  const names: Record<string, string> = {
-    'data_source': '数据源',
-    'data_filter': '数据筛选',
-    // 暂时注释掉其他节点类型
-    // 'data_cleaning': '数据清洗',
-    // 'feature_engineering': '特征工程',
-    // 'statistical_analysis': '统计分析',
-    // 'ml_prediction': '机器学习预测',
-    // 'data_visualization': '数据可视化'
-  };
-  return names[nodeType] || nodeType;
 };
 
 export default NodeConfigModal;

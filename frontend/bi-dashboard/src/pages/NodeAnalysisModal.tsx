@@ -49,9 +49,10 @@ const NodeAnalysisModal: React.FC<NodeAnalysisModalProps> = ({
         <div className="modal-body">
           {/* 使用现有的NodePalette组件 */}
           <NodePalette 
-            onNodeAdd={(nodeType, position) => {
-              console.log('添加节点:', nodeType, position);
-              // 这里可以通过ref或其他方式传递给NodeCanvas
+            onNodeAdd={(nodeType: string) => {
+              console.log('添加节点:', nodeType);
+              // 注意：NodePalette 的 onNodeAdd 回调只接受 nodeType 参数
+              // 如果需要位置信息，需要通过其他方式获取
             }}
           />
           

@@ -50,7 +50,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({ onNodeSelect, onNodeConf
   // 处理从调色板拖拽添加节点
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const nodeType = e.dataTransfer.getData('nodeType');
+    const nodeType = e.dataTransfer.getData('application/reactflow');
     
     if (nodeType && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -77,6 +77,7 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({ onNodeSelect, onNodeConf
     setNodes(prev => [...prev, newNode]);
   };
 
+  // 节点鼠标事件处理
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
     if (!canvasRef.current) return;
@@ -94,6 +95,12 @@ export const NodeCanvas: React.FC<NodeCanvasProps> = ({ onNodeSelect, onNodeConf
         connectionId: null
       });
       setSelectedNode(nodeId);
+      return;
+    }
+    
+    // 如果正在连接状态，完成连接
+    if (connectingNode) {
+      completeConnection(nodeId);
       return;
     }
     

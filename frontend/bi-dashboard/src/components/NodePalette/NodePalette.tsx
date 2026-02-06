@@ -1,59 +1,68 @@
-// frontend/bi-dashboard/src/components/NodePalette/NodePalette.tsx
 import React from 'react';
 import './NodePalette.css';
 
 interface NodeType {
-  id: string;
+  type: string;
   name: string;
   icon: string;
-  description: string;
   color: string;
+  description: string;
 }
 
-// 只保留数据源节点
+interface NodePaletteProps {
+  onNodeAdd: (nodeType: string) => void;
+}
+
 const NODE_TYPES: NodeType[] = [
   {
-    id: 'data_source',
+    type: 'data_source',
     name: '数据源',
+    icon: '🗄️',
+    color: '#4CAF50',
+    description: '连接数据库获取数据'
+  },
+  {
+    type: 'processing',
+    name: '数据处理',
+    icon: '⚙️',
+    color: '#2196F3',
+    description: '对数据进行筛选、聚合、转换等处理'
+  },
+  {
+    type: 'visualization',
+    name: '数据可视化',
     icon: '📊',
-    description: '从数据库获取原始数据',
-    color: '#667eea'
+    color: '#FF9800',
+    description: '创建图表和报表'
   }
 ];
 
-interface NodePaletteProps {
-  onNodeAdd?: (nodeType: string, position: { x: number; y: number }) => void;
-}
-
 export const NodePalette: React.FC<NodePaletteProps> = ({ onNodeAdd }) => {
-  const handleDragStart = (e: React.DragEvent, nodeType: string) => {
-    e.dataTransfer.setData('nodeType', nodeType);
+  const handleNodeDragStart = (event: React.DragEvent, nodeType: NodeType) => {
+    event.dataTransfer.setData('application/reactflow', nodeType.type);
+    event.dataTransfer.effectAllowed = 'move';
   };
 
   return (
     <div className="node-palette">
-      <div className="palette-header">
-        <h3>节点库</h3>
-        <p>拖拽节点到画布中</p>
-      </div>
-      
+      <h3>节点库</h3>
       <div className="node-types">
         {NODE_TYPES.map((nodeType) => (
           <div
-            key={nodeType.id}
+            key={nodeType.type}
             className="node-type-item"
             draggable
-            onDragStart={(e) => handleDragStart(e, nodeType.id)}
+            onDragStart={(e) => handleNodeDragStart(e, nodeType)}
           >
             <div 
-              className="node-icon"
+              className="node-icon" 
               style={{ backgroundColor: nodeType.color }}
             >
               {nodeType.icon}
             </div>
             <div className="node-info">
-              <div className="node-name">{nodeType.name}</div>
-              <div className="node-description">{nodeType.description}</div>
+              <h4>{nodeType.name}</h4>
+              <p>{nodeType.description}</p>
             </div>
           </div>
         ))}
