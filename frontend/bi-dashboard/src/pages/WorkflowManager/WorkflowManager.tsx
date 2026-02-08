@@ -1,8 +1,6 @@
 // File: e:\bi-dashboard\frontend\bi-dashboard\src\pages\WorkflowManager\WorkflowManager.tsx
 
 import React, { useState, useEffect } from 'react';
-import { NodeCanvas } from '../../components/NodeCanvas/NodeCanvas';
-import { NodePalette } from '../../components/NodePalette/NodePalette';
 import './WorkflowManager.css';
 
 export const WorkflowManager: React.FC = () => {
@@ -18,13 +16,7 @@ export const WorkflowManager: React.FC = () => {
 
   return (
     <div className="workflow-manager">
-      <div className="sidebar">
-        <NodePalette onNodeAdd={handleNodeAdd} />
-      </div>
-      <div className="main-content">
-        {/* 移除不兼容的 props，使用 NodeCanvas 组件的默认 props */}
-        <NodeCanvas />
-      </div>
+      
     </div>
   );
 };

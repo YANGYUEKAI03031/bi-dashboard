@@ -1,48 +1,85 @@
-// src/pages/AnalyticsPage.tsx
-import React from 'react';
-import { Sidebar } from '../components/navigation/Sidebar';
+import React, { useState } from 'react';
+import { ChartCard } from '../components/charts/ChartCard/ChartCard';
 import './AnalyticsPage.css';
 
-export const AnalyticsPage: React.FC = () => {
+// 定义统一的图表配置接口
+interface ChartConfig {
+  id?: string;
+  type: string;
+  title: string;
+  xAxis?: { field: string; title: string };
+  yAxis?: { field: string; title: string };
+  series: any[];
+  dataBinding: any;
+  styling: any;
+}
+
+export const AnalyticsPage: React.FC = () => { // 改为命名导出
+  const [charts, setCharts] = useState<ChartConfig[]>([
+    {
+      id: 'chart1',
+      type: 'bar',
+      title: '销售趋势图',
+      xAxis: { field: 'month', title: '月份' },
+      yAxis: { field: 'sales', title: '销售额' },
+      series: [{ name: '销售额', type: 'bar', dataField: 'sales' }],
+      dataBinding: {
+        dataSource: 'mysql_db',
+        query: 'SELECT month, sales FROM sales_data'
+      },
+      styling: {
+        colors: ['#3b82f6'],
+        theme: 'light',
+        showLegend: true,
+        showTooltip: true
+      }
+    },
+    {
+      id: 'chart2',
+      type: 'pie',
+      title: '用户分布图',
+      series: [{ name: '用户数', type: 'pie', dataField: 'count' }],
+      dataBinding: {
+        dataSource: 'mysql_db',
+        query: 'SELECT region, count FROM user_distribution'
+      },
+      styling: {
+        colors: ['#ef4444', '#10b981', '#f59e0b'],
+        theme: 'light',
+        showLegend: true,
+        showTooltip: true
+      }
+    }
+  ]);
+
+  const handleChartConfigChange = (index: number, newConfig: ChartConfig) => {
+    setCharts(prev => {
+      const updated = [...prev];
+      updated[index] = newConfig;
+      return updated;
+    });
+  };
+
   return (
-    <div className="dashboard-layout">
-      <Sidebar />
-      <main className="dashboard-main">
-        <div className="dashboard-content">
-          <h2>数据分析</h2>
-          <p>深入分析业务数据，发现洞察和趋势</p>
-          
-          <div className="analytics-section">
-            <div className="chart-container">
-              <h3>销售趋势图</h3>
-              <div className="chart-placeholder">
-                [图表区域 - 这里可以集成 Chart.js 或其他图表库]
-              </div>
-            </div>
-            <div className="chart-container">
-              <h3>用户分布图</h3>
-              <div className="chart-placeholder">
-                [图表区域 - 这里可以集成 Chart.js 或其他图表库]
-              </div>
-            </div>
+    <div className="analytics-page">
+      <div className="page-header">
+        <h1>数据分析</h1>
+        <p>创建和管理您的数据可视化图表</p>
+      </div>
+      
+      <div className="charts-grid">
+        {charts.map((chart, index) => (
+          <div key={chart.id || index} className="chart-container">
+            <ChartCard
+              config={chart}
+              onConfigChange={(newConfig) => handleChartConfigChange(index, newConfig)}
+              editable={true}
+              width={600}
+              height={400}
+            />
           </div>
-          
-          <div className="data-summary">
-            <div className="summary-card">
-              <h4>总销售额</h4>
-              <p className="summary-value">¥1,234,567</p>
-            </div>
-            <div className="summary-card">
-              <h4>用户增长率</h4>
-              <p className="summary-value">+15.3%</p>
-            </div>
-            <div className="summary-card">
-              <h4>转化率</h4>
-              <p className="summary-value">3.2%</p>
-            </div>
-          </div>
-        </div>
-      </main>
+        ))}
+      </div>
     </div>
   );
 };

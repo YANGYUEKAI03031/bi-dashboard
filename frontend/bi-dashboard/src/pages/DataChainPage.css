@@ -1,190 +1,58 @@
-/* frontend/bi-dashboard/src/pages/DataChainPage.css */
+/* src/pages/DataChainPage.css */
 .data-chain-page {
   padding: 20px;
-  background-color: #f5f5f5;
-  min-height: 100vh;
-}
-
-.page-header {
-  margin-bottom: 30px;
 }
 
 .page-header h1 {
+  margin: 0 0 8px 0;
   color: #333;
   font-size: 28px;
-  margin-bottom: 10px;
 }
 
 .page-header p {
-  color: #666;
-  font-size: 16px;
-}
-
-.data-chain-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 20px;
-}
-
-.panel {
-  background: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.panel h2 {
-  margin-top: 0;
-  color: #333;
-  font-size: 20px;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 10px;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-  color: #666;
-}
-
-.table-list {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.table-item {
-  padding: 12px;
-  border: 1px solid #eee;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.table-item:hover {
-  background-color: #f8f9fa;
-  border-color: #007bff;
-}
-
-.table-item.selected {
-  background-color: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-
-.table-name {
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-.table-info {
-  display: flex;
-  gap: 10px;
-  font-size: 14px;
-  color: #666;
-}
-
-.table-item.selected .table-info {
-  color: rgba(255,255,255,0.8);
-}
-
-.data-preview {
-  height: 100%;
-}
-
-.preview-header h3 {
-  margin-top: 0;
-  color: #333;
-}
-
-.preview-content {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table th,
-.data-table td {
-  padding: 8px;
-  text-align: left;
-  border-bottom: 1px solid #ddd;
-}
-
-.data-table th {
-  background-color: #f8f9fa;
-  font-weight: bold;
-}
-
-.no-data,
-.no-selection {
-  text-align: center;
-  padding: 40px;
-  color: #999;
-  font-style: italic;
-}
-
-.analysis-description {
-  margin: 20px 0;
-  padding: 15px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  border-left: 4px solid #007bff;
-}
-
-.analysis-description p {
   margin: 0;
   color: #666;
-  line-height: 1.5;
 }
 
-.analysis-actions {
+.chain-builder {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 20px;
+  height: 600px;
 }
 
-.primary-button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 12px 20px;
+.toolbox {
+  width: 200px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.toolbox h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.tool-item {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #f5f5f5;
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.2s;
+  cursor: grab;
+  text-align: center;
 }
 
-.primary-button:hover:not(:disabled) {
-  background-color: #0056b3;
+.canvas-area {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.primary-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.secondary-button {
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.2s;
-}
-
-.secondary-button:hover {
-  background-color: #545b62;
-}
-
-@media (max-width: 768px) {
-  .data-chain-container {
-    grid-template-columns: 1fr;
-  }
+.canvas-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
 }
