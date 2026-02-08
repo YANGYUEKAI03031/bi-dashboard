@@ -10,7 +10,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { DataChainPage } from './pages/DataChainPage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthService } from './services/authService';
-
+import { DataProcessor } from './components/DataProcessor/DataProcessor';
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = AuthService.isAuthenticated();
@@ -86,6 +86,16 @@ function App() {
             } 
           />
           {/* 添加数据导入页面路由 */}
+          <Route 
+            path="/data-processor" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <DataProcessor />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/data-chain" 
             element={

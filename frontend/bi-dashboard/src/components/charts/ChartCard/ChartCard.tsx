@@ -4,7 +4,7 @@ import { EnhancedChartRenderer } from '../EnhancedChartRenderer';
 import { ChartConfigPanel } from '../ChartConfigPanel';
 import { ChartToolbar } from './ChartToolbar';
 import { DataTransformer } from '../../../services/dataTransformer';
-import { DataProcessor } from '../../../services/dataProcessor';
+import { DataProcessorService } from '../../../services/dataProcessor';
 import { DataCache } from '../../../services/dataCache';
 
 // 临时定义接口避免循环依赖
