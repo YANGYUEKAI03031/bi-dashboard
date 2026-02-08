@@ -4,7 +4,7 @@ import { EnhancedChartRenderer } from '../EnhancedChartRenderer';
 import { ChartConfigPanel } from '../ChartConfigPanel';
 import { ChartToolbar } from './ChartToolbar';
 import { DataTransformer } from '../../../services/dataTransformer';
-import { DataProcessorService } from '../../../services/dataProcessor';
+import { DataProcessorService, ProcessedData } from '../../../services/dataProcessor';
 import { DataCache } from '../../../services/dataCache';
 
 // 临时定义接口避免循环依赖
@@ -86,6 +86,21 @@ export const ChartCard: React.FC<ChartCardProps> = ({
   const dataService = new MockDataService();
   const cache = new DataCache();
 
+  // 添加类型转换函数：将 ProcessedData 转换为 QueryResult 格式
+  const convertProcessedDataToQueryResult = (processedData: ProcessedData) => {
+    // 将 processedData.processedData（对象数组）转换为 rows（二维数组）
+    const rows = processedData.processedData.map(rowObj => {
+      return processedData.columns.map(col => rowObj[col]);
+    });
+    
+    return {
+      columns: processedData.columns,
+      rows: rows,
+      rowCount: processedData.processedData.length,
+      executionTime: 0 // 处理后的数据没有执行时间
+    };
+  };
+
   useEffect(() => {
     if (config.dataBinding.dataSource && config.dataBinding.query) {
       loadData();
@@ -111,14 +126,16 @@ export const ChartCard: React.FC<ChartCardProps> = ({
       if (!processedData) {
         const rawData = await dataService.executeQuery(config.dataBinding);
         
-        const processedResult = await DataProcessor.processRawData(rawData, {
+        const processedResult = await DataProcessorService.getInstance().processRawData(rawData, {
           filters: config.dataBinding.filters || [],
           calculatedColumns: config.dataBinding.calculatedColumns || [],
           sortBy: config.dataBinding.sortBy,
           limit: 1000
         });
         
-        processedData = DataTransformer.transformForChart(processedResult, config);
+        // 修复：先转换类型再传递给 transformForChart
+        const queryResult = convertProcessedDataToQueryResult(processedResult);
+        processedData = DataTransformer.transformForChart(queryResult, config);
         cache.set(cacheKey, processedData, 5 * 60 * 1000);
       }
       

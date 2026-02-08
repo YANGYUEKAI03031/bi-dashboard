@@ -1,16 +1,18 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import './MainLayout.css';
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
-    // 登出后会自动重定向到登录页
+    // 手动导航到登录页面
+    navigate('/login', { replace: true });
   };
 
   const isActive = (path: string) => {
@@ -50,13 +52,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span>分析</span>
           </Link>
           
-          <Link 
-            to="/data-chain" 
-            className={`nav-item ${isActive('/data-chain') ? 'active' : ''}`}
-          >
-            <span className="icon">🔗</span>
-            <span>数据链</span>
-          </Link>
         </nav>
         
         <div className="sidebar-footer">

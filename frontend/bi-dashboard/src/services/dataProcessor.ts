@@ -17,6 +17,32 @@ export interface DataOperation {
   timestamp: Date;
 }
 
+// 新增：原始数据处理选项接口
+export interface RawDataProcessingOptions {
+  filters?: Array<{
+    column: string;
+    condition: string;
+    value: any;
+  }>;
+  calculatedColumns?: Array<{
+    name: string;
+    formula: string;
+  }>;
+  sortBy?: {
+    field: string;
+    direction: 'asc' | 'desc';
+  };
+  limit?: number;
+}
+
+// 新增：原始数据格式接口
+export interface RawData {
+  columns: string[];
+  rows: any[][];
+  rowCount: number;
+  executionTime: number;
+}
+
 export class DataProcessorService {
   private static instance: DataProcessorService;
   private processedDatasets: Map<string, ProcessedData> = new Map();
@@ -26,6 +52,93 @@ export class DataProcessorService {
       DataProcessorService.instance = new DataProcessorService();
     }
     return DataProcessorService.instance;
+  }
+
+  // 新增：处理原始数据的方法
+  async processRawData(rawData: RawData, options: RawDataProcessingOptions): Promise<ProcessedData> {
+    try {
+      // 将原始数据转换为对象数组格式
+      const dataObjects = rawData.rows.map(row => {
+        const obj: any = {};
+        rawData.columns.forEach((col, index) => {
+          obj[col] = row[index];
+        });
+        return obj;
+      });
+
+      // 创建临时处理数据集
+      const tempDatasetId = this.generateId();
+      const processedData: ProcessedData = {
+        id: tempDatasetId,
+        fileName: 'raw_query_data',
+        originalData: dataObjects,
+        processedData: [...dataObjects],
+        columns: [...rawData.columns],
+        createdAt: new Date(),
+        operations: []
+      };
+
+      // 应用过滤器
+      if (options.filters && options.filters.length > 0) {
+        options.filters.forEach(filter => {
+          processedData.processedData = processedData.processedData.filter(row => {
+            const cellValue = row[filter.column];
+            switch (filter.condition) {
+              case 'equals': return cellValue == filter.value;
+              case 'contains': return String(cellValue).includes(String(filter.value));
+              case 'greater': return Number(cellValue) > Number(filter.value);
+              case 'less': return Number(cellValue) < Number(filter.value);
+              case 'not_equals': return cellValue != filter.value;
+              default: return true;
+            }
+          });
+        });
+      }
+
+      // 应用排序
+      if (options.sortBy) {
+        processedData.processedData.sort((a, b) => {
+          const aVal = a[options.sortBy!.field];
+          const bVal = b[options.sortBy!.field];
+          
+          if (options.sortBy!.direction === 'asc') {
+            return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+          } else {
+            return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+          }
+        });
+      }
+
+      // 应用计算列
+      if (options.calculatedColumns && options.calculatedColumns.length > 0) {
+        options.calculatedColumns.forEach(calcCol => {
+          processedData.processedData = processedData.processedData.map(row => {
+            const newRow = { ...row };
+            try {
+              const evaluatedValue = this.evaluateFormula(calcCol.formula, row);
+              newRow[calcCol.name] = evaluatedValue;
+            } catch (error) {
+              newRow[calcCol.name] = null;
+            }
+            return newRow;
+          });
+          
+          // 更新列列表
+          if (!processedData.columns.includes(calcCol.name)) {
+            processedData.columns.push(calcCol.name);
+          }
+        });
+      }
+
+      // 应用限制
+      if (options.limit && options.limit > 0) {
+        processedData.processedData = processedData.processedData.slice(0, options.limit);
+      }
+
+      return processedData;
+    } catch (error) {
+      throw new Error(`处理原始数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
   }
 
   // Load data from file

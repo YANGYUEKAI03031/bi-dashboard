@@ -7,7 +7,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { DataChainPage } from './pages/DataChainPage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthService } from './services/authService';
 import { DataProcessor } from './components/DataProcessor/DataProcessor';
@@ -96,16 +95,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/data-chain" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <DataChainPage />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
+          
           <Route 
             path="/settings" 
             element={
