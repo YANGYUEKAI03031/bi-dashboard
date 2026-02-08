@@ -14,8 +14,7 @@ const sidebarItems: SidebarItem[] = [
   { id: 'dashboard', title: '仪表板', path: '/dashboard', icon: '📊' },
   { id: 'reports', title: '报表中心', path: '/reports', icon: '📈' },
   { id: 'analytics', title: '数据分析', path: '/analytics', icon: '🔍' },
-  { id: 'data-chain', title: '数据链', path: '/data-chain', icon: '🔗' },
-  { id: 'settings', title: '系统设置', path: '/settings', icon: '⚙️' },
+  { id: 'database', title: '数据库浏览器', path: '/database', icon: '🗄️' },
 ];
 
 export const Sidebar: React.FC = () => {

@@ -51,6 +51,20 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="icon">🔍</span>
             <span>分析</span>
           </Link>
+          <Link 
+              to="/advanced-analytics" 
+              className={`nav-item ${isActive('/advanced-analytics') ? 'active' : ''}`}
+            >
+              <span className="icon">🔬</span>
+              <span>高级分析</span>
+            </Link>
+          <Link 
+            to="/database" 
+            className={`nav-item ${isActive('/database') ? 'active' : ''}`}
+          >
+            <span className="icon">🗄️</span>
+            <span>数据库</span>
+          </Link>
           
         </nav>
         

@@ -5,6 +5,7 @@ uvicorn[standard]>=0.24.0
 # Database and ORM
 sqlalchemy>=2.0.0
 asyncpg>=0.29.0  # PostgreSQL async driver
+aiomysql>=0.2.0  # MySQL async driver
 
 # Redis and Caching
 redis>=4.5.0

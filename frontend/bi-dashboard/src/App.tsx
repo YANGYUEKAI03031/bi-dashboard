@@ -1,6 +1,8 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\App.tsx */
 import React from 'react';
+import { AdvancedDataAnalyzer } from './components/AdvancedDataAnalyzer/AdvancedDataAnalyzer';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { DatabaseExplorer } from './components/DatabaseExplorer/DatabaseExplorer';
 import { AuthProvider } from './contexts/AuthContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -75,6 +77,16 @@ function App() {
             } 
           />
           <Route 
+            path="/advanced-analytics" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <AdvancedDataAnalyzer />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/analytics" 
             element={
               <ProtectedRoute>
@@ -84,6 +96,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/database" element={<DatabaseExplorer />} />
           {/* 添加数据导入页面路由 */}
           <Route 
             path="/data-processor" 

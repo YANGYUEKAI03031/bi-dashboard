@@ -1,0 +1,447 @@
+.advanced-data-analyzer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #f8f9fa;
+}
+
+/* 顶部工具栏 */
+.toolbar {
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.toolbar select, .toolbar input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.upload-button {
+  background: #007bff;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.upload-button:hover {
+  background: #0056b3;
+}
+
+.tab-button {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.tab-button.active {
+  background: #007bff;
+  color: white;
+}
+
+.tab-button:not(.active):hover {
+  background: #e9ecef;
+}
+
+/* 主要内容区域 */
+.main-content {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+}
+
+.tab-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 24px;
+  min-height: 500px;
+}
+
+/* 数据表格样式 */
+.data-table-container {
+  overflow: auto;
+  max-height: 600px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table th {
+  background: #f8f9fa;
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 2px solid #dee2e6;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.column-header {
+  min-width: 120px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.row-number {
+  background: #f8f9fa;
+  width: 50px;
+  text-align: center;
+  font-weight: 600;
+  color: #6c757d;
+}
+
+.data-table td {
+  padding: 8px;
+  border-bottom: 1px solid #dee2e6;
+  vertical-align: top;
+}
+
+.data-cell {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  min-width: 120px;
+  max-width: 200px;
+  word-wrap: break-word;
+}
+
+.data-cell:hover {
+  background-color: #f8f9fa;
+}
+
+.data-cell.editing {
+  background-color: #fff3cd;
+  padding: 0;
+}
+
+.data-cell input {
+  width: 100%;
+  border: 2px solid #ffc107;
+  outline: none;
+  padding: 6px;
+  font-size: 14px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 48px;
+  color: #6c757d;
+  font-size: 16px;
+}
+
+.table-footer {
+  padding: 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  text-align: center;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+/* 操作按钮 */
+.data-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.action-button:hover {
+  background: #5a6268;
+}
+
+/* 操作历史 */
+.operations-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.operation-item {
+  background: #f8f9fa;
+  border-left: 4px solid #007bff;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+.operation-type {
+  display: inline-block;
+  background: #007bff;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 12px;
+}
+
+.operation-time {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.operation-config {
+  margin-top: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* Python编辑器 */
+.python-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.execute-button {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.execute-button:hover:not(:disabled) {
+  background: #218838;
+}
+
+.execute-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.python-editor {
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: none;
+  background: #f8f9fa;
+  line-height: 1.5;
+}
+
+.execution-result {
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 4px;
+  border-left: 4px solid;
+}
+
+.execution-result.success {
+  background: #d4edda;
+  border-color: #28a745;
+}
+
+.execution-result.error {
+  background: #f8d7da;
+  border-color: #dc3545;
+}
+
+.execution-result h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+
+.execution-result pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  background: rgba(255,255,255,0.5);
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.error-message {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff3cd;
+  border-radius: 4px;
+  color: #856404;
+}
+
+.result-data {
+  margin-top: 16px;
+}
+
+.result-data strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+/* 可视化区域 */
+.visualization-tools {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.viz-button {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.viz-button:hover {
+  background: #138496;
+}
+
+.chart-preview {
+  background: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 8px;
+  padding: 48px;
+  text-align: center;
+  color: #6c757d;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 改进的Python执行结果样式 */
+.python-editor-container {
+  padding: 16px;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.python-editor {
+  width: 100%;
+  min-height: 150px;
+  max-height: 300px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  resize: vertical;
+  margin-bottom: 16px;
+}
+
+/* 改进执行结果的样式 */
+.execution-result {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 16px;
+  margin-top: 16px;
+  background-color: #f8f9fa;
+  overflow: auto; /* 允许内容滚动 */
+  max-height: 400px; /* 设置最大高度 */
+}
+
+.execution-result h4 {
+  margin-top: 0;
+  color: #333;
+}
+
+.result-content {
+  white-space: pre-wrap; /* 保持文本格式但允许换行 */
+  word-wrap: break-word; /* 长单词断行 */
+  line-height: 1.4;
+}
+
+.result-output,
+.result-data-preview {
+  background-color: #f0f7ff;
+  border: 1px solid #b3d9ff;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto; /* 水平滚动 */
+  font-family: monospace;
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.result-output {
+  color: #333;
+}
+
+.result-data-preview {
+  color: #2c3e50;
+}
+
+.error-message {
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+  color: #c62828;
+}
+
+/* 添加响应式设计 */
+@media (max-width: 768px) {
+  .python-editor {
+    max-height: 200px;
+  }
+  
+  .execution-result {
+    max-height: 300px;
+  }
+}
