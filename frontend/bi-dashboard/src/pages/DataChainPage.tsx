@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/DataChainPage.tsx
 import React, { useState, useEffect } from 'react';
 import './DataChainPage.css';
-import NodeAnalysisModal from './NodeAnalysisModal';
+
 
 interface DataTable {
   name: string;
@@ -157,11 +157,7 @@ export const DataChainPage: React.FC = () => {
       </div>
 
       {/* 节点式分析模态框 */}
-      <NodeAnalysisModal 
-        isOpen={isNodeAnalysisOpen} 
-        onClose={handleCloseAnalysis}
-        selectedTable={selectedTable}
-      />
+      
     </div>
   );
 };
