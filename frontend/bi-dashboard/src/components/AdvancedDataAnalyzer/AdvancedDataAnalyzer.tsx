@@ -28,16 +28,6 @@ interface PythonExecutionResult {
   data?: any;
 }
 
-// MySQL数据接口
-interface MySQLDataset {
-  id: string;
-  name: string;
-  table_name: string;
-  columns: string[];
-  row_count: number;
-  created_at: string;
-}
-
 // Helper function to convert ProcessedData to Dataset
 const convertProcessedDataToDataset = (processedData: ProcessedData): Dataset => {
   return {
@@ -49,6 +39,16 @@ const convertProcessedDataToDataset = (processedData: ProcessedData): Dataset =>
     createdAt: processedData.createdAt
   };
 };
+
+// 数据集接口（匹配后端返回格式）
+interface APIDataset {
+  id: string;
+  name: string;
+  table_name: string;
+  columns: string[];
+  row_count: number;
+  created_at: string;
+}
 
 export const AdvancedDataAnalyzer: React.FC = () => {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -67,90 +67,37 @@ export const AdvancedDataAnalyzer: React.FC = () => {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const processor = DataProcessorService.getInstance();
 
-  // 调试API响应的辅助函数
-  const debugAPIResponse = async (url: string) => {
+  // 获取数据集列表
+  const fetchDatasets = async () => {
     try {
-      console.log(`Debugging API call to: ${url}`);
-      const response = await fetch(url);
+      console.log('正在获取数据集列表...');
+      const response = await fetch('http://localhost:8000/api/v1/data-analyzer/datasets');
       
-      console.log('Response Status:', response.status);
-      console.log('Response Headers:', [...response.headers.entries()]);
-      
-      const text = await response.text();
-      console.log('Response Text:', text);
-      
-      // 尝试解析为JSON
-      try {
-        const json = JSON.parse(text);
-        console.log('Parsed JSON:', json);
-        return { success: true, data: json };
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        return { success: false, error: 'Invalid JSON', text: text };
-      }
-    } catch (error) {
-      console.error('API Debug Error:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  };
-
-  // 调试按钮组件
-  const DebugAPIButton = () => {
-    const handleDebug = async () => {
-      const result = await debugAPIResponse('/api/mysql/datasets');
-      console.log('Debug Result:', result);
-    };
-
-    return (
-      <button 
-        onClick={handleDebug}
-        style={{ 
-          background: '#ffc107', 
-          color: '#000', 
-          border: 'none', 
-          padding: '4px 8px', 
-          borderRadius: '4px',
-          fontSize: '12px',
-          marginLeft: '10px'
-        }}
-      >
-        调试API
-      </button>
-    );
-  };
-
-  // 获取MySQL数据集列表
-  const fetchMySQLDatasets = async () => {
-    try {
-      console.log('Fetching MySQL datasets...');
-      const response = await fetch('/api/mysql/datasets');
-      
-      // 检查响应状态
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API Error Response:', errorText);
+        console.error('API错误响应:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      // 检查Content-Type
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const textResponse = await response.text();
-        console.error('Non-JSON Response:', textResponse);
+        console.error('非JSON响应:', textResponse);
         throw new Error('服务器返回了非JSON格式的响应');
       }
       
-      const mysqlDatasets: MySQLDataset[] = await response.json();
-      console.log('Received MySQL datasets:', mysqlDatasets);
+      const result = await response.json();
+      const apiDatasets: APIDataset[] = result.datasets || [];
+      console.log('接收到数据集:', apiDatasets);
       
-      // 将MySQL数据集转换为组件需要的格式
-      const convertedDatasets = mysqlDatasets.map(mysqlDataset => ({
-        id: mysqlDataset.id,
-        name: mysqlDataset.name,
+      // 转换为组件需要的格式
+      const convertedDatasets = apiDatasets.map(apiDataset => ({
+        id: apiDataset.id,
+        name: apiDataset.name,
         data: [], // 数据将在选择时加载
-        columns: mysqlDataset.columns,
+        columns: apiDataset.columns,
         source: 'mysql',
-        createdAt: new Date(mysqlDataset.created_at)
+        createdAt: new Date(apiDataset.created_at)
       }));
       
       setDatasets(convertedDatasets);
@@ -160,9 +107,9 @@ export const AdvancedDataAnalyzer: React.FC = () => {
         setSelectedDataset(convertedDatasets[0].id);
       }
     } catch (error) {
-      console.error('Error fetching MySQL datasets:', error);
+      console.error('获取数据集失败:', error);
       
-      // 显示更友好的错误信息
+      // 显示友好错误信息
       let errorMessage = '获取数据集失败';
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch')) {
@@ -176,17 +123,17 @@ export const AdvancedDataAnalyzer: React.FC = () => {
       
       alert(errorMessage);
       
-      // 添加一些示例数据以便测试
+      // 添加示例数据用于测试
       const sampleDatasets: Dataset[] = [
         {
-          id: 'sample_1',
-          name: '示例数据集1',
+          id: 'sample_users',
+          name: '用户数据示例',
           data: [
-            { id: 1, name: '产品A', price: 100, category: '电子产品' },
-            { id: 2, name: '产品B', price: 200, category: '家居用品' },
-            { id: 3, name: '产品C', price: 150, category: '服装' }
+            { id: 1, name: '张三', email: 'zhangsan@example.com', age: 25, city: '北京' },
+            { id: 2, name: '李四', email: 'lisi@example.com', age: 30, city: '上海' },
+            { id: 3, name: '王五', email: 'wangwu@example.com', age: 28, city: '广州' }
           ],
-          columns: ['id', 'name', 'price', 'category'],
+          columns: ['id', 'name', 'email', 'age', 'city'],
           source: 'sample',
           createdAt: new Date()
         }
@@ -199,44 +146,48 @@ export const AdvancedDataAnalyzer: React.FC = () => {
     }
   };
 
-  // 加载特定MySQL数据集的数据
-  const loadMySQLDatasetData = async (datasetId: string) => {
+  // 加载特定数据集的数据
+  const loadDatasetData = async (datasetId: string) => {
     try {
-      console.log(`Loading data for dataset: ${datasetId}`);
-      const response = await fetch(`/api/mysql/datasets/${datasetId}/data`);
+      console.log(`正在加载数据集: ${datasetId}`);
+      const response = await fetch(`http://localhost:8000/api/v1/data-analyzer/datasets/${datasetId}/data?limit=1000`);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Data API Error:', errorText);
+        console.error('数据API错误:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const data = await response.json();
-      console.log('Received dataset data:', data);
+      const result = await response.json();
+      console.log('接收到数据集数据:', result);
       
-      // 更新数据集数据
-      setDatasets(prevDatasets => 
-        prevDatasets.map(dataset => 
-          dataset.id === datasetId 
-            ? { ...dataset, data: data.rows || data || [] } 
-            : dataset
-        )
-      );
+      if (result.success) {
+        // 更新数据集数据
+        setDatasets(prevDatasets => 
+          prevDatasets.map(dataset => 
+            dataset.id === datasetId 
+              ? { ...dataset, data: result.data || [] } 
+              : dataset
+          )
+        );
+      } else {
+        throw new Error(result.error || '获取数据失败');
+      }
     } catch (error) {
-      console.error('Error loading dataset data:', error);
+      console.error('加载数据集数据失败:', error);
       alert('加载数据失败: ' + (error as Error).message);
     }
   };
 
   // 初始化组件
   useEffect(() => {
-    fetchMySQLDatasets();
+    fetchDatasets();
   }, []);
 
   // 当选择数据集时加载数据
   useEffect(() => {
     if (selectedDataset && datasets.find(d => d.id === selectedDataset)?.source === 'mysql') {
-      loadMySQLDatasetData(selectedDataset);
+      loadDatasetData(selectedDataset);
     }
   }, [selectedDataset]);
 
@@ -254,7 +205,7 @@ export const AdvancedDataAnalyzer: React.FC = () => {
           config: { fileName: selectedFile.name, fileSize: selectedFile.size }
         });
       } catch (error) {
-        alert('Error loading file: ' + (error as Error).message);
+        alert('文件加载错误: ' + (error as Error).message);
       }
     }
   };
@@ -469,9 +420,6 @@ export const AdvancedDataAnalyzer: React.FC = () => {
           <label htmlFor="file-upload" className="upload-button">
             上传文件
           </label>
-          
-          {/* 开发环境下的调试按钮 */}
-          {process.env.NODE_ENV === 'development' && <DebugAPIButton />}
         </div>
 
         <div className="toolbar-section">
