@@ -1,0 +1,368 @@
+/* Excel风格数据表格样式 */
+.excel-datatable-container {
+  background: white;
+  border: 1px solid #d4d4d4;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+}
+
+/* 工具栏样式 */
+.excel-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #d4d4d4;
+  font-size: 13px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stats-info {
+  display: flex;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-value {
+  color: #333;
+  font-weight: 600;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-input {
+  padding: 6px 12px 6px 28px;
+  border: 1px solid #d4d4d4;
+  border-radius: 3px;
+  font-size: 13px;
+  width: 200px;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+}
+
+.clear-btn {
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #333;
+}
+
+.clear-btn:hover {
+  background: #e5e5e5;
+  border-color: #c0c0c0;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #666;
+}
+
+.page-size-selector select {
+  padding: 4px 8px;
+  border: 1px solid #d4d4d4;
+  border-radius: 3px;
+  font-size: 13px;
+  background: white;
+}
+
+/* 表格容器 */
+.excel-table-wrapper {
+  overflow: auto;
+  max-height: 500px;
+}
+
+.excel-datatable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+/* 列头样式 */
+.excel-header {
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  padding: 8px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.excel-header:hover {
+  background: #e5e5e5;
+}
+
+.excel-header.filtered {
+  background: #e1f0ff;
+}
+
+.excel-header.sorted {
+  background: #cce5ff;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.column-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-icon {
+  font-size: 12px;
+  color: #0078d4;
+}
+
+.sort-icon {
+  font-size: 10px;
+  color: #0078d4;
+}
+
+.sort-icon.asc {
+  color: #0078d4;
+}
+
+.sort-icon.desc {
+  color: #d40000;
+}
+
+/* 筛选行样式 */
+.filter-row {
+  background: #fafafa;
+}
+
+.filter-cell {
+  border: 1px solid #d4d4d4;
+  padding: 4px 6px;
+  position: sticky;
+  top: 36px;
+  z-index: 9;
+  background: #fafafa;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #d4d4d4;
+  border-radius: 2px;
+  font-size: 12px;
+  background: white;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.3);
+}
+
+.clear-filter-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 数据行样式 */
+.data-row {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.data-row:hover {
+  background: #f5f5f5;
+}
+
+.data-row.selected-row {
+  background: #cce5ff;
+}
+
+/* 数据单元格样式 */
+.data-cell {
+  border: 1px solid #e0e0e0;
+  padding: 6px 8px;
+  cursor: cell;
+  position: relative;
+}
+
+.data-cell:hover {
+  background: #f0f0f0;
+}
+
+.data-cell.selected {
+  background: #cce5ff;
+  border: 2px solid #0078d4;
+  padding: 5px 7px;
+}
+
+.cell-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 特殊单元格样式 */
+.error-cell {
+  text-align: center;
+  color: #d40000;
+  font-style: italic;
+  padding: 20px;
+}
+
+.no-data-cell {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 30px;
+  background: #fafafa;
+}
+
+/* 状态栏样式 */
+.excel-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #f8f8f8;
+  border-top: 1px solid #d4d4d4;
+  font-size: 12px;
+  color: #666;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-text {
+  font-weight: 500;
+}
+
+.execution-time {
+  color: #0078d4;
+}
+
+/* 分页控件样式 */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d4d4d4;
+  background: white;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #c0c0c0;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-weight: 500;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .excel-toolbar {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+  
+  .toolbar-left {
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .excel-table-wrapper {
+    max-height: 400px;
+  }
+  
+  .excel-datatable {
+    font-size: 12px;
+  }
+  
+  .excel-header,
+  .data-cell {
+    padding: 4px 6px;
+  }
+}
