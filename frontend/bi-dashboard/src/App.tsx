@@ -7,8 +7,6 @@ import { AuthProvider } from './contexts/AuthContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { AnalyticsPage } from './pages/AnalyticsPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthService } from './services/authService';
 import { DataProcessor } from './components/DataProcessor/DataProcessor';
@@ -86,16 +84,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/analytics" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <AnalyticsPage />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
+          
           <Route path="/database" element={<DatabaseExplorer />} />
           {/* 添加数据导入页面路由 */}
           <Route 
@@ -109,16 +98,7 @@ function App() {
             } 
           />
           
-          <Route 
-            path="/settings" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <SettingsPage />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
+          
         </Routes>
       </Router>
     </AuthProvider>
