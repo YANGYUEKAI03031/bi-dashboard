@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "antd": "^6.3.0",
     "konva": "^10.2.0",
     "react-draggable": "^4.5.0",
     "react-konva": "^19.2.2"

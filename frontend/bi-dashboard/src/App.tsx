@@ -6,7 +6,9 @@ import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
+import { VisualizationBuilder } from './pages/VisualizationBuilder'; // 添加导入
 import { AuthService } from './services/authService';
+
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = AuthService.isAuthenticated();
@@ -72,7 +74,17 @@ function App() {
             } 
           />
          
-          
+          {/* 添加可视化构建器路由 */}
+          <Route 
+            path="/visualization-builder" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <VisualizationBuilder />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
           
         </Routes>
       </Router>

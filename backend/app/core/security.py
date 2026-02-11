@@ -3,11 +3,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 
 # 创建密码上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 def get_password_hash(password: str) -> str:
     """
     对密码进行哈希处理
@@ -69,3 +71,19 @@ def verify_token(token: str):
         return payload
     except JWTError:
         return None
+def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
+    """从JWT token中获取用户ID"""
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="无法验证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        return int(user_id)
+    except JWTError:
+        raise credentials_exception
