@@ -1,4 +1,3 @@
-// frontend/bi-dashboard/src/components/charts/ChartFactory.tsx
 import React, { useMemo } from 'react';
 import * as echarts from 'echarts/core';
 import {
@@ -6,6 +5,23 @@ import {
   LineChart,
   PieChart,
   ScatterChart,
+  HeatmapChart,
+  RadarChart,
+  FunnelChart,
+  GaugeChart,
+  BoxplotChart,
+  GraphChart,
+  TreeChart,
+  TreemapChart,
+  SunburstChart,
+  SankeyChart,
+  ThemeRiverChart,
+  // Removed CalendarChart import as it's not available
+  EffectScatterChart,
+  LinesChart,
+  PictorialBarChart,
+  ThemeRiverChart as ThemeRiver,
+  CustomChart
 } from 'echarts/charts';
 import {
   GridComponent,
@@ -13,6 +29,14 @@ import {
   LegendComponent,
   TitleComponent,
   ToolboxComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  TimelineComponent,
+  CalendarComponent, // Keep CalendarComponent for calendar coordinate system
+  GraphicComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  MarkAreaComponent
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import ReactECharts from 'echarts-for-react';
@@ -23,11 +47,36 @@ echarts.use([
   LineChart,
   PieChart,
   ScatterChart,
+  HeatmapChart,
+  RadarChart,
+  FunnelChart,
+  GaugeChart,
+  BoxplotChart,
+  GraphChart,
+  TreeChart,
+  TreemapChart,
+  SunburstChart,
+  SankeyChart,
+  ThemeRiverChart,
+  // Removed CalendarChart registration
+  EffectScatterChart,
+  LinesChart,
+  PictorialBarChart,
+  ThemeRiver,
+  CustomChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
   TitleComponent,
   ToolboxComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  TimelineComponent,
+  CalendarComponent, // Keep CalendarComponent for calendar coordinate system
+  GraphicComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  MarkAreaComponent,
   CanvasRenderer
 ]);
 
@@ -40,6 +89,9 @@ interface ChartConfig {
   legend?: any;
   tooltip?: any;
   grid?: any;
+  xField?: string; // X轴字段
+  yFields?: string[]; // Y轴字段数组
+  colorField?: string; // 颜色分组字段
 }
 
 interface ChartFactoryProps {
@@ -56,13 +108,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   onEvents
 }) => {
   const option = useMemo(() => {
-    // 处理xAxis数据
-    const xAxisData = data.map(item => {
-      // 假设第一列是x轴数据
-      const keys = Object.keys(item);
-      return item[keys[0]] || '';
-    });
+    // 处理xAxis数据 - 使用配置的xField
+    const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
+    const xAxisData = data.map(item => item[xField] || '');
 
+    // 处理系列数据 - 使用配置的yFields
+    const yFields = config.yFields || config.series.map(s => s.field) || [];
+    
     const baseOption: any = {
       title: {
         text: config.title || '',
@@ -75,7 +127,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         }
       },
       legend: config.legend || {
-        data: config.series.map(s => s.name || s.field),
+        data: yFields.map(field => field),
         bottom: 10
       },
       grid: config.grid || {
@@ -87,26 +139,54 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       xAxis: {
         ...config.xAxis,
         type: 'category',
-        data: xAxisData
+        data: xAxisData,
+        name: config.xAxis?.name || 'X轴'
       },
       yAxis: {
         ...config.yAxis,
-        type: 'value'
-      },
-      series: config.series.map(series => ({
-        ...series,
-        type: config.type,
-        name: series.name || series.field,
-        data: data.map(item => item[series.field] || 0)
-      }))
+        type: 'value',
+        name: config.yAxis?.name || 'Y轴'
+      }
     };
 
     // 根据图表类型调整配置
     switch (config.type.toLowerCase()) {
       case 'bar':
+        baseOption.series = yFields.map(field => ({
+          name: field,
+          type: 'bar',
+          data: data.map(item => item[field] || 0),
+          ...(config.colorField ? {
+            encode: { x: config.xField, y: field }
+          } : {})
+        }));
         break;
+        
       case 'line':
+        baseOption.series = yFields.map(field => ({
+          name: field,
+          type: 'line',
+          data: data.map(item => item[field] || 0),
+          smooth: true,
+          ...(config.colorField ? {
+            encode: { x: config.xField, y: field }
+          } : {})
+        }));
         break;
+        
+      case 'area':
+        baseOption.series = yFields.map(field => ({
+          name: field,
+          type: 'line',
+          data: data.map(item => item[field] || 0),
+          smooth: true,
+          areaStyle: {},
+          ...(config.colorField ? {
+            encode: { x: config.xField, y: field }
+          } : {})
+        }));
+        break;
+        
       case 'pie':
         baseOption.tooltip = {
           trigger: 'item'
@@ -116,29 +196,102 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         };
         delete baseOption.xAxis;
         delete baseOption.yAxis;
+        
+        if (yFields.length > 0) {
+          const fieldValue = yFields[0]; // 饼图通常只需要一个数值字段
+          baseOption.series = [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            data: data.map((item, index) => ({
+              name: item[xField] || `数据${index + 1}`,
+              value: item[fieldValue] || 0
+            })),
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }];
+        }
+        break;
+        
+      case 'scatter':
+        baseOption.xAxis.type = 'value';
+        baseOption.yAxis.type = 'value';
+        if (yFields.length >= 2) {
+          baseOption.series = [{
+            name: '散点图',
+            type: 'scatter',
+            data: data.map(item => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
+            symbolSize: 10
+          }];
+          // 移除不必要的轴配置
+          delete baseOption.xAxis.data;
+          delete baseOption.xAxis.name;
+          delete baseOption.yAxis.name;
+        }
+        break;
+        
+      case 'heatmap':
+        // 热力图需要特殊的二维数据格式
+        baseOption.visualMap = {
+          min: 0,
+          max: Math.max(...data.map(item => Math.max(...yFields.map(field => item[field] || 0)))),
+          calculable: true,
+          orient: 'horizontal',
+          left: 'center',
+          bottom: '15%'
+        };
         baseOption.series = [{
-          type: 'pie',
-          radius: ['40%', '70%'],
-          data: data.map((item, index) => {
-            const keys = Object.keys(item);
-            return {
-              name: item[keys[0]] || `数据${index + 1}`,
-              value: item[keys[1]] || 0
-            };
-          }),
+          name: '热力图',
+          type: 'heatmap',
+          data: data.map((item, rowIndex) => 
+            yFields.map((field, colIndex) => [colIndex, rowIndex, item[field] || 0])
+          ).flat(),
+          label: {
+            show: true
+          },
           emphasis: {
             itemStyle: {
               shadowBlur: 10,
-              shadowOffsetX: 0,
               shadowColor: 'rgba(0, 0, 0, 0.5)'
             }
           }
         }];
+        baseOption.xAxis = {
+          type: 'category',
+          data: yFields
+        };
+        baseOption.yAxis = {
+          type: 'category',
+          data: xAxisData
+        };
         break;
-      case 'scatter':
-        baseOption.xAxis.type = 'value';
-        baseOption.yAxis.type = 'value';
-        break;
+        
+      default:
+        // 默认使用柱状图
+        baseOption.series = yFields.map(field => ({
+          name: field,
+          type: 'bar',
+          data: data.map(item => item[field] || 0)
+        }));
+    }
+
+    // 如果有颜色分组字段，添加颜色映射
+    if (config.colorField && config.colorField !== '') {
+      baseOption.visualMap = {
+        show: false,
+        dimension: 2,
+        pieces: [
+          { gt: 0, color: '#5470c6' },
+          { gt: 100, color: '#91cc75' },
+          { gt: 200, color: '#fac858' },
+          { gt: 300, color: '#ee6666' },
+          { gt: 400, color: '#73c0de' }
+        ]
+      };
     }
 
     return baseOption;
