@@ -44,15 +44,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span>报表</span>
           </Link>
           
-          
-          <Link 
-            to="/database" 
-            className={`nav-item ${isActive('/database') ? 'active' : ''}`}
-          >
-            <span className="icon">🗄️</span>
-            <span>数据库</span>
-          </Link>
-          
         </nav>
         
         <div className="sidebar-footer">

@@ -1,15 +1,12 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\App.tsx */
 import React from 'react';
-import { AdvancedDataAnalyzer } from './components/AdvancedDataAnalyzer/AdvancedDataAnalyzer';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { DatabaseExplorer } from './components/DatabaseExplorer/DatabaseExplorer';
 import { AuthProvider } from './contexts/AuthContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthService } from './services/authService';
-import { DataProcessor } from './components/DataProcessor/DataProcessor';
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = AuthService.isAuthenticated();
@@ -74,29 +71,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/advanced-analytics" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <AdvancedDataAnalyzer />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
-          
-          <Route path="/database" element={<DatabaseExplorer />} />
-          {/* 添加数据导入页面路由 */}
-          <Route 
-            path="/data-processor" 
-            element={
-              <ProtectedRoute>
-                <MainLayout>
-                  <DataProcessor />
-                </MainLayout>
-              </ProtectedRoute>
-            } 
-          />
+         
           
           
         </Routes>
