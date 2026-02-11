@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table } from 'antd';
 import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
@@ -59,6 +59,25 @@ export const VisualizationBuilder: React.FC = () => {
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [totalRecords, setTotalRecords] = useState<number>(0);
+  const [tableColumns, setTableColumns] = useState<any[]>([]);
+
+  // 当queryResult变化时，更新表格列定义
+  useEffect(() => {
+    if (queryResult.length > 0) {
+      const columns = Object.keys(queryResult[0]).map(key => ({
+        title: key,
+        dataIndex: key,
+        key: key,
+        sorter: (a: any, b: any) => {
+          if (typeof a[key] === 'number' && typeof b[key] === 'number') {
+            return a[key] - b[key];
+          }
+          return String(a[key]).localeCompare(String(b[key]));
+        }
+      }));
+      setTableColumns(columns);
+    }
+  }, [queryResult]);
 
   useEffect(() => {
     loadDataSources();
@@ -112,6 +131,9 @@ export const VisualizationBuilder: React.FC = () => {
   };
 
   const loadPreviewData = async (tableName: string) => {
+    console.log('开始加载预览数据，表名:', tableName);
+    console.log('当前数据源:', selectedDataSource);
+    
     setLoading(true);
     try {
       // 执行查询获取前10行数据作为预览
@@ -119,6 +141,8 @@ export const VisualizationBuilder: React.FC = () => {
         data_source_id: selectedDataSource,
         query: `SELECT * FROM ${tableName} LIMIT 10`
       });
+      
+      console.log('查询结果:', result);
       
       // 转换数据格式
       const formattedData = result.rows.map((row: any) => {
@@ -129,6 +153,8 @@ export const VisualizationBuilder: React.FC = () => {
         return obj;
       });
       
+      console.log('格式化后的数据:', formattedData);
+      
       setQueryResult(formattedData);
       
       // 获取总记录数（需要执行另一个查询）
@@ -137,9 +163,12 @@ export const VisualizationBuilder: React.FC = () => {
         query: `SELECT COUNT(*) as total FROM ${tableName}`
       });
       
+      console.log('计数结果:', countResult);
+      
       setTotalRecords(countResult.rows[0].total);
       
     } catch (error: any) {
+      console.error('加载数据预览失败:', error);
       message.error(error.message || '加载数据预览失败');
     } finally {
       setLoading(false);
@@ -245,8 +274,8 @@ export const VisualizationBuilder: React.FC = () => {
         <Spin spinning={loading}>
           <Row gutter={24}>
             {/* 左侧数据配置面板 */}
-            <Col span={8}>
-              <Card title="数据配置">
+            <Col span={6}>
+              <Card title="数据配置" size="small">
                 <Space direction="vertical" style={{ width: '100%' }} size="middle">
                   <div>
                     <label>数据源:</label>
@@ -282,47 +311,81 @@ export const VisualizationBuilder: React.FC = () => {
                   </div>
 
                   <div>
-                    <p><strong>数据预览:</strong> {totalRecords} 条记录</p>
-                    <p><small>当前显示前10条记录</small></p>
+                    <p><strong>数据统计:</strong></p>
+                    <p>总记录数: {totalRecords} 条</p>
+                    <p>预览记录: {queryResult.length} 条</p>
                   </div>
                 </Space>
               </Card>
             </Col>
 
-            {/* 中间图表预览区域 */}
-            <Col span={10}>
+            {/* 中间图表预览区域 - 更大尺寸 */}
+            <Col span={18}>
               <Card title="图表预览">
-                <ChartFactory
-                  config={{
-                    type: chartData.chart_type,
-                    title: chartData.name,
-                    xAxis: {
-                      name: chartData.visualization_settings.x_axis_title
-                    },
-                    yAxis: {
-                      name: chartData.visualization_settings.y_axis_title
-                    },
-                    series: [{
+                {queryResult.length > 0 ? (
+                  <ChartFactory
+                    config={{
                       type: chartData.chart_type,
-                      field: chartData.visualization_settings.graph_metrics?.[0] || 'value'
-                    }]
-                  }}
-                  data={queryResult}
-                  style={{ height: '500px' }}
-                />
+                      title: chartData.name,
+                      xAxis: {
+                        name: chartData.visualization_settings.x_axis_title || '日期'
+                      },
+                      yAxis: {
+                        name: chartData.visualization_settings.y_axis_title || '数值'
+                      },
+                      series: [{
+                        name: '数据',
+                        type: chartData.chart_type,
+                        field: Object.keys(queryResult[0])[1] || '1星'
+                      }]
+                    }}
+                    data={queryResult}
+                    style={{ height: '500px' }}
+                  />
+                ) : (
+                  <div style={{ 
+                    height: '500px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '4px'
+                  }}>
+                    <p>请选择数据表以查看图表预览</p>
+                  </div>
+                )}
               </Card>
             </Col>
-            
-            {/* 右侧信息面板 */}
-            <Col span={6}>
-              <Card title="数据信息">
-                <p><strong>图表类型:</strong> {chartData.chart_type}</p>
-                <p><strong>维度:</strong> {chartData.visualization_settings.graph_dimensions?.join(', ') || '未设置'}</p>
-                <p><strong>度量:</strong> {chartData.visualization_settings.graph_metrics?.join(', ') || '未设置'}</p>
-                <p><strong>数据点:</strong> {queryResult.length} 个</p>
-                <p><strong>数据源:</strong> {dataSources.find(ds => ds.type === selectedDataSource)?.name || '未选择'}</p>
-                <p><strong>数据表:</strong> {selectedTable || '未选择'}</p>
-                <p><strong>总记录数:</strong> {totalRecords} 条</p>
+          </Row>
+
+          {/* 数据预览表格 - 放在下方 */}
+          <Row gutter={24} style={{ marginTop: '24px' }}>
+            <Col span={24}>
+              <Card title="数据预览">
+                {queryResult.length > 0 ? (
+                  <Table
+                    dataSource={queryResult.map((item, index) => ({ ...item, key: index }))}
+                    columns={tableColumns}
+                    pagination={{ 
+                      pageSize: 5,
+                      size: 'small',
+                      showSizeChanger: false
+                    }}
+                    size="small"
+                    scroll={{ y: 300 }}
+                  />
+                ) : (
+                  <div style={{ 
+                    height: '350px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    backgroundColor: '#fafafa',
+                    borderRadius: '4px'
+                  }}>
+                    <p>暂无数据预览</p>
+                  </div>
+                )}
               </Card>
             </Col>
           </Row>

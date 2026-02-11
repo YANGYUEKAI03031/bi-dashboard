@@ -56,6 +56,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   onEvents
 }) => {
   const option = useMemo(() => {
+    // 处理xAxis数据
+    const xAxisData = data.map(item => {
+      // 假设第一列是x轴数据
+      const keys = Object.keys(item);
+      return item[keys[0]] || '';
+    });
+
     const baseOption: any = {
       title: {
         text: config.title || '',
@@ -68,7 +75,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         }
       },
       legend: config.legend || {
-        data: [],
+        data: config.series.map(s => s.name || s.field),
         bottom: 10
       },
       grid: config.grid || {
@@ -77,10 +84,19 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         bottom: '15%',
         containLabel: true
       },
-      xAxis: config.xAxis || {},
-      yAxis: config.yAxis || {},
+      xAxis: {
+        ...config.xAxis,
+        type: 'category',
+        data: xAxisData
+      },
+      yAxis: {
+        ...config.yAxis,
+        type: 'value'
+      },
       series: config.series.map(series => ({
         ...series,
+        type: config.type,
+        name: series.name || series.field,
         data: data.map(item => item[series.field] || 0)
       }))
     };
@@ -88,12 +104,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // 根据图表类型调整配置
     switch (config.type.toLowerCase()) {
       case 'bar':
-        baseOption.xAxis.type = baseOption.xAxis.type || 'category';
-        baseOption.yAxis.type = baseOption.yAxis.type || 'value';
         break;
       case 'line':
-        baseOption.xAxis.type = baseOption.xAxis.type || 'category';
-        baseOption.yAxis.type = baseOption.yAxis.type || 'value';
         break;
       case 'pie':
         baseOption.tooltip = {
@@ -107,10 +119,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = [{
           type: 'pie',
           radius: ['40%', '70%'],
-          data: data.map((item, index) => ({
-            name: item.name || `数据${index + 1}`,
-            value: item.value || 0
-          })),
+          data: data.map((item, index) => {
+            const keys = Object.keys(item);
+            return {
+              name: item[keys[0]] || `数据${index + 1}`,
+              value: item[keys[1]] || 0
+            };
+          }),
           emphasis: {
             itemStyle: {
               shadowBlur: 10,
@@ -121,13 +136,17 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         }];
         break;
       case 'scatter':
-        baseOption.xAxis.type = baseOption.xAxis.type || 'value';
-        baseOption.yAxis.type = baseOption.yAxis.type || 'value';
+        baseOption.xAxis.type = 'value';
+        baseOption.yAxis.type = 'value';
         break;
     }
 
     return baseOption;
   }, [config, data]);
+
+  // 添加调试信息
+  console.log('ChartFactory props:', { config, data });
+  console.log('Generated option:', option);
 
   return (
     <ReactECharts
