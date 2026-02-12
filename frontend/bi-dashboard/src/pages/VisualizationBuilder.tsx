@@ -7,6 +7,7 @@ import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import { DataSourceService } from '../services/dataSourceService';
+import { AuthService } from '../services/authService';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
@@ -32,7 +33,7 @@ interface TableInfo {
   columns: any[];
 }
 
-// 新增：图表类型定义
+// 图表类型定义
 const CHART_TYPES = [
   { value: 'bar', label: '柱状图', icon: <BarChartOutlined /> },
   { value: 'line', label: '折线图', icon: <LineChartOutlined /> },
@@ -42,7 +43,7 @@ const CHART_TYPES = [
 ];
 
 export const VisualizationBuilder: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated, checkAuthStatus } = useAuth();
   const [chartData, setChartData] = useState<ChartData>({
     name: '新图表',
     chart_type: 'bar',
@@ -57,9 +58,9 @@ export const VisualizationBuilder: React.FC = () => {
       graph_metrics: [],
       x_axis_title: "X轴",
       y_axis_title: "Y轴",
-      x_field: "", // 新增：X轴字段
-      y_fields: [], // 新增：Y轴字段（支持多字段）
-      color_field: "" // 新增：颜色分组字段
+      x_field: "",
+      y_fields: [],
+      color_field: ""
     },
     database_id: 1
   });
@@ -67,14 +68,65 @@ export const VisualizationBuilder: React.FC = () => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [queryResult, setQueryResult] = useState<any[]>([]);
-  const [previewData, setPreviewData] = useState<any[]>([]); // 新增：预览数据
+  const [previewData, setPreviewData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [totalRecords, setTotalRecords] = useState<number>(0);
   const [tableColumns, setTableColumns] = useState<any[]>([]);
-  const [availableFields, setAvailableFields] = useState<string[]>([]); // 新增：可用字段列表
+  const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // 监听认证状态变化
+  useEffect(() => {
+    const verifyAuth = async () => {
+      console.log('=== 验证认证状态 ===');
+      console.log('Context状态:', { user, isAuthenticated });
+      
+      // 检查本地存储的token
+      const token = AuthService.getAuthToken();
+      console.log('LocalStorage token:', token ? '存在' : '不存在');
+      
+      // 如果Context和localStorage状态不一致，重新检查
+      if (token && !isAuthenticated) {
+        console.log('检测到token但Context显示未认证，重新检查认证状态');
+        const isActuallyAuthenticated = await checkAuthStatus();
+        console.log('重新检查结果:', isActuallyAuthenticated);
+      }
+      
+      setAuthChecked(true);
+    };
+    
+    verifyAuth();
+  }, [user, isAuthenticated, checkAuthStatus]);
+
+  // 当组件挂载或路由变化时重新检查认证状态
+  useEffect(() => {
+    const handleRouteChange = () => {
+      console.log('=== 路由变化，重新检查认证 ===');
+      setAuthChecked(false);
+      setTimeout(() => {
+        checkAuthStatus().then(() => {
+          setAuthChecked(true);
+        });
+      }, 100);
+    };
+
+    // 监听路由变化
+    handleRouteChange();
+    
+    // 添加路由变化监听器
+    const originalPushState = window.history.pushState;
+    window.history.pushState = function(...args) {
+      originalPushState.apply(this, args);
+      handleRouteChange();
+    };
+
+    return () => {
+      window.history.pushState = originalPushState;
+    };
+  }, [checkAuthStatus]);
 
   // 当queryResult变化时，更新表格列定义和可用字段
   useEffect(() => {
@@ -108,7 +160,7 @@ export const VisualizationBuilder: React.FC = () => {
           visualization_settings: {
             ...prev.visualization_settings,
             x_field: availableFields[0],
-            y_fields: availableFields.slice(1, Math.min(3, availableFields.length)) // 默认选择前几个数值字段
+            y_fields: availableFields.slice(1, Math.min(3, availableFields.length))
           }
         }));
       }
@@ -141,7 +193,6 @@ export const VisualizationBuilder: React.FC = () => {
       const tableList = await DataSourceService.getTables(dataSourceType);
       setTables(tableList);
       
-      // 如果有表，自动选择第一个并加载预览数据
       if (tableList.length > 0) {
         setSelectedTable(tableList[0].name);
         loadPreviewData(tableList[0].name);
@@ -158,7 +209,7 @@ export const VisualizationBuilder: React.FC = () => {
     setTables([]);
     setSelectedTable('');
     setQueryResult([]);
-    setPreviewData([]); // 清空预览数据
+    setPreviewData([]);
     setAvailableFields([]);
     loadTables(value);
   };
@@ -174,7 +225,6 @@ export const VisualizationBuilder: React.FC = () => {
     
     setLoading(true);
     try {
-      // 执行查询获取所有数据（不加LIMIT）
       const result = await DataSourceService.executeQuery({
         data_source_id: selectedDataSource,
         query: `SELECT * FROM ${tableName}`
@@ -182,7 +232,6 @@ export const VisualizationBuilder: React.FC = () => {
       
       console.log('查询结果:', result);
       
-      // 转换数据格式
       const formattedData = result.rows.map((row: any) => {
         const obj: any = {};
         result.columns.forEach((col: string, index: number) => {
@@ -192,21 +241,15 @@ export const VisualizationBuilder: React.FC = () => {
       });
       
       console.log('格式化后的数据:', formattedData);
-      
-      // 设置完整数据到queryResult用于图表显示
       setQueryResult(formattedData);
-      
-      // 设置前10条作为预览数据
       setPreviewData(formattedData.slice(0, 10));
       
-      // 获取总记录数（需要执行另一个查询）
       const countResult = await DataSourceService.executeQuery({
         data_source_id: selectedDataSource,
         query: `SELECT COUNT(*) as total FROM ${tableName}`
       });
       
       console.log('计数结果:', countResult);
-      
       setTotalRecords(countResult.rows[0].total);
       
     } catch (error: any) {
@@ -247,10 +290,8 @@ export const VisualizationBuilder: React.FC = () => {
       console.log('Formatted data length:', formattedData.length);
       console.log('Formatted data:', formattedData);
       
-      // 更新完整数据
       setQueryResult(formattedData);
       setTotalRecords(result.row_count);
-      // 更新预览数据为前10条
       setPreviewData(formattedData.slice(0, 10));
       message.success(`查询成功，返回 ${result.row_count} 条记录`);
     } catch (error: any) {
@@ -269,7 +310,6 @@ export const VisualizationBuilder: React.FC = () => {
     message.success('配置已更新');
   };
 
-  // 新增：处理图表类型变更
   const handleChartTypeChange = (value: string) => {
     setChartData(prev => ({
       ...prev,
@@ -277,7 +317,6 @@ export const VisualizationBuilder: React.FC = () => {
     }));
   };
 
-  // 新增：处理字段映射变更
   const handleFieldMappingChange = (fieldType: string, value: any) => {
     setChartData(prev => ({
       ...prev,
@@ -289,8 +328,33 @@ export const VisualizationBuilder: React.FC = () => {
   };
 
   const handleSaveChart = async () => {
-    if (!user) {
+    console.log('=== 保存图表开始 ===');
+    console.log('当前认证状态:', { user, isAuthenticated, authChecked });
+    
+    const token = AuthService.getAuthToken();
+    console.log('Token存在:', !!token);
+    
+    if (!authChecked) {
+      message.warning('正在检查认证状态，请稍后再试');
+      return;
+    }
+    
+    if (!isAuthenticated || !user || !token) {
+      console.log('认证失败详情:', { 
+        isAuthenticated, 
+        user: !!user, 
+        token: !!token,
+        contextUser: user
+      });
+      
       message.error('请先登录');
+      
+      const refreshed = await checkAuthStatus();
+      if (refreshed) {
+        message.success('认证状态已恢复，请重试');
+      } else {
+        window.location.href = '/login';
+      }
       return;
     }
     
@@ -312,14 +376,25 @@ export const VisualizationBuilder: React.FC = () => {
         creator_id: user.id
       };
       
+      console.log('准备保存的图表数据:', chartToSave);
       await ChartService.createChart(chartToSave);
       message.success('图表保存成功');
     } catch (error: any) {
+      console.error('保存图表失败:', error);
       message.error(error.message || '保存失败');
     } finally {
       setLoading(false);
     }
   };
+
+  // 如果认证检查还未完成，显示加载状态
+  if (!authChecked) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center' }}>
+        <Spin size="large" tip="正在检查认证状态..." />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '24px' }}>
@@ -338,12 +413,34 @@ export const VisualizationBuilder: React.FC = () => {
               icon={<SaveOutlined />} 
               onClick={handleSaveChart}
               loading={loading}
+              disabled={!isAuthenticated || !user}
             >
               保存图表
             </Button>
           </Space>
         }
       >
+        {!isAuthenticated || !user ? (
+          <div style={{ 
+            padding: '20px', 
+            textAlign: 'center', 
+            backgroundColor: '#fffbe6', 
+            border: '1px solid #ffe58f',
+            borderRadius: '4px',
+            marginBottom: '20px'
+          }}>
+            <p style={{ color: '#faad14', fontWeight: 'bold' }}>
+              ⚠️ 请先登录以保存图表
+            </p>
+            <Button 
+              type="primary" 
+              onClick={() => window.location.href = '/login'}
+            >
+              前往登录
+            </Button>
+          </div>
+        ) : null}
+        
         <Spin spinning={loading}>
           <Tabs defaultActiveKey="1">
             <TabPane tab="数据配置" key="1">
@@ -387,7 +484,7 @@ export const VisualizationBuilder: React.FC = () => {
                       <div>
                         <p><strong>数据统计:</strong></p>
                         <p>总记录数: {totalRecords} 条</p>
-                        <p>预览记录: {previewData.length} 条</p> {/* 更新为显示预览数据条数 */}
+                        <p>预览记录: {previewData.length} 条</p>
                       </div>
                     </Space>
                   </Card>
@@ -522,7 +619,7 @@ export const VisualizationBuilder: React.FC = () => {
                       xField: chartData.visualization_settings.x_field,
                       colorField: chartData.visualization_settings.color_field
                     }}
-                    data={queryResult} // 使用完整数据而不是预览数据
+                    data={queryResult}
                     style={{ height: '500px' }}
                   />
                 ) : (
@@ -549,7 +646,6 @@ export const VisualizationBuilder: React.FC = () => {
             </TabPane>
           </Tabs>
 
-          {/* 数据预览表格 - 放在下方 */}
           <Row gutter={24} style={{ marginTop: '24px' }}>
             <Col span={24}>
               <Card title="数据预览">

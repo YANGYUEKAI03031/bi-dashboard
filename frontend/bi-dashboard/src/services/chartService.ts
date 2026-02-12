@@ -9,8 +9,8 @@ interface ChartCreateRequest {
   chart_type: string;
   dataset_query: any;
   visualization_settings: any;
-  database_id: number;
-  creator_id: number;
+  database_id: number;  // 恢复原始字段名
+  creator_id: number;   // 恢复原始字段名
   is_public?: boolean;
 }
 
@@ -21,8 +21,8 @@ interface ChartResponse {
   chart_type: string;
   dataset_query: any;
   visualization_settings: any;
-  database_id: number;
-  creator_id: number;
+  database_id: number;  // 恢复原始字段名
+  creator_id: number;   // 恢复原始字段名
   created_at: string;
   updated_at: string;
 }

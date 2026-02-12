@@ -94,7 +94,7 @@ class DashboardService:
             # 验证图表存在且属于用户
             chart_stmt = select(VisualizationCard).where(
                 VisualizationCard.id == card_data.chart_id,
-                VisualizationCard.creator_id == user_id
+                VisualizationCard.created_by == user_id  # 修正：使用正确的字段名
             )
             chart_result = await self.db.execute(chart_stmt)
             chart = chart_result.scalar_one_or_none()

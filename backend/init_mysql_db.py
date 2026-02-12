@@ -34,6 +34,8 @@ async def init_tables():
     from sqlalchemy.ext.asyncio import create_async_engine
     from app.db.base import Base
     from app.models.user import User
+    from app.models.dashboard import Dashboard, DashboardCard, DashboardTab
+    from app.models.visualization import VisualizationCard, Database
     
     # 构建不包含数据库名的URL用于创建引擎
     db_url = f"mysql+aiomysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}"

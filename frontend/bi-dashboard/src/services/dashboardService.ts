@@ -1,5 +1,4 @@
-// frontend/bi-dashboard/src/services/dashboardService.ts
-import { AuthService } from './authService';
+// src/services/dashboardService.ts
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
@@ -30,151 +29,147 @@ interface DashboardCardUpdateRequest {
   parameter_mappings?: any;
 }
 
-interface DashboardResponse {
-  id: number;
-  name: string;
-  description?: string;
-  layout?: any;
-  settings?: any;
-  creator_id: number;
-  is_public: boolean;
-  archived: boolean;
-  created_at: string;
-  updated_at: string;
-  cards: any[];
-}
-
 export class DashboardService {
-  static async createDashboard(dashboardData: DashboardCreateRequest): Promise<DashboardResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
+  static async getUserDashboards(): Promise<any[]> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('获取仪表盘列表失败:', error);
+      throw error;
     }
-
-    const response = await fetch(`${API_BASE_URL}/dashboards/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(dashboardData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '创建仪表板失败');
-    }
-
-    return response.json();
   }
 
-  static async getDashboard(dashboardId: number): Promise<DashboardResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
+  static async createDashboard(dashboardData: DashboardCreateRequest): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dashboardData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('创建仪表盘失败:', error);
+      throw error;
     }
-
-    const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取仪表板失败');
-    }
-
-    return response.json();
   }
 
-  static async getUserDashboards(): Promise<DashboardResponse[]> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
+  static async getDashboard(dashboardId: number): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('获取仪表盘失败:', error);
+      throw error;
     }
-
-    const response = await fetch(`${API_BASE_URL}/dashboards/`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取仪表板列表失败');
-    }
-
-    return response.json();
   }
 
   static async addChartToDashboard(dashboardId: number, cardData: DashboardCardCreateRequest): Promise<any> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/cards`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(cardData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('添加图表到仪表盘失败:', error);
+      throw error;
     }
-
-    const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/cards`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(cardData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '添加图表到仪表板失败');
-    }
-
-    return response.json();
   }
 
   static async updateDashboardCard(cardId: number, updateData: DashboardCardUpdateRequest): Promise<any> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('更新仪表盘卡片失败:', error);
+      throw error;
     }
-
-    const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updateData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '更新仪表板卡片失败');
-    }
-
-    return response.json();
   }
 
   static async removeChartFromDashboard(cardId: number): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) {
-      throw new Error('用户未认证');
-    }
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '从仪表板移除图表失败');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('从仪表盘移除图表失败:', error);
+      throw error;
     }
   }
 }

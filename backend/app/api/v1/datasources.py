@@ -62,8 +62,8 @@ async def get_tables(datasource_type: str, db: Session = Depends(get_db)):
         for table in tables:
             table_name = table[0]
             
-            # 获取表结构信息
-            describe_result = await db.execute(text(f"DESCRIBE {table_name}"))
+            # 使用反引号包围表名以避免关键字冲突
+            describe_result = await db.execute(text(f"DESCRIBE `{table_name}`"))
             columns_info = describe_result.fetchall()
             
             columns = []
@@ -91,8 +91,8 @@ async def get_table_columns(datasource_type: str, table_name: str, db: Session =
         if datasource_type != 'mysql':
             raise HTTPException(status_code=400, detail=f"不支持的数据源类型: {datasource_type}")
         
-        # 使用现有的SQLAlchemy会话查询列信息
-        result = await db.execute(text(f"DESCRIBE {table_name}"))
+        # 使用反引号包围表名以避免关键字冲突
+        result = await db.execute(text(f"DESCRIBE `{table_name}`"))
         columns_info = result.fetchall()
         
         columns = []

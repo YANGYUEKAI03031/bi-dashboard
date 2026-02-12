@@ -108,32 +108,42 @@ export class AuthService {
 
   // 保存token到localStorage
   static setAuthToken(token: string): void {
+    console.log('保存token到localStorage:', token.substring(0, 20) + '...');
     localStorage.setItem('authToken', token);
   }
 
   // 获取存储的token
   static getAuthToken(): string | null {
-    return localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken');
+    console.log('从localStorage获取token:', token ? token.substring(0, 20) + '...' : 'null');
+    return token;
   }
 
   // 清除认证信息
   static clearAuth(): void {
+    console.log('清除认证信息');
     localStorage.removeItem('authToken');
   }
 
   // 检查是否已认证
   static isAuthenticated(): boolean {
-    return !!this.getAuthToken();
+    const token = this.getAuthToken();
+    const isAuthenticated = !!token;
+    console.log('检查认证状态:', isAuthenticated);
+    return isAuthenticated;
   }
 
   // 获取当前用户信息
   static async getCurrentUser(): Promise<any> {
     const token = this.getAuthToken();
+    console.log('getCurrentUser - Token:', token ? '存在' : '不存在');
+    
     if (!token) {
       return null;
     }
 
     try {
+      console.log('发送获取用户信息请求到:', `${API_BASE_URL}/auth/me`);
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
         method: 'GET',
         headers: {
@@ -142,15 +152,20 @@ export class AuthService {
         },
       });
 
+      console.log('用户信息响应状态:', response.status);
+      
       if (!response.ok) {
         // 如果token过期或无效，清除认证信息
         if (response.status === 401) {
+          console.log('Token无效或过期，清除认证信息');
           this.clearAuth();
         }
         return null;
       }
 
-      return await response.json();
+      const userData = await response.json();
+      console.log('获取到的用户信息:', userData);
+      return userData;
     } catch (error) {
       console.error('获取用户信息失败:', error);
       return null;

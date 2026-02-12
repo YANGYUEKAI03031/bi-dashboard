@@ -1,5 +1,5 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\contexts\AuthContext.tsx */
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { AuthService } from '../services/authService';
 
 interface User {
@@ -15,6 +15,8 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   loading: boolean;
+  refreshAuth: () => Promise<void>;
+  checkAuthStatus: () => Promise<boolean>; // 新增：检查认证状态的方法
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,33 +25,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // 页面加载时检查认证状态
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
+  // 检查认证状态的核心函数
+  const checkAuthStatus = useCallback(async (): Promise<boolean> => {
+    console.log('=== 检查认证状态 ===');
     try {
-      const currentUser = await AuthService.getCurrentUser();
-      if (currentUser) {
-        setUser({
-          id: currentUser.id,
-          username: currentUser.username,
-          email: currentUser.email,
-          full_name: currentUser.full_name
-        });
+      const token = AuthService.getAuthToken();
+      console.log('Token存在:', !!token);
+      
+      if (token) {
+        const currentUser = await AuthService.getCurrentUser();
+        console.log('获取到的用户信息:', currentUser);
+        
+        if (currentUser) {
+          setUser({
+            id: currentUser.id,
+            username: currentUser.username,
+            email: currentUser.email,
+            full_name: currentUser.full_name
+          });
+          console.log('认证状态: 已认证');
+          return true;
+        } else {
+          console.log('用户信息获取失败，清除认证状态');
+          AuthService.clearAuth();
+          setUser(null);
+          return false;
+        }
+      } else {
+        console.log('无有效token');
+        setUser(null);
+        return false;
       }
     } catch (error) {
       console.error('检查认证状态失败:', error);
-      // 如果检查失败，清除认证信息
       AuthService.clearAuth();
-    } finally {
-      setLoading(false);
+      setUser(null);
+      return false;
     }
-  };
+  }, []);
 
-  const login = async (username: string, password: string) => {
+  // 刷新认证状态
+  const refreshAuth = useCallback(async () => {
+    setLoading(true);
+    await checkAuthStatus();
+    setLoading(false);
+  }, [checkAuthStatus]);
+
+  // 初始化时检查认证状态
+  useEffect(() => {
+    const initializeAuth = async () => {
+      console.log('=== 初始化认证状态 ===');
+      await checkAuthStatus();
+      setLoading(false);
+    };
+    
+    initializeAuth();
+  }, [checkAuthStatus]);
+
+  // 监听storage事件，处理多标签页认证同步
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'authToken') {
+        console.log('检测到认证token变化，重新检查认证状态');
+        refreshAuth();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [refreshAuth]);
+
+  const login = useCallback(async (username: string, password: string) => {
     try {
+      console.log('=== 执行登录 ===');
       const response = await AuthService.login({ username, password });
       
       if (response.success && response.user) {
@@ -59,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: response.user.email,
           full_name: response.user.full_name
         });
+        console.log('登录成功，用户状态已更新');
       }
       
       return { success: response.success, message: response.message };
@@ -66,22 +115,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('登录失败:', error);
       return { success: false, message: '登录过程中发生错误' };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
+      console.log('=== 执行登出 ===');
       await AuthService.logout();
     } finally {
       setUser(null);
+      console.log('登出完成，用户状态已清除');
     }
-  };
+  }, []);
 
   const value = {
     user,
     isAuthenticated: !!user,
     login,
     logout,
-    loading
+    loading,
+    refreshAuth,
+    checkAuthStatus
   };
 
   return (

@@ -23,8 +23,25 @@ async def create_chart(
         service = ChartService(db)
         chart = await service.create_chart(chart_data, user_id)
         
-        # 转换为响应模型
-        return ChartResponse.model_validate(chart)
+        # 转换为响应模型 - 处理字段名映射
+        response_data = {
+            "id": chart.id,
+            "name": chart.name,
+            "description": chart.description,
+            "chart_type": chart.chart_type,
+            "dataset_query": chart.dataset_query,
+            "visualization_settings": chart.visualization_settings,
+            "database_id": chart.data_source_id,  # 字段名映射
+            "creator_id": chart.created_by,  # 字段名映射
+            "is_public": chart.is_public,
+            "archived": chart.archived,
+            "cache_enabled": chart.cache_enabled,
+            "cache_duration": chart.cache_duration,
+            "created_at": chart.created_at,
+            "updated_at": chart.updated_at
+        }
+        
+        return ChartResponse(**response_data)
         
     except Exception as e:
         logger.error(f"创建图表API错误: {str(e)}")
@@ -44,7 +61,25 @@ async def get_chart(
         if not chart:
             raise HTTPException(status_code=404, detail="图表不存在")
             
-        return ChartResponse.model_validate(chart)
+        # 转换为响应模型
+        response_data = {
+            "id": chart.id,
+            "name": chart.name,
+            "description": chart.description,
+            "chart_type": chart.chart_type,
+            "dataset_query": chart.dataset_query,
+            "visualization_settings": chart.visualization_settings,
+            "database_id": chart.data_source_id,
+            "creator_id": chart.created_by,
+            "is_public": chart.is_public,
+            "archived": chart.archived,
+            "cache_enabled": chart.cache_enabled,
+            "cache_duration": chart.cache_duration,
+            "created_at": chart.created_at,
+            "updated_at": chart.updated_at
+        }
+        
+        return ChartResponse(**response_data)
         
     except HTTPException:
         raise
@@ -53,18 +88,39 @@ async def get_chart(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[ChartResponse])
-async def list_charts(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+async def get_user_charts(
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
-    """获取用户图表列表"""
+    """获取用户的所有图表"""
     try:
         service = ChartService(db)
         charts = await service.get_user_charts(user_id, skip, limit)
         
-        return [ChartResponse.model_validate(chart) for chart in charts]
+        # 转换为响应模型列表
+        response_list = []
+        for chart in charts:
+            response_data = {
+                "id": chart.id,
+                "name": chart.name,
+                "description": chart.description,
+                "chart_type": chart.chart_type,
+                "dataset_query": chart.dataset_query,
+                "visualization_settings": chart.visualization_settings,
+                "database_id": chart.data_source_id,
+                "creator_id": chart.created_by,
+                "is_public": chart.is_public,
+                "archived": chart.archived,
+                "cache_enabled": chart.cache_enabled,
+                "cache_duration": chart.cache_duration,
+                "created_at": chart.created_at,
+                "updated_at": chart.updated_at
+            }
+            response_list.append(ChartResponse(**response_data))
+        
+        return response_list
         
     except Exception as e:
         logger.error(f"获取图表列表API错误: {str(e)}")
@@ -84,8 +140,26 @@ async def update_chart(
         
         if not chart:
             raise HTTPException(status_code=404, detail="图表不存在")
-            
-        return ChartResponse.model_validate(chart)
+        
+        # 转换为响应模型
+        response_data = {
+            "id": chart.id,
+            "name": chart.name,
+            "description": chart.description,
+            "chart_type": chart.chart_type,
+            "dataset_query": chart.dataset_query,
+            "visualization_settings": chart.visualization_settings,
+            "database_id": chart.data_source_id,
+            "creator_id": chart.created_by,
+            "is_public": chart.is_public,
+            "archived": chart.archived,
+            "cache_enabled": chart.cache_enabled,
+            "cache_duration": chart.cache_duration,
+            "created_at": chart.created_at,
+            "updated_at": chart.updated_at
+        }
+        
+        return ChartResponse(**response_data)
         
     except HTTPException:
         raise
@@ -106,33 +180,11 @@ async def delete_chart(
         
         if not success:
             raise HTTPException(status_code=404, detail="图表不存在")
-            
+        
         return {"message": "图表删除成功"}
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"删除图表API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/{chart_id}/archive")
-async def archive_chart(
-    chart_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
-):
-    """归档图表"""
-    try:
-        service = ChartService(db)
-        chart = await service.archive_chart(chart_id, user_id)
-        
-        if not chart:
-            raise HTTPException(status_code=404, detail="图表不存在")
-            
-        return {"message": "图表归档成功"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"归档图表API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

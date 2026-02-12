@@ -1,7 +1,8 @@
 # backend/app/schemas/chart.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import json
 
 class DatasetQuery(BaseModel):
     """数据集查询配置 - 对应Metabase的dataset_query"""
@@ -59,15 +60,16 @@ class ChartUpdate(BaseModel):
     cache_duration: Optional[int] = None
 
 class ChartResponse(BaseModel):
-    """图表响应"""
+    """图表响应 - 适配现有数据库结构"""
     id: int
     name: str
     description: Optional[str]
     chart_type: str
-    dataset_query: Dict[str, Any]
-    visualization_settings: Dict[str, Any]
-    database_id: int
-    creator_id: int
+    dataset_query: Dict[str, Any]  # 从JSON字符串转换
+    visualization_settings: Dict[str, Any]  # 从JSON字符串转换
+    # 使用数据库中的实际字段名
+    data_source_id: int  # 对应 database_id
+    created_by: int  # 对应 creator_id
     is_public: bool
     archived: bool
     cache_enabled: bool
@@ -75,5 +77,29 @@ class ChartResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
+    # 验证器：将JSON字符串转换为字典
+    @validator('dataset_query', pre=True)
+    def parse_dataset_query(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v
+    
+    @validator('visualization_settings', pre=True)
+    def parse_visualization_settings(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v
+    
     class Config:
         from_attributes = True
+        # 字段别名映射
+        alias_generator = lambda x: {
+            'data_source_id': 'database_id',
+            'created_by': 'creator_id'
+        }.get(x, x)
