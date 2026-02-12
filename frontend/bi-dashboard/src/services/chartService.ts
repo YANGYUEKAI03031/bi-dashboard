@@ -138,27 +138,29 @@ export class ChartService {
     }
   }
 
-  static async executeChartQuery(chartId: number): Promise<any[]> {
-    try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}/query`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+  // 在 ChartService.ts 中添加数据验证
+static async executeChartQuery(chartId: number): Promise<any[]> {
+  try {
+    const token = localStorage.getItem('authToken');
+    const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('执行图表查询失败:', error);
-      throw error;
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
     }
+
+    const result = await response.json();
+    // 确保返回数组格式
+    return Array.isArray(result.data) ? result.data : [];
+  } catch (error) {
+    console.error('执行图表查询失败:', error);
+    throw error;
   }
+}
 }
