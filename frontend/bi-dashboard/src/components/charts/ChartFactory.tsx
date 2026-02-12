@@ -1,313 +1,419 @@
-import React, { useMemo } from 'react';
-import * as echarts from 'echarts/core';
-import {
-  BarChart,
-  LineChart,
-  PieChart,
-  ScatterChart,
-  HeatmapChart,
-  RadarChart,
-  FunnelChart,
-  GaugeChart,
-  BoxplotChart,
-  GraphChart,
-  TreeChart,
-  TreemapChart,
-  SunburstChart,
-  SankeyChart,
-  ThemeRiverChart,
-  // Removed CalendarChart import as it's not available
-  EffectScatterChart,
-  LinesChart,
-  PictorialBarChart,
-  ThemeRiverChart as ThemeRiver,
-  CustomChart
-} from 'echarts/charts';
-import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  TitleComponent,
-  ToolboxComponent,
-  DataZoomComponent,
-  VisualMapComponent,
-  TimelineComponent,
-  CalendarComponent, // Keep CalendarComponent for calendar coordinate system
-  GraphicComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  MarkAreaComponent
-} from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-import ReactECharts from 'echarts-for-react';
-
-// 注册必需的组件
-echarts.use([
-  BarChart,
-  LineChart,
-  PieChart,
-  ScatterChart,
-  HeatmapChart,
-  RadarChart,
-  FunnelChart,
-  GaugeChart,
-  BoxplotChart,
-  GraphChart,
-  TreeChart,
-  TreemapChart,
-  SunburstChart,
-  SankeyChart,
-  ThemeRiverChart,
-  // Removed CalendarChart registration
-  EffectScatterChart,
-  LinesChart,
-  PictorialBarChart,
-  ThemeRiver,
-  CustomChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  TitleComponent,
-  ToolboxComponent,
-  DataZoomComponent,
-  VisualMapComponent,
-  TimelineComponent,
-  CalendarComponent, // Keep CalendarComponent for calendar coordinate system
-  GraphicComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  MarkAreaComponent,
-  CanvasRenderer
-]);
+// frontend/bi-dashboard/src/components/charts/ChartFactory.tsx
+import React from 'react';
+import * as echarts from 'echarts';
 
 interface ChartConfig {
   type: string;
   title?: string;
   xAxis?: any;
   yAxis?: any;
-  series: any[];
-  legend?: any;
-  tooltip?: any;
-  grid?: any;
-  xField?: string; // X轴字段
-  yFields?: string[]; // Y轴字段数组
-  colorField?: string; // 颜色分组字段
+  series?: any[];
+  xField?: string;
+  yFields?: string[];
+  colorField?: string;  // 添加颜色分组字段支持
 }
 
 interface ChartFactoryProps {
   config: ChartConfig;
   data: any[];
   style?: React.CSSProperties;
-  onEvents?: Record<string, Function>;
 }
 
-export const ChartFactory: React.FC<ChartFactoryProps> = ({
-  config,
-  data,
-  style = { height: '400px' },
-  onEvents
-}) => {
-  const option = useMemo(() => {
-    // 处理xAxis数据 - 使用配置的xField
-    const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
-    const xAxisData = data.map(item => item[xField] || '');
+export const ChartFactory: React.FC<ChartFactoryProps> = ({ config, data, style }) => {
+  const [chartInstance, setChartInstance] = React.useState<echarts.ECharts | null>(null);
+  const chartRef = React.useRef<HTMLDivElement>(null);
 
-    // 处理系列数据 - 使用配置的yFields
-    const yFields = config.yFields || config.series.map(s => s.field) || [];
-    
-    const baseOption: any = {
+  // 当数据或配置变化时更新图表
+  React.useEffect(() => {
+    if (!chartRef.current) return;
+
+    // 初始化ECharts实例
+    if (!chartInstance) {
+      const instance = echarts.init(chartRef.current);
+      setChartInstance(instance);
+    }
+
+    // 更新图表配置
+    const option = generateChartOption(config, data);
+    chartInstance?.setOption(option, true); // 添加true参数强制更新
+
+    // 窗口大小变化时重绘图表
+    const handleResize = () => {
+      chartInstance?.resize();
+    };
+    window.addEventListener('resize', handleResize);
+
+    // 清理函数
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chartInstance?.dispose();
+    };
+  }, [config, data, chartInstance]);
+
+  // 生成图表选项
+  const generateChartOption = (config: ChartConfig, data: any[]) => {
+    const option: any = {
       title: {
-        text: config.title || '',
-        left: 'center'
-      },
-      tooltip: config.tooltip || {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross'
+        text: config.title,
+        left: 'center',
+        textStyle: {
+          fontSize: 16,
+          fontWeight: 'normal'
         }
       },
-      legend: config.legend || {
-        data: yFields.map(field => field),
-        bottom: 10
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(params: any) {
+          if (!params || params.length === 0) return '';
+          
+          let tooltip = `<strong>${params[0].name}</strong><br/>`;
+          params.forEach((param: any) => {
+            tooltip += `${param.seriesName}: ${param.value}<br/>`;
+          });
+          return tooltip;
+        }
       },
-      grid: config.grid || {
-        left: '3%',
-        right: '4%',
+      legend: {
+        show: true,
+        type: 'scroll',
+        top: '10%',
+        textStyle: {
+          fontSize: 12
+        }
+      },
+      grid: {
+        left: '10%',
+        right: '10%',
         bottom: '15%',
         containLabel: true
-      },
-      xAxis: {
-        ...config.xAxis,
-        type: 'category',
-        data: xAxisData,
-        name: config.xAxis?.name || 'X轴'
-      },
-      yAxis: {
-        ...config.yAxis,
-        type: 'value',
-        name: config.yAxis?.name || 'Y轴'
       }
     };
 
-    // 根据图表类型调整配置
-    switch (config.type.toLowerCase()) {
-      case 'bar':
-        baseOption.series = yFields.map(field => ({
-          name: field,
-          type: 'bar',
-          data: data.map(item => item[field] || 0),
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
-        }));
-        break;
-        
+    // 定义颜色 palette
+    const colorPalette = [
+      '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', 
+      '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#5b8ff9',
+      '#61ddaa', '#65789b', '#f6bd16', '#726fff', '#f19ec2'
+    ];
+
+    // 如果有colorField，处理颜色分组
+    if (config.colorField && data.length > 0 && data[0][config.colorField]) {
+      const uniqueValues = [...new Set(data.map(item => item[config.colorField!]))];
+      option.color = uniqueValues.map((_, index) => colorPalette[index % colorPalette.length]);
+    } else {
+      option.color = colorPalette;
+    }
+
+    // 根据图表类型设置不同的配置
+    switch (config.type) {
       case 'line':
-        baseOption.series = yFields.map(field => ({
-          name: field,
-          type: 'line',
-          data: data.map(item => item[field] || 0),
-          smooth: true,
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
-        }));
-        break;
+        option.xAxis = {
+          type: 'category',
+          data: data.map((item: any) => item[config.xField || 'x']),
+          axisLabel: {
+            rotate: 45,
+            fontSize: 12
+          }
+        };
+        option.yAxis = {
+          type: 'value',
+          name: config.yAxis?.name,
+          axisLabel: {
+            fontSize: 12
+          }
+        };
         
+        // 处理颜色分组
+        if (config.colorField && config.yFields && config.yFields.length > 0) {
+          const groupedData: Record<string, any[]> = {};
+          data.forEach(item => {
+            const groupKey = item[config.colorField!] || '未知';
+            if (!groupedData[groupKey]) {
+              groupedData[groupKey] = [];
+            }
+            groupedData[groupKey].push(item);
+          });
+          
+          option.series = Object.entries(groupedData).flatMap(([group, groupData]) => 
+            config.yFields!.map((field: string) => ({
+              name: `${group} - ${field}`,
+              type: 'line',
+              smooth: true,
+              data: groupData.map((item: any) => {
+                const value = item[field];
+                return value !== null && value !== undefined ? value : 0;
+              }),
+              symbolSize: 6,
+              lineStyle: {
+                width: 2
+              }
+            }))
+          );
+        } else {
+          option.series = config.yFields?.map((field: string) => ({
+            name: field,
+            type: 'line',
+            smooth: true,
+            data: data.map((item: any) => {
+              const value = item[field];
+              return value !== null && value !== undefined ? value : 0;
+            }),
+            symbolSize: 6,
+            lineStyle: {
+              width: 2
+            }
+          })) || [];
+        }
+        break;
+
+      case 'bar':
+        option.xAxis = {
+          type: 'category',
+          data: data.map((item: any) => item[config.xField || 'x']),
+          axisLabel: {
+            rotate: 45,
+            fontSize: 12
+          }
+        };
+        option.yAxis = {
+          type: 'value',
+          name: config.yAxis?.name,
+          axisLabel: {
+            fontSize: 12
+          }
+        };
+        
+        // 处理颜色分组
+        if (config.colorField && config.yFields && config.yFields.length > 0) {
+          const groupedData: Record<string, any[]> = {};
+          data.forEach(item => {
+            const groupKey = item[config.colorField!] || '未知';
+            if (!groupedData[groupKey]) {
+              groupedData[groupKey] = [];
+            }
+            groupedData[groupKey].push(item);
+          });
+          
+          option.series = Object.entries(groupedData).flatMap(([group, groupData]) => 
+            config.yFields!.map((field: string) => ({
+              name: `${group} - ${field}`,
+              type: 'bar',
+              data: groupData.map((item: any) => {
+                const value = item[field];
+                return value !== null && value !== undefined ? value : 0;
+              }),
+              barGap: '0%',
+              barCategoryGap: '20%'
+            }))
+          );
+        } else {
+          option.series = config.yFields?.map((field: string) => ({
+            name: field,
+            type: 'bar',
+            data: data.map((item: any) => {
+              const value = item[field];
+              return value !== null && value !== undefined ? value : 0;
+            }),
+            barGap: '0%',
+            barCategoryGap: '20%'
+          })) || [];
+        }
+        break;
+
       case 'area':
-        baseOption.series = yFields.map(field => ({
-          name: field,
-          type: 'line',
-          data: data.map(item => item[field] || 0),
-          smooth: true,
-          areaStyle: {},
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
-        }));
+        option.xAxis = {
+          type: 'category',
+          data: data.map((item: any) => item[config.xField || 'x']),
+          axisLabel: {
+            rotate: 45,
+            fontSize: 12
+          }
+        };
+        option.yAxis = {
+          type: 'value',
+          name: config.yAxis?.name,
+          axisLabel: {
+            fontSize: 12
+          }
+        };
+        
+        // 处理颜色分组
+        if (config.colorField && config.yFields && config.yFields.length > 0) {
+          const groupedData: Record<string, any[]> = {};
+          data.forEach(item => {
+            const groupKey = item[config.colorField!] || '未知';
+            if (!groupedData[groupKey]) {
+              groupedData[groupKey] = [];
+            }
+            groupedData[groupKey].push(item);
+          });
+          
+          option.series = Object.entries(groupedData).flatMap(([group, groupData]) => 
+            config.yFields!.map((field: string) => ({
+              name: `${group} - ${field}`,
+              type: 'line',
+              smooth: true,
+              areaStyle: {
+                opacity: 0.3
+              },
+              data: groupData.map((item: any) => {
+                const value = item[field];
+                return value !== null && value !== undefined ? value : 0;
+              }),
+              symbolSize: 0,
+              lineStyle: {
+                width: 2
+              }
+            }))
+          );
+        } else {
+          option.series = config.yFields?.map((field: string) => ({
+            name: field,
+            type: 'line',
+            smooth: true,
+            areaStyle: {
+              opacity: 0.3
+            },
+            data: data.map((item: any) => {
+              const value = item[field];
+              return value !== null && value !== undefined ? value : 0;
+            }),
+            symbolSize: 0,
+            lineStyle: {
+              width: 2
+            }
+          })) || [];
+        }
         break;
-        
+
       case 'pie':
-        baseOption.tooltip = {
-          trigger: 'item'
+        option.legend = {
+          show: true,
+          type: 'scroll',
+          top: '10%',
+          textStyle: {
+            fontSize: 12
+          }
         };
-        baseOption.legend = {
-          top: 'bottom'
-        };
-        delete baseOption.xAxis;
-        delete baseOption.yAxis;
         
-        if (yFields.length > 0) {
-          const fieldValue = yFields[0]; // 饼图通常只需要一个数值字段
-          baseOption.series = [{
+        // 饼图不支持colorField分组，直接按yFields显示
+        if (config.yFields && config.yFields.length > 0) {
+          const field = config.yFields[0];
+          option.series = [{
+            name: config.title || field,
             type: 'pie',
             radius: ['40%', '70%'],
-            data: data.map((item, index) => ({
-              name: item[xField] || `数据${index + 1}`,
-              value: item[fieldValue] || 0
-            })),
+            center: ['50%', '60%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'center'
+            },
             emphasis: {
-              itemStyle: {
-                shadowBlur: 10,
-                shadowOffsetX: 0,
-                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              label: {
+                show: true,
+                fontSize: '16',
+                fontWeight: 'bold'
               }
-            }
+            },
+            labelLine: {
+              show: false
+            },
+            data: data.map((item: any) => ({
+              value: item[field] !== null && item[field] !== undefined ? item[field] : 0,
+              name: item[config.xField || 'name'] || '未知'
+            }))
           }];
         }
         break;
-        
+
       case 'scatter':
-        baseOption.xAxis.type = 'value';
-        baseOption.yAxis.type = 'value';
-        if (yFields.length >= 2) {
-          baseOption.series = [{
-            name: '散点图',
+        option.xAxis = {
+          type: 'value',
+          name: config.xAxis?.name || 'X轴',
+          axisLabel: {
+            fontSize: 12
+          }
+        };
+        option.yAxis = {
+          type: 'value',
+          name: config.yAxis?.name || 'Y轴',
+          axisLabel: {
+            fontSize: 12
+          }
+        };
+        
+        // 散点图的颜色分组
+        if (config.colorField && config.yFields && config.yFields.length > 0) {
+          const field = config.yFields[0];
+          const groupedData: Record<string, any[]> = {};
+          data.forEach(item => {
+            const groupKey = item[config.colorField!] || '未知';
+            if (!groupedData[groupKey]) {
+              groupedData[groupKey] = [];
+            }
+            groupedData[groupKey].push(item);
+          });
+          
+          option.series = Object.entries(groupedData).map(([group, groupData]) => ({
+            name: group,
             type: 'scatter',
-            data: data.map(item => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
+            data: groupData.map((item: any) => [
+              item[config.xField || 'x'],
+              item[field]
+            ]),
+            symbolSize: 10
+          }));
+        } else if (config.yFields && config.yFields.length > 0) {
+          const field = config.yFields[0];
+          option.series = [{
+            name: field,
+            type: 'scatter',
+            data: data.map((item: any) => [
+              item[config.xField || 'x'],
+              item[field]
+            ]),
             symbolSize: 10
           }];
-          // 移除不必要的轴配置
-          delete baseOption.xAxis.data;
-          delete baseOption.xAxis.name;
-          delete baseOption.yAxis.name;
         }
         break;
-        
-      case 'heatmap':
-        // 热力图需要特殊的二维数据格式
-        baseOption.visualMap = {
-          min: 0,
-          max: Math.max(...data.map(item => Math.max(...yFields.map(field => item[field] || 0)))),
-          calculable: true,
-          orient: 'horizontal',
-          left: 'center',
-          bottom: '15%'
+
+      default:
+        // 默认使用折线图
+        option.xAxis = {
+          type: 'category',
+          data: data.map((item: any) => item[config.xField || 'x']),
+          axisLabel: {
+            rotate: 45,
+            fontSize: 12
+          }
         };
-        baseOption.series = [{
-          name: '热力图',
-          type: 'heatmap',
-          data: data.map((item, rowIndex) => 
-            yFields.map((field, colIndex) => [colIndex, rowIndex, item[field] || 0])
-          ).flat(),
-          label: {
-            show: true
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
+        option.yAxis = {
+          type: 'value',
+          name: config.yAxis?.name,
+          axisLabel: {
+            fontSize: 12
+          }
+        };
+        option.series = [{
+          name: config.title || '默认系列',
+          type: 'line',
+          data: data.map((item: any) => {
+            const field = config.yFields?.[0] || 'y';
+            const value = item[field];
+            return value !== null && value !== undefined ? value : 0;
+          }),
+          symbolSize: 6,
+          lineStyle: {
+            width: 2
           }
         }];
-        baseOption.xAxis = {
-          type: 'category',
-          data: yFields
-        };
-        baseOption.yAxis = {
-          type: 'category',
-          data: xAxisData
-        };
-        break;
-        
-      default:
-        // 默认使用柱状图
-        baseOption.series = yFields.map(field => ({
-          name: field,
-          type: 'bar',
-          data: data.map(item => item[field] || 0)
-        }));
     }
 
-    // 如果有颜色分组字段，添加颜色映射
-    if (config.colorField && config.colorField !== '') {
-      baseOption.visualMap = {
-        show: false,
-        dimension: 2,
-        pieces: [
-          { gt: 0, color: '#5470c6' },
-          { gt: 100, color: '#91cc75' },
-          { gt: 200, color: '#fac858' },
-          { gt: 300, color: '#ee6666' },
-          { gt: 400, color: '#73c0de' }
-        ]
-      };
-    }
-
-    return baseOption;
-  }, [config, data]);
-
-  // 添加调试信息
-  console.log('ChartFactory props:', { config, data });
-  console.log('Generated option:', option);
+    return option;
+  };
 
   return (
-    <ReactECharts
-      option={option}
-      style={style}
-      onEvents={onEvents}
-      notMerge={true}
-      lazyUpdate={true}
-    />
+    <div ref={chartRef} style={{ ...style, height: '100%' }} />
   );
 };

@@ -205,14 +205,15 @@ export const VisualizationBuilder: React.FC = () => {
   };
 
   const handleDataSourceChange = (value: string) => {
-    setSelectedDataSource(value);
-    setTables([]);
-    setSelectedTable('');
-    setQueryResult([]);
-    setPreviewData([]);
-    setAvailableFields([]);
-    loadTables(value);
-  };
+  console.log('数据源变更:', value);
+  setSelectedDataSource(value);
+  setTables([]);
+  setSelectedTable('');
+  setQueryResult([]);
+  setPreviewData([]);
+  setAvailableFields([]);
+  loadTables(value);
+};
 
   const handleTableChange = (value: string) => {
     setSelectedTable(value);
@@ -328,64 +329,75 @@ export const VisualizationBuilder: React.FC = () => {
   };
 
   const handleSaveChart = async () => {
-    console.log('=== 保存图表开始 ===');
-    console.log('当前认证状态:', { user, isAuthenticated, authChecked });
+  console.log('=== 保存图表开始 ===');
+  console.log('当前认证状态:', { user, isAuthenticated, authChecked });
+  
+  const token = AuthService.getAuthToken();
+  console.log('Token存在:', !!token);
+  
+  if (!authChecked) {
+    message.warning('正在检查认证状态，请稍后再试');
+    return;
+  }
+  
+  if (!isAuthenticated || !user || !token) {
+    console.log('认证失败详情:', { 
+      isAuthenticated, 
+      user: !!user, 
+      token: !!token,
+      contextUser: user
+    });
     
-    const token = AuthService.getAuthToken();
-    console.log('Token存在:', !!token);
+    message.error('请先登录');
     
-    if (!authChecked) {
-      message.warning('正在检查认证状态，请稍后再试');
-      return;
+    const refreshed = await checkAuthStatus();
+    if (refreshed) {
+      message.success('认证状态已恢复，请重试');
+    } else {
+      window.location.href = '/login';
     }
-    
-    if (!isAuthenticated || !user || !token) {
-      console.log('认证失败详情:', { 
-        isAuthenticated, 
-        user: !!user, 
-        token: !!token,
-        contextUser: user
-      });
-      
-      message.error('请先登录');
-      
-      const refreshed = await checkAuthStatus();
-      if (refreshed) {
-        message.success('认证状态已恢复，请重试');
-      } else {
-        window.location.href = '/login';
-      }
-      return;
-    }
-    
-    if (queryResult.length === 0) {
-      message.error('请先执行查询获取数据');
-      return;
-    }
+    return;
+  }
+  
+  if (queryResult.length === 0) {
+    message.error('请先执行查询获取数据');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const chartToSave = {
-        ...chartData,
-        dataset_query: {
-          type: 'native',
-          native: {
-            query: `SELECT * FROM ${selectedTable}`
-          }
-        },
-        creator_id: user.id
-      };
-      
-      console.log('准备保存的图表数据:', chartToSave);
-      await ChartService.createChart(chartToSave);
-      message.success('图表保存成功');
-    } catch (error: any) {
-      console.error('保存图表失败:', error);
-      message.error(error.message || '保存失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 确保有选中的数据源
+  if (!selectedDataSource) {
+    message.error('请选择数据源');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // 查找选中数据源对应的ID
+    const selectedSource = dataSources.find(source => source.type === selectedDataSource);
+    const databaseId = selectedSource ? parseInt(selectedSource.id) : 1;
+
+    const chartToSave = {
+      ...chartData,
+      database_id: databaseId,  // 明确设置 database_id
+      dataset_query: {
+        type: 'native',
+        native: {
+          query: `SELECT * FROM ${selectedTable}`
+        }
+      },
+      creator_id: user.id
+    };
+    
+    console.log('准备保存的图表数据:', chartToSave);
+    await ChartService.createChart(chartToSave);
+    message.success('图表保存成功');
+  } catch (error: any) {
+    console.error('保存图表失败:', error);
+    message.error(error.message || '保存失败');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 如果认证检查还未完成，显示加载状态
   if (!authChecked) {
@@ -617,6 +629,7 @@ export const VisualizationBuilder: React.FC = () => {
                         field: field
                       })),
                       xField: chartData.visualization_settings.x_field,
+                      yFields: chartData.visualization_settings.y_fields,
                       colorField: chartData.visualization_settings.color_field
                     }}
                     data={queryResult}

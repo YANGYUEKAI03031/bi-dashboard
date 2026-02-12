@@ -1,5 +1,4 @@
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
-// frontend/bi-dashboard/src/pages/DashboardPage.tsx
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
@@ -339,6 +338,10 @@ export const DashboardPage: React.FC = () => {
       loadData();
     }, [card.chart?.id]); // 只有当chart.id变化时才重新加载
     
+    // 添加数据验证和调试信息
+    console.log('图表数据:', chartData);
+    console.log('图表配置:', card.chart?.visualization_settings);
+
     if (!card.chart) return null;
     
     return (
@@ -415,7 +418,7 @@ export const DashboardPage: React.FC = () => {
                   xField: card.chart.visualization_settings?.x_field,
                   yFields: card.chart.visualization_settings?.y_fields
                 }}
-                data={chartData}
+                data={chartData.length > 0 ? chartData : [{ x: '无数据', y: 0 }]}
                 style={{ height: '100%', width: '100%' }}
               />
             </div>

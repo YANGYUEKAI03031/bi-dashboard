@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/services/chartService.ts
-// frontend/bi-dashboard/src/services/chartService.ts
-import { AuthService } from './authService';
+import { AuthService } from './authService';  // 添加这行导入
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
 interface ChartCreateRequest {
