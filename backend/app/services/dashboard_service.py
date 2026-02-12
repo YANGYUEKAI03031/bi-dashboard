@@ -2,6 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
@@ -45,22 +46,33 @@ class DashboardService:
             raise Exception(f"创建仪表板失败: {str(e)}")
     
     async def get_dashboard(self, dashboard_id: int, user_id: int) -> Optional[Dashboard]:
-        """获取仪表板详情（包含卡片信息）"""
+        """获取仪表板详情（包含卡片和图表信息）"""
         try:
-            stmt = select(Dashboard).where(
+            # 使用selectinload预加载关联数据
+            stmt = select(Dashboard).options(
+                selectinload(Dashboard.dashboard_cards).selectinload(DashboardCard.chart)
+            ).where(
                 Dashboard.id == dashboard_id,
                 Dashboard.creator_id == user_id
             )
+            
             result = await self.db.execute(stmt)
             dashboard = result.scalar_one_or_none()
             
             if dashboard:
-                # 获取关联的卡片信息
-                cards_stmt = select(DashboardCard).where(
-                    DashboardCard.dashboard_id == dashboard_id
-                )
-                cards_result = await self.db.execute(cards_stmt)
-                dashboard.cards = cards_result.scalars().all()
+                # 确保cards属性存在并包含关联的图表数据
+                if not hasattr(dashboard, 'cards') or dashboard.cards is None:
+                    dashboard.cards = dashboard.dashboard_cards
+                    
+                # 确保每个卡片都有chart数据
+                for card in dashboard.cards:
+                    if not hasattr(card, 'chart') or card.chart is None:
+                        # 如果关联数据没有正确加载，手动查询
+                        chart_stmt = select(VisualizationCard).where(
+                            VisualizationCard.id == card.chart_id
+                        )
+                        chart_result = await self.db.execute(chart_stmt)
+                        card.chart = chart_result.scalar_one_or_none()
             
             return dashboard
             
@@ -69,15 +81,35 @@ class DashboardService:
             raise Exception(f"获取仪表板失败: {str(e)}")
     
     async def get_user_dashboards(self, user_id: int, skip: int = 0, limit: int = 100) -> List[Dashboard]:
-        """获取用户的所有仪表板"""
+        """获取用户的所有仪表板（包含完整关联数据）"""
         try:
-            stmt = select(Dashboard).where(
+            # 使用selectinload预加载所有关联数据
+            stmt = select(Dashboard).options(
+                selectinload(Dashboard.dashboard_cards).selectinload(DashboardCard.chart)
+            ).where(
                 Dashboard.creator_id == user_id,
                 Dashboard.archived == False
             ).offset(skip).limit(limit)
             
             result = await self.db.execute(stmt)
-            return result.scalars().all()
+            dashboards = result.scalars().all()
+            
+            # 确保每个仪表板的cards属性被正确设置
+            for dashboard in dashboards:
+                if not hasattr(dashboard, 'cards') or dashboard.cards is None:
+                    dashboard.cards = dashboard.dashboard_cards
+                    
+                # 确保每个卡片都有chart数据
+                for card in dashboard.cards:
+                    if not hasattr(card, 'chart') or card.chart is None:
+                        # 如果关联数据没有正确加载，手动查询
+                        chart_stmt = select(VisualizationCard).where(
+                            VisualizationCard.id == card.chart_id
+                        )
+                        chart_result = await self.db.execute(chart_stmt)
+                        card.chart = chart_result.scalar_one_or_none()
+            
+            return dashboards
             
         except SQLAlchemyError as e:
             logger.error(f"获取仪表板列表失败: {str(e)}")
@@ -94,7 +126,7 @@ class DashboardService:
             # 验证图表存在且属于用户
             chart_stmt = select(VisualizationCard).where(
                 VisualizationCard.id == card_data.chart_id,
-                VisualizationCard.created_by == user_id  # 修正：使用正确的字段名
+                VisualizationCard.created_by == user_id
             )
             chart_result = await self.db.execute(chart_stmt)
             chart = chart_result.scalar_one_or_none()
@@ -116,6 +148,9 @@ class DashboardService:
             self.db.add(dashboard_card)
             await self.db.commit()
             await self.db.refresh(dashboard_card)
+            
+            # 手动加载关联的图表数据
+            dashboard_card.chart = chart
             
             logger.info(f"图表添加到仪表板成功: 仪表板ID {dashboard_id}, 图表ID {card_data.chart_id}")
             return dashboard_card

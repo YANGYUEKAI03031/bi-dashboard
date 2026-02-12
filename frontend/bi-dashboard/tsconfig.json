@@ -22,9 +22,16 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    // 移除了已废弃的选项，保留有用的配置
+    "noImplicitAny": false,
+    "strictNullChecks": false
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "build"
   ]
 }

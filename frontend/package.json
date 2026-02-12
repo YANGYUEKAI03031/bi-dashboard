@@ -5,5 +5,8 @@
     "konva": "^10.2.0",
     "react-draggable": "^4.5.0",
     "react-konva": "^19.2.2"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3"
   }
 }

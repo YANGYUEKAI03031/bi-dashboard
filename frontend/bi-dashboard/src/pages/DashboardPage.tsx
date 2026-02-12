@@ -1,11 +1,56 @@
+// frontend/bi-dashboard/src/pages/DashboardPage.tsx
+// frontend/bi-dashboard/src/pages/DashboardPage.tsx
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import { DashboardService } from '../services/dashboardService';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import './DashboardPage.css';
+
+// 添加拖拽相关的CSS类
+const gridStyles = `
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 60px;
+  gap: 16px;
+  padding: 16px;
+  min-height: 600px;
+}
+
+.dashboard-card-wrapper {
+  position: relative;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.dashboard-card-wrapper:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: move;
+  z-index: 10;
+  background: rgba(255,255,255,0.9);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.chart-container {
+  height: 100%;
+  overflow: hidden;
+}
+`;
+
+// 在组件顶部添加样式
+const styleSheet = document.createElement("style");
+styleSheet.innerText = gridStyles;
+document.head.appendChild(styleSheet);
 
 // 从ChartService导入ChartResponse类型
 type ChartResponse = Awaited<ReturnType<typeof ChartService.getUserCharts>>[0];
@@ -58,6 +103,24 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
+  const [draggedCard, setDraggedCard] = useState<DashboardCard | null>(null);
+  const [chartDataCache, setChartDataCache] = useState<Record<number, any[]>>({});
+
+  // 加载图表数据的函数
+  const loadChartData = async (chartId: number) => {
+    if (chartDataCache[chartId]) {
+      return chartDataCache[chartId];
+    }
+    
+    try {
+      const data = await ChartService.executeChartQuery(chartId);
+      setChartDataCache(prev => ({ ...prev, [chartId]: data }));
+      return data;
+    } catch (error) {
+      console.error('加载图表数据失败:', error);
+      return [];
+    }
+  };
 
   // 加载图表列表
   const loadCharts = async () => {
@@ -130,10 +193,17 @@ export const DashboardPage: React.FC = () => {
         size_y: 4
       });
       
+      // 手动关联chart数据
+      const chartData = charts.find(c => c.id === chartId);
+      const cardWithChart = {
+        ...newCard,
+        chart: chartData
+      };
+      
       // 更新本地状态
       const updatedDashboard = {
         ...selectedDashboard,
-        cards: [...selectedDashboard.cards, newCard]
+        cards: [...selectedDashboard.cards, cardWithChart]
       };
       
       setSelectedDashboard(updatedDashboard);
@@ -245,19 +315,70 @@ export const DashboardPage: React.FC = () => {
     </div>
   );
 
-  // 渲染仪表盘卡片
-  const renderDashboardCard = (card: DashboardCard) => {
+  // 渲染仪表盘卡片组件 - 简化版本，不使用Hooks
+  const DashboardCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
+    const [chartData, setChartData] = useState<any[]>([]);
+    const [dataLoading, setDataLoading] = useState(false);
+    
+    // 在组件挂载时加载数据
+    useEffect(() => {
+      const loadData = async () => {
+        if (!card.chart) return;
+        
+        setDataLoading(true);
+        try {
+          const data = await loadChartData(card.chart.id);
+          setChartData(data);
+        } catch (error) {
+          message.error('加载图表数据失败');
+        } finally {
+          setDataLoading(false);
+        }
+      };
+      
+      loadData();
+    }, [card.chart?.id]); // 只有当chart.id变化时才重新加载
+    
     if (!card.chart) return null;
     
     return (
       <div 
         key={card.id}
-        className="dashboard-card"
+        className="dashboard-card-wrapper"
         style={{
-          gridRow: `${card.card_row + 1} / span ${card.size_y}`,
-          gridColumn: `${card.card_col + 1} / span ${card.size_x}`
+          gridRow: `span ${card.size_y}`,
+          gridColumn: `span ${card.size_x}`,
+          zIndex: draggedCard?.id === card.id ? 1000 : 1
+        }}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          setDraggedCard(card);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          if (draggedCard && draggedCard.id !== card.id) {
+            // 计算新的位置
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / (rect.width / card.size_x));
+            const y = Math.floor((e.clientY - rect.top) / (rect.height / card.size_y));
+            
+            // 更新位置
+            await handleCardResizeOrMove(draggedCard.id, {
+              card_row: Math.max(0, card.card_row + y),
+              card_col: Math.max(0, card.card_col + x)
+            });
+            setDraggedCard(null);
+          }
         }}
       >
+        <div className="drag-handle">
+          <DragOutlined />
+        </div>
         <Card 
           title={card.chart.name}
           extra={
@@ -265,30 +386,40 @@ export const DashboardPage: React.FC = () => {
               type="text" 
               icon={<DeleteOutlined />}
               onClick={() => handleRemoveChartFromDashboard(card.id)}
+              size="small"
             />
           }
           className="dashboard-card-inner"
+          bodyStyle={{ padding: '12px', height: 'calc(100% - 56px)' }}
         >
-          <ChartFactory
-            config={{
-              type: card.chart.chart_type,
-              title: card.chart.name,
-              xAxis: {
-                name: card.chart.visualization_settings?.x_axis_title || 'X轴'
-              },
-              yAxis: {
-                name: card.chart.visualization_settings?.y_axis_title || 'Y轴'
-              },
-              series: card.chart.visualization_settings?.y_fields?.map((field: string) => ({
-                name: field,
-                field: field
-              })) || [],
-              xField: card.chart.visualization_settings?.x_field,
-              yFields: card.chart.visualization_settings?.y_fields
-            }}
-            data={[]} // 这里需要从后端获取实际数据
-            style={{ height: '100%' }}
-          />
+          {dataLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <Spin />
+            </div>
+          ) : (
+            <div className="chart-container">
+              <ChartFactory
+                config={{
+                  type: card.chart.chart_type,
+                  title: card.chart.name,
+                  xAxis: {
+                    name: card.chart.visualization_settings?.x_axis_title || 'X轴'
+                  },
+                  yAxis: {
+                    name: card.chart.visualization_settings?.y_axis_title || 'Y轴'
+                  },
+                  series: card.chart.visualization_settings?.y_fields?.map((field: string) => ({
+                    name: field,
+                    field: field
+                  })) || [],
+                  xField: card.chart.visualization_settings?.x_field,
+                  yFields: card.chart.visualization_settings?.y_fields
+                }}
+                data={chartData}
+                style={{ height: '100%', width: '100%' }}
+              />
+            </div>
+          )}
         </Card>
       </div>
     );
@@ -309,87 +440,77 @@ export const DashboardPage: React.FC = () => {
             </Button>
           </Space>
         </div>
-        <p>拖拽图表到仪表盘或点击添加按钮</p>
       </div>
       
-      <Spin spinning={loading}>
-        <div className="dashboard-container">
+      <div className="dashboard-content">
+        <Row gutter={24}>
           {/* 左侧图表列表 */}
-          <div className="charts-panel">
-            <Card title="可用图表" className="panel-card">
-              <div className="charts-list">
-                {charts.length > 0 ? (
-                  charts.map(renderDraggableChartItem)
-                ) : (
-                  <div className="no-charts">
-                    <p>暂无可用图表</p>
-                    <Button 
-                      type="link" 
-                      href="/visualization-builder"
-                    >
-                      去创建图表
-                    </Button>
-                  </div>
-                )}
+          <Col span={6}>
+            <Card title="可用图表" className="chart-list-panel">
+              <div className="chart-list">
+                {charts.map(chart => renderDraggableChartItem(chart))}
               </div>
             </Card>
-          </div>
+          </Col>
           
           {/* 右侧仪表盘区域 */}
-          <div className="dashboard-panel">
-            {dashboards.length > 0 ? (
-              <>
-                {/* 仪表盘选择器 */}
-                <div className="dashboard-selector">
+          <Col span={18}>
+            {selectedDashboard ? (
+              <Card 
+                title={selectedDashboard.name}
+                extra={
                   <Space>
-                    {dashboards.map(dashboard => (
-                      <Button
-                        key={dashboard.id}
-                        type={selectedDashboard?.id === dashboard.id ? "primary" : "default"}
-                        onClick={() => setSelectedDashboard(dashboard)}
-                      >
-                        {dashboard.name}
-                      </Button>
-                    ))}
+                    <Button onClick={() => loadDashboards()}>刷新</Button>
                   </Space>
+                }
+              >
+                <div className="dashboard-grid">
+                  {selectedDashboard.cards.map(card => (
+                    <DashboardCardComponent key={card.id} card={card} />
+                  ))}
+                  
+                  {/* 空白占位符用于放置新卡片 */}
+                  <div 
+                    className="grid-placeholder"
+                    style={{
+                      gridRow: 'span 4',
+                      gridColumn: 'span 6',
+                      border: '2px dashed #ddd',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#999'
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      if (draggedCard) {
+                        // 添加到仪表盘的新位置
+                        await handleAddChartToDashboard(draggedCard.chart_id);
+                        setDraggedCard(null);
+                      }
+                    }}
+                  >
+                    拖拽图表到这里
+                  </div>
                 </div>
-                
-                {/* 仪表盘内容 */}
-                {selectedDashboard ? (
-                  <Card className="dashboard-content-card">
-                    <div className="dashboard-grid">
-                      {selectedDashboard.cards.map(renderDashboardCard)}
-                    </div>
-                  </Card>
-                ) : (
-                  <Card>
-                    <div className="empty-dashboard">
-                      <p>请选择一个仪表盘</p>
-                    </div>
-                  </Card>
-                )}
-              </>
+              </Card>
             ) : (
               <Card>
-                <div className="empty-dashboard">
-                  <p>暂无仪表盘</p>
-                  <Button 
-                    type="primary"
-                    onClick={() => setCreateModalVisible(true)}
-                  >
-                    创建第一个仪表盘
-                  </Button>
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <p>请选择或创建一个仪表盘</p>
                 </div>
               </Card>
             )}
-          </div>
-        </div>
-      </Spin>
+          </Col>
+        </Row>
+      </div>
       
       {/* 创建仪表盘模态框 */}
       <Modal
         title="创建新仪表盘"
-        open={createModalVisible}
+        visible={createModalVisible}
         onCancel={() => setCreateModalVisible(false)}
         footer={null}
       >

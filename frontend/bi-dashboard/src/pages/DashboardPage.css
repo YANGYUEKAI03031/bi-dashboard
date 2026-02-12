@@ -1,43 +1,34 @@
+/* frontend/bi-dashboard/src/pages/DashboardPage.css */
+/* frontend/bi-dashboard/src/pages/DashboardPage.css */
+
 .dashboard-page {
-  padding: 24px;
   height: 100%;
+  background: #f5f5f5;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
 }
 
-.page-header h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+.dashboard-content {
+  padding: 24px;
+  height: calc(100% - 64px);
 }
 
-.dashboard-container {
-  display: flex;
-  gap: 24px;
-  height: calc(100vh - 180px);
-}
-
-/* 左侧面板 */
-.charts-panel {
-  width: 300px;
-  flex-shrink: 0;
-}
-
-.panel-card {
+.chart-list-panel {
   height: 100%;
 }
 
-.charts-list {
-  max-height: calc(100vh - 250px);
+.chart-list {
+  max-height: 600px;
   overflow-y: auto;
 }
 
@@ -51,98 +42,104 @@
 }
 
 .chart-item-content h4 {
-  margin: 0 0 4px 0;
+  margin: 0 0 8px 0;
   font-size: 14px;
-  font-weight: 500;
 }
 
 .chart-type {
-  margin: 0 0 8px 0;
-  font-size: 12px;
+  margin: 0 0 12px 0;
   color: #666;
+  font-size: 12px;
 }
 
 .chart-actions {
   text-align: right;
 }
 
-/* 右侧面板 */
-.dashboard-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.dashboard-selector {
-  background: white;
-  padding: 12px 16px;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.dashboard-content-card {
-  flex: 1;
-  overflow: hidden;
-}
-
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  grid-template-rows: repeat(12, 100px);
+  grid-auto-rows: minmax(200px, auto);
   gap: 16px;
-  height: calc(100vh - 300px);
   padding: 16px;
-  background: #f5f5f5;
-  border-radius: 6px;
+  min-height: 500px;
+  background: #fafafa;
+  border-radius: 8px;
 }
 
-.dashboard-card {
+.dashboard-card-wrapper {
   position: relative;
   background: white;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #e8e8e8;
 }
 
-.dashboard-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.dashboard-card-wrapper:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+.dashboard-card-wrapper.dragging {
+  opacity: 0.7;
+  transform: rotate(5deg);
+  z-index: 1000;
+}
+
+.drag-handle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  cursor: move;
+  z-index: 10;
+  background: rgba(255,255,255,0.9);
+  border-radius: 4px;
+  padding: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.2s;
+}
+
+.drag-handle:hover {
+  background: rgba(255,255,255,1);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
 .dashboard-card-inner {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.dashboard-card-inner .ant-card-body {
-  height: calc(100% - 56px);
-  padding: 12px;
+.chart-container {
+  flex: 1;
+  min-height: 0;
 }
 
-/* 空状态 */
-.no-charts, .empty-dashboard {
-  text-align: center;
-  padding: 40px 20px;
-  color: #666;
+.grid-placeholder {
+  background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), 
+              linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), 
+              linear-gradient(45deg, transparent 75%, #f0f0f0 75%), 
+              linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  animation: placeholder-pulse 2s infinite;
 }
 
-.no-charts p, .empty-dashboard p {
-  margin: 0 0 16px 0;
+@keyframes placeholder-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .dashboard-container {
-    flex-direction: column;
-    height: auto;
-  }
-  
-  .charts-panel {
-    width: 100%;
-  }
-  
   .dashboard-grid {
     grid-template-columns: repeat(6, 1fr);
-    grid-template-rows: repeat(20, 80px);
-    height: 600px;
+    gap: 12px;
+  }
+  
+  .dashboard-content {
+    padding: 12px;
   }
 }

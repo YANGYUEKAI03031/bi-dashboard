@@ -1,4 +1,5 @@
 # backend/app/api/v1/charts.py
+# backend/app/api/v1/charts.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -187,4 +188,33 @@ async def delete_chart(
         raise
     except Exception as e:
         logger.error(f"删除图表API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{chart_id}/query", response_model=dict)
+async def execute_chart_query(
+    chart_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """执行图表查询并返回数据"""
+    try:
+        service = ChartService(db)
+        chart = await service.get_chart(chart_id, user_id)
+        
+        if not chart:
+            raise HTTPException(status_code=404, detail="图表不存在")
+        
+        # 执行查询
+        query_result = await service.execute_chart_query(chart)
+        
+        return {
+            "data": query_result,
+            "columns": list(query_result[0].keys()) if query_result else [],
+            "row_count": len(query_result)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"执行图表查询API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,10 +1,12 @@
+# backend/app/services/chart_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, text
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
 import logging
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.models.visualization import VisualizationCard, Database
 from app.schemas.chart import ChartCreate, ChartUpdate
@@ -180,3 +182,42 @@ class ChartService:
             await self.db.rollback()
             logger.error(f"删除图表失败: {str(e)}")
             raise Exception(f"删除图表失败: {str(e)}")
+    
+    async def execute_chart_query(self, chart: VisualizationCard) -> List[Dict]:
+        """执行图表的SQL查询"""
+        try:
+            # 解析dataset_query获取SQL
+            dataset_query = chart.dataset_query
+            if isinstance(dataset_query, str):
+                dataset_query = json.loads(dataset_query)
+            
+            sql_query = dataset_query.get('native', {}).get('query', '')
+            if not sql_query:
+                return []
+            
+            # 获取数据源连接信息
+            db_model = await self.db.get(Database, chart.data_source_id)
+            if not db_model:
+                raise Exception("数据源不存在")
+            
+            # 构建数据库连接URL
+            db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+            
+            # 创建临时连接执行查询
+            temp_engine = create_async_engine(db_url)
+            try:
+                async with temp_engine.connect() as conn:
+                    result = await conn.execute(text(sql_query))
+                    rows = result.fetchall()
+                    
+                    # 转换为字典列表
+                    columns = result.keys()
+                    data = [dict(zip(columns, row)) for row in rows]
+                    
+                    return data
+            finally:
+                await temp_engine.dispose()
+                
+        except Exception as e:
+            logger.error(f"执行查询失败: {str(e)}")
+            raise Exception(f"查询执行失败: {str(e)}")

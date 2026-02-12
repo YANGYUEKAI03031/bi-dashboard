@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/services/chartService.ts
+// frontend/bi-dashboard/src/services/chartService.ts
 import { AuthService } from './authService';
-
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
 interface ChartCreateRequest {
@@ -135,6 +135,30 @@ export class ChartService {
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail || '删除图表失败');
+    }
+  }
+
+  static async executeChartQuery(chartId: number): Promise<any[]> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('执行图表查询失败:', error);
+      throw error;
     }
   }
 }
