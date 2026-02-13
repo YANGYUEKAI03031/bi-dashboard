@@ -60,7 +60,11 @@ export const VisualizationBuilder: React.FC = () => {
       y_axis_title: "Y轴",
       x_field: "",
       y_fields: [],
-      color_field: ""
+      color_field: "",
+      // 添加更多配置项
+      show_legend: true,
+      show_tooltip: true,
+      grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
     },
     database_id: 1
   });
@@ -160,6 +164,17 @@ export const VisualizationBuilder: React.FC = () => {
           visualization_settings: {
             ...prev.visualization_settings,
             x_field: availableFields[0],
+            y_fields: availableFields.slice(1, Math.min(3, availableFields.length))
+          }
+        }));
+      }
+      
+      // 确保y_fields不为空
+      if (availableFields.length > 1 && (!chartData.visualization_settings.y_fields || chartData.visualization_settings.y_fields.length === 0)) {
+        setChartData(prev => ({
+          ...prev,
+          visualization_settings: {
+            ...prev.visualization_settings,
             y_fields: availableFields.slice(1, Math.min(3, availableFields.length))
           }
         }));
@@ -363,22 +378,75 @@ export const VisualizationBuilder: React.FC = () => {
       return;
     }
 
+    // 验证必要字段
+    if (!chartData.name.trim()) {
+      message.error('请输入图表名称');
+      return;
+    }
+    
+    if (!chartData.visualization_settings.x_field) {
+      message.error('请选择X轴字段');
+      return;
+    }
+    
+    if (!chartData.visualization_settings.y_fields || chartData.visualization_settings.y_fields.length === 0) {
+      message.error('请选择至少一个Y轴字段');
+      return;
+    }
+
     setLoading(true);
     try {
+      // 构建完整的SQL查询
+      let finalQuery = '';
+      if (chartData.dataset_query?.native?.query) {
+        // 使用自定义SQL查询
+        finalQuery = chartData.dataset_query.native.query;
+      } else {
+        // 自动生成基于选中表的查询
+        const selectFields = [
+          chartData.visualization_settings.x_field,
+          ...chartData.visualization_settings.y_fields
+        ].filter(Boolean);
+        
+        finalQuery = `SELECT ${selectFields.join(', ')} FROM ${selectedTable}`;
+        
+        // 添加LIMIT防止数据过大
+        finalQuery += ' LIMIT 1000';
+      }
+      
       const chartToSave = {
-        ...chartData,
+        name: chartData.name,
+        description: chartData.name, // 使用名称作为描述
+        chart_type: chartData.chart_type,
         dataset_query: {
           type: 'native',
           native: {
-            query: `SELECT * FROM ${selectedTable}`
+            query: finalQuery
           }
         },
-        creator_id: user.id
+        visualization_settings: {
+          ...chartData.visualization_settings,
+          // 确保必要的配置项存在
+          x_axis_title: chartData.visualization_settings.x_axis_title || 'X轴',
+          y_axis_title: chartData.visualization_settings.y_axis_title || 'Y轴',
+          // 确保x_field和y_fields存在
+          x_field: chartData.visualization_settings.x_field || (availableFields.length > 0 ? availableFields[0] : ''),
+          y_fields: chartData.visualization_settings.y_fields || (availableFields.length > 1 ? availableFields.slice(1, Math.min(3, availableFields.length)) : [])
+        },
+        database_id: chartData.database_id,
+        creator_id: user.id,
+        is_public: false
       };
       
       console.log('准备保存的图表数据:', chartToSave);
-      await ChartService.createChart(chartToSave);
-      message.success('图表保存成功');
+      const savedChart = await ChartService.createChart(chartToSave);
+      console.log('保存成功的图表:', savedChart);
+      
+      message.success(`图表"${chartData.name}"保存成功`);
+      
+      // 保存成功后重置表单或跳转
+      // 可以选择重置或者让用户继续编辑
+      
     } catch (error: any) {
       console.error('保存图表失败:', error);
       message.error(error.message || '保存失败');

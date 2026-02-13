@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { AuthService } from '../services/authService';
 import { ChartService } from '../services/chartService';
 import { DashboardService } from '../services/dashboardService';
 import { ChartFactory } from '../components/charts/ChartFactory';
@@ -113,11 +114,14 @@ export const DashboardPage: React.FC = () => {
     }
     
     try {
+      console.log(`开始加载图表数据: ${chartId}`);
       const data = await ChartService.executeChartQuery(chartId);
+      console.log(`图表${chartId}数据加载完成:`, data);
       setChartDataCache(prev => ({ ...prev, [chartId]: data }));
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载图表数据失败:', error);
+      message.error(`加载图表数据失败: ${error.message || '未知错误'}`);
       return [];
     }
   };
@@ -162,18 +166,31 @@ export const DashboardPage: React.FC = () => {
   // 创建新仪表盘
   const handleCreateDashboard = async (values: any) => {
     try {
+      console.log('创建仪表盘请求:', values);
+      
+      if (!values.name || !values.name.trim()) {
+        message.error('请输入仪表盘名称');
+        return;
+      }
+      
       const newDashboard = await DashboardService.createDashboard({
-        name: values.name,
-        description: values.description || ''
+        name: values.name.trim(),
+        description: values.description ? values.description.trim() : ''
       });
+      
+      console.log('创建成功:', newDashboard);
       
       setDashboards([...dashboards, newDashboard]);
       setSelectedDashboard(newDashboard);
       setCreateModalVisible(false);
       createForm.resetFields();
       message.success('仪表盘创建成功');
+      
+      // 刷新仪表盘列表
+      await loadDashboards();
     } catch (error: any) {
-      message.error(error.message || '创建仪表盘失败');
+      console.error('创建仪表盘失败:', error);
+      message.error(error.message || '创建仪表盘失败，请检查网络连接和权限');
     }
   };
 
@@ -275,9 +292,34 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+
+  // 初始化数据加载 - 最终正确版本
   useEffect(() => {
-    loadCharts();
-    loadDashboards();
+    // 只有当 user 存在时才加载数据
+    if (user) {
+      console.log('用户已认证，开始加载数据...');
+      
+      const loadData = async () => {
+        try {
+          console.log('加载仪表盘列表...');
+          await loadDashboards();
+          
+          console.log('加载图表列表...');
+          await loadCharts();
+          
+          console.log('数据加载完成');
+        } catch (error) {
+          console.error('数据加载失败:', error);
+          // 重试机制
+          setTimeout(() => {
+            loadDashboards();
+            loadCharts();
+          }, 800);
+        }
+      };
+
+      loadData();
+    }
   }, [user]);
 
   // 渲染可拖拽的图表项
@@ -315,31 +357,92 @@ export const DashboardPage: React.FC = () => {
     </div>
   );
 
-  // 渲染仪表盘卡片组件 - 简化版本，不使用Hooks
+  // 渲染仪表盘卡片组件 - 增强版本
   const DashboardCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     
     // 在组件挂载时加载数据
     useEffect(() => {
       const loadData = async () => {
-        if (!card.chart) return;
+        if (!card.chart) {
+          setError('图表数据缺失');
+          return;
+        }
         
         setDataLoading(true);
+        setError(null);
         try {
+          console.log(`加载卡片${card.id}的图表数据`);
           const data = await loadChartData(card.chart.id);
-          setChartData(data);
-        } catch (error) {
-          message.error('加载图表数据失败');
+          
+          // 验证数据格式和内容
+          if (!Array.isArray(data)) {
+            throw new Error('返回的数据格式不正确');
+          }
+          
+          // 检查数据是否为空
+          if (data.length === 0) {
+            setError('没有查询到数据，请检查SQL查询');
+            setChartData([]);
+            return;
+          }
+          
+          // 验证X轴字段是否存在
+          const xField = card.chart.visualization_settings?.x_field || '';
+          if (xField && !Object.keys(data[0] || {}).includes(xField)) {
+            console.warn(`X轴字段 '${xField}' 在数据中不存在，使用第一个字段`);
+            // 使用第一个字段作为X轴
+            const firstField = Object.keys(data[0] || {})[0];
+            setChartData(data.map(item => ({
+              ...item,
+              [firstField]: item[firstField] || ''
+            })));
+          } else {
+            setChartData(data);
+          }
+          console.log(`卡片${card.id}数据加载完成，共${data.length}条记录`);
+        } catch (error: any) {
+          console.error(`加载卡片${card.id}数据失败:`, error);
+          setError(error.message || '数据加载失败');
+          message.error(`图表"${card.chart?.name || '未知'}"数据加载失败`);
         } finally {
           setDataLoading(false);
         }
       };
       
       loadData();
-    }, [card.chart?.id]); // 只有当chart.id变化时才重新加载
+    }, [card.chart?.id]);
     
-    if (!card.chart) return null;
+    if (!card.chart) {
+      return (
+        <div 
+          className="dashboard-card-wrapper"
+          style={{
+            gridRow: `span ${card.size_y}`,
+            gridColumn: `span ${card.size_x}`,
+            border: '2px dashed #ff4d4f',
+            backgroundColor: '#fff2f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '8px'
+          }}
+        >
+          <div style={{ textAlign: 'center', color: '#ff4d4f' }}>
+            <p>图表数据缺失</p>
+            <Button 
+              type="link" 
+              danger
+              onClick={() => handleRemoveChartFromDashboard(card.id)}
+            >
+              移除卡片
+            </Button>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div 
@@ -380,28 +483,87 @@ export const DashboardPage: React.FC = () => {
           <DragOutlined />
         </div>
         <Card 
-          title={card.chart.name}
+          title={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{card.chart.name}</span>
+              <span style={{ fontSize: '12px', color: '#888' }}>
+                {card.chart.chart_type}
+              </span>
+            </div>
+          }
           extra={
             <Button 
               type="text" 
               icon={<DeleteOutlined />}
               onClick={() => handleRemoveChartFromDashboard(card.id)}
               size="small"
+              danger
             />
           }
           className="dashboard-card-inner"
           bodyStyle={{ padding: '12px', height: 'calc(100% - 56px)' }}
         >
           {dataLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-              <Spin />
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%' 
+            }}>
+              <Spin tip="加载数据中..." />
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>
+                正在执行查询...
+              </div>
+            </div>
+          ) : error ? (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              color: '#ff4d4f'
+            }}>
+              <div style={{ marginBottom: '8px' }}>⚠️</div>
+              <div style={{ fontSize: '14px', textAlign: 'center' }}>{error}</div>
+              <Button 
+                type="link" 
+                size="small" 
+                onClick={() => {
+                  setError(null);
+                  setChartDataCache(prev => {
+                    const newCache = { ...prev };
+                    delete newCache[card.chart!.id];
+                    return newCache;
+                  });
+                }}
+              >
+                重新加载
+              </Button>
+            </div>
+          ) : chartData.length === 0 ? (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              color: '#888'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ marginBottom: '8px' }}>📊</div>
+                <div>暂无数据</div>
+                <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                  查询返回空结果
+                </div>
+              </div>
             </div>
           ) : (
             <div className="chart-container">
               <ChartFactory
                 config={{
                   type: card.chart.chart_type,
-                  title: card.chart.name,
+                  title: '', // 不显示重复标题
                   xAxis: {
                     name: card.chart.visualization_settings?.x_axis_title || 'X轴'
                   },
@@ -413,11 +575,36 @@ export const DashboardPage: React.FC = () => {
                     field: field
                   })) || [],
                   xField: card.chart.visualization_settings?.x_field,
-                  yFields: card.chart.visualization_settings?.y_fields
+                  yFields: card.chart.visualization_settings?.y_fields,
+                  colorField: card.chart.visualization_settings?.color_field,
+                  // 添加更多配置
+                  legend: {
+                    show: card.chart.visualization_settings?.show_legend !== false,
+                    bottom: 10
+                  },
+                  tooltip: {
+                    show: card.chart.visualization_settings?.show_tooltip !== false,
+                    trigger: 'axis'
+                  },
+                  grid: card.chart.visualization_settings?.grid_padding || {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '15%',
+                    containLabel: true
+                  }
                 }}
                 data={chartData}
                 style={{ height: '100%', width: '100%' }}
               />
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '4px', 
+                right: '8px', 
+                fontSize: '10px', 
+                color: '#aaa' 
+              }}>
+                {chartData.length}条记录
+              </div>
             </div>
           )}
         </Card>
@@ -444,11 +631,46 @@ export const DashboardPage: React.FC = () => {
       
       <div className="dashboard-content">
         <Row gutter={24}>
-          {/* 左侧图表列表 */}
+          {/* 左侧图表列表 - 增强版本 */}
           <Col span={6}>
-            <Card title="可用图表" className="chart-list-panel">
+            <Card 
+              title="可用图表" 
+              className="chart-list-panel"
+              extra={
+                <Button 
+                  type="link" 
+                  size="small" 
+                  onClick={loadCharts}
+                  loading={loading}
+                >
+                  刷新
+                </Button>
+              }
+            >
               <div className="chart-list">
-                {charts.map(chart => renderDraggableChartItem(chart))}
+                {charts.length === 0 ? (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '24px', 
+                    color: '#888' 
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>📊</div>
+                    <div>暂无可用图表</div>
+                    <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                      请先创建图表
+                    </div>
+                    <Button 
+                      type="primary" 
+                      size="small" 
+                      style={{ marginTop: '12px' }}
+                      onClick={() => window.location.hash = '#/visualization-builder'}
+                    >
+                      创建图表
+                    </Button>
+                  </div>
+                ) : (
+                  charts.map(chart => renderDraggableChartItem(chart))
+                )}
               </div>
             </Card>
           </Col>
@@ -510,8 +732,11 @@ export const DashboardPage: React.FC = () => {
       {/* 创建仪表盘模态框 */}
       <Modal
         title="创建新仪表盘"
-        visible={createModalVisible}
-        onCancel={() => setCreateModalVisible(false)}
+        open={createModalVisible}
+        onCancel={() => {
+          setCreateModalVisible(false);
+          createForm.resetFields();
+        }}
         footer={null}
       >
         <Form

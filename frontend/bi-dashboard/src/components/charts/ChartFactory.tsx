@@ -110,10 +110,72 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const option = useMemo(() => {
     // 处理xAxis数据 - 使用配置的xField
     const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
-    const xAxisData = data.map(item => item[xField] || '');
+    const xAxisData = data.map(item => {
+      if (!item) return '';
+      
+      // 支持多种数据格式
+      if (typeof item === 'object' && item !== null) {
+        // 对象格式：直接访问字段
+        if (xField in item) {
+          const value = item[xField];
+          // 如果是日期格式，保持原样；否则转为字符串
+          if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            return value;
+          }
+          return String(value);
+        }
+        // 嵌套对象：尝试访问子属性
+        if (xField.includes('.')) {
+          const keys = xField.split('.');
+          let value = item;
+          for (const key of keys) {
+            if (value && typeof value === 'object' && key in value) {
+              value = value[key];
+            } else {
+              break;
+            }
+          }
+          if (value !== undefined) {
+            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+              return value;
+            }
+            return String(value);
+          }
+        }
+        // 数组格式：取第一个元素
+        if (Array.isArray(item) && item.length > 0) {
+          const firstValue = item[0];
+          if (typeof firstValue === 'string' && /^\d{4}-\d{2}-\d{2}/.test(firstValue)) {
+            return firstValue;
+          }
+          return String(firstValue);
+        }
+      }
+      
+      // 基本类型
+      return String(item);
+    });
 
     // 处理系列数据 - 使用配置的yFields
-    const yFields = config.yFields || config.series.map(s => s.field) || [];
+    let yFields = config.yFields || config.series.map(s => s.field) || [];
+
+    // 如果yFields为空且有数据，尝试自动检测数值字段
+    if (yFields.length === 0 && data.length > 0 && data[0]) {
+      const firstItem = data[0];
+      if (typeof firstItem === 'object') {
+        // 检测数值字段
+        const numericFields = Object.keys(firstItem).filter(key => {
+          const value = firstItem[key];
+          return typeof value === 'number' || 
+                 (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value));
+        });
+        
+        if (numericFields.length > 0) {
+          console.log('自动检测到数值字段:', numericFields);
+          yFields = numericFields.slice(0, 3); // 最多3个字段
+        }
+      }
+    }
     
     const baseOption: any = {
       title: {
@@ -140,7 +202,17 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         ...config.xAxis,
         type: 'category',
         data: xAxisData,
-        name: config.xAxis?.name || 'X轴'
+        name: config.xAxis?.name || 'X轴',
+        // 对于日期数据，添加时间轴格式化
+        axisLabel: {
+          formatter: function(value) {
+            // 如果是日期格式，保持原样
+            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+              return value;
+            }
+            return value;
+          }
+        }
       },
       yAxis: {
         ...config.yAxis,
