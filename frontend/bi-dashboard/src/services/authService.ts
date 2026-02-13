@@ -82,6 +82,11 @@ export class AuthService {
       if (data.success && data.token) {
         this.setAuthToken(data.token);
         console.log('登录成功，token已保存');
+            
+        // 登录成功后自动刷新页面，确保dashboard正确加载
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       }
       
       return data as AuthResponse;

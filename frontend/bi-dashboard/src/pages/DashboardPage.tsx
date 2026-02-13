@@ -294,18 +294,20 @@ export const DashboardPage: React.FC = () => {
 
 
   // 初始化数据加载 - 最终正确版本
+  // 统一的数据加载逻辑 - 最终可靠版本
   useEffect(() => {
-    // 只有当 user 存在时才加载数据
     if (user) {
-      console.log('用户已认证，开始加载数据...');
+      console.log('用户已认证，开始数据加载流程...');
       
-      const loadData = async () => {
+      // 等待800ms确保authContext完全初始化
+      const timer = setTimeout(() => {
+        console.log('800ms后，执行实际数据加载');
         try {
           console.log('加载仪表盘列表...');
-          await loadDashboards();
+          loadDashboards();
           
           console.log('加载图表列表...');
-          await loadCharts();
+          loadCharts();
           
           console.log('数据加载完成');
         } catch (error) {
@@ -314,11 +316,11 @@ export const DashboardPage: React.FC = () => {
           setTimeout(() => {
             loadDashboards();
             loadCharts();
-          }, 800);
+          }, 1000);
         }
-      };
+      }, 800);
 
-      loadData();
+      return () => clearTimeout(timer);
     }
   }, [user]);
 
