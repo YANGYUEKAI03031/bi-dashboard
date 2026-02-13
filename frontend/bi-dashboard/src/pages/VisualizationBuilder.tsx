@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
@@ -79,7 +79,7 @@ export const VisualizationBuilder: React.FC = () => {
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [totalRecords, setTotalRecords] = useState<number>(0);
   const [tableColumns, setTableColumns] = useState<any[]>([]);
-  const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [availableFields, setAvailableFields] = useState<string[]>([]); // 确保始终是数组
   const [authChecked, setAuthChecked] = useState(false);
 
   // 监听认证状态变化
@@ -333,13 +333,46 @@ export const VisualizationBuilder: React.FC = () => {
   };
 
   const handleFieldMappingChange = (fieldType: string, value: any) => {
-    setChartData(prev => ({
-      ...prev,
-      visualization_settings: {
-        ...prev.visualization_settings,
-        [fieldType]: value
+    setChartData(prev => {
+      let newSettings = { ...prev.visualization_settings };
+      
+      // 处理X轴字段选择：自动设置X轴标题
+      if (fieldType === 'x_field') {
+        newSettings.x_field = value;
+        newSettings.x_axis_title = value || 'X轴';
       }
-    }));
+      
+      // 处理Y轴字段选择：智能设置Y轴标题
+      if (fieldType === 'y_fields') {
+        newSettings.y_fields = value;
+        if (Array.isArray(value) && value.length > 0) {
+          // 多选时设置为"汇总"
+          newSettings.y_axis_title = value.length > 1 ? '汇总' : value[0] || 'Y轴';
+        } else {
+          newSettings.y_axis_title = 'Y轴';
+        }
+      }
+      
+      // 处理样式配置字段
+      if (['show_legend', 'animation', 'rotate_labels', 'show_grid'].includes(fieldType)) {
+        newSettings[fieldType] = value;
+      }
+      
+      // 处理字符串类型字段
+      if (['legend_position'].includes(fieldType)) {
+        newSettings[fieldType] = value;
+      }
+      
+      // 其他字段正常处理
+      if (!['x_field', 'y_fields', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position'].includes(fieldType)) {
+        newSettings[fieldType] = value;
+      }
+      
+      return {
+        ...prev,
+        visualization_settings: newSettings
+      };
+    });
   };
 
   const handleSaveChart = async () => {
@@ -430,8 +463,8 @@ export const VisualizationBuilder: React.FC = () => {
           x_axis_title: chartData.visualization_settings.x_axis_title || 'X轴',
           y_axis_title: chartData.visualization_settings.y_axis_title || 'Y轴',
           // 确保x_field和y_fields存在
-          x_field: chartData.visualization_settings.x_field || (availableFields.length > 0 ? availableFields[0] : ''),
-          y_fields: chartData.visualization_settings.y_fields || (availableFields.length > 1 ? availableFields.slice(1, Math.min(3, availableFields.length)) : [])
+          x_field: chartData.visualization_settings.x_field ?? (availableFields?.length > 0 ? availableFields[0] : ''),
+          y_fields: chartData.visualization_settings.y_fields ?? (availableFields?.length > 1 ? availableFields.slice(1, Math.min(3, availableFields?.length || 0)) : [])
         },
         database_id: chartData.database_id,
         creator_id: user.id,
@@ -441,6 +474,20 @@ export const VisualizationBuilder: React.FC = () => {
       console.log('准备保存的图表数据:', chartToSave);
       const savedChart = await ChartService.createChart(chartToSave);
       console.log('保存成功的图表:', savedChart);
+      
+      // 更新本地状态，确保配置同步（安全版本）
+      setChartData(prev => {
+        const newSettings = savedChart.visualization_settings || 
+          prev.visualization_settings || 
+          { x_field: '', y_fields: [], x_axis_title: 'X轴', y_axis_title: 'Y轴' };
+        
+        return {
+          ...prev,
+          id: savedChart.id,
+          name: savedChart.name,
+          visualization_settings: newSettings
+        };
+      });
       
       message.success(`图表"${chartData.name}"保存成功`);
       
@@ -470,12 +517,6 @@ export const VisualizationBuilder: React.FC = () => {
         title="图表构建器" 
         extra={
           <Space>
-            <Button 
-              icon={<PlusOutlined />} 
-              onClick={() => setShowConfig(true)}
-            >
-              配置图表
-            </Button>
             <Button 
               type="primary" 
               icon={<SaveOutlined />} 
@@ -510,6 +551,16 @@ export const VisualizationBuilder: React.FC = () => {
         ) : null}
         
         <Spin spinning={loading}>
+          {/* 图表名称输入区域 */}
+          <div style={{ marginBottom: '16px', padding: '0 24px' }}>
+            <label>图表名称:</label>
+            <Input
+              value={chartData.name}
+              onChange={(e) => setChartData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="请输入图表名称"
+              style={{ width: '100%', marginTop: '8px' }}
+            />
+          </div>
           <Tabs defaultActiveKey="1">
             <TabPane tab="数据配置" key="1">
               <Row gutter={24}>
@@ -662,9 +713,78 @@ export const VisualizationBuilder: React.FC = () => {
                         </div>
                       </Col>
                     </Row>
+                    
+                    {/* 图表样式设置 */}
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>图表样式设置</div>
+                    <Row gutter={16} style={{ marginTop: '8px' }}>
+                      <Col span={8}>
+                        <div>
+                          <label>显示图例:</label>
+                          <Switch 
+                            checked={chartData.visualization_settings.show_legend !== false}
+                            onChange={(checked) => handleFieldMappingChange('show_legend', checked)}
+                            style={{ marginLeft: '8px' }}
+                          />
+                        </div>
+                      </Col>
+                      
+                      <Col span={8}>
+                        <div>
+                          <label>启用动画:</label>
+                          <Switch 
+                            checked={chartData.visualization_settings.animation !== false}
+                            onChange={(checked) => handleFieldMappingChange('animation', checked)}
+                            style={{ marginLeft: '8px' }}
+                          />
+                        </div>
+                      </Col>
+                      
+                      <Col span={8}>
+                        <div>
+                          <label>图例位置:</label>
+                          <Select
+                            value={chartData.visualization_settings.legend_position || 'right'}
+                            onChange={(value) => handleFieldMappingChange('legend_position', value)}
+                            style={{ width: '100%' }}
+                          >
+                            <Option value="top">顶部</Option>
+                            <Option value="bottom">底部</Option>
+                            <Option value="left">左侧</Option>
+                            <Option value="right">右侧</Option>
+                          </Select>
+                        </div>
+                      </Col>
+                    </Row>
+                    
+                    <Row gutter={16} style={{ marginTop: '16px' }}>
+                      <Col span={8}>
+                        <div>
+                          <label>旋转标签:</label>
+                          <Switch 
+                            checked={chartData.visualization_settings.rotate_labels !== false}
+                            onChange={(checked) => handleFieldMappingChange('rotate_labels', checked)}
+                            style={{ marginLeft: '8px' }}
+                          />
+                        </div>
+                      </Col>
+                      
+                      <Col span={8}>
+                        <div>
+                          <label>显示网格线:</label>
+                          <Switch 
+                            checked={chartData.visualization_settings.show_grid !== false}
+                            onChange={(checked) => handleFieldMappingChange('show_grid', checked)}
+                            defaultChecked
+                            style={{ marginLeft: '8px' }}
+                          />
+                        </div>
+                      </Col>
+                    </Row>
                   </Card>
                 </Col>
               </Row>
+
+
             </TabPane>
             
             <TabPane tab="图表预览" key="2">
