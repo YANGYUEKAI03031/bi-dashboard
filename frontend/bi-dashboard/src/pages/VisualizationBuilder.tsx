@@ -1,5 +1,5 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider } from 'antd';
 import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
@@ -182,8 +182,15 @@ export const VisualizationBuilder: React.FC = () => {
     }
   }, [queryResult]);
 
+  // 防止重复加载数据源的标志
+  const dataSourcesLoadedRef = useRef(false);
+  
   useEffect(() => {
-    loadDataSources();
+    // 只在首次加载时调用，避免重复请求
+    if (!dataSourcesLoadedRef.current) {
+      loadDataSources();
+      dataSourcesLoadedRef.current = true;
+    }
   }, []);
 
   const loadDataSources = async () => {

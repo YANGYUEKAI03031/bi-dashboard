@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -96,6 +96,17 @@ const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
   };
 };
 
+// 添加请求监控
+const requestMonitor = {
+  requestCount: 0,
+  startTime: Date.now(),
+  logRequest: (chartId: number, type: 'cache' | 'network') => {
+    requestMonitor.requestCount++;
+    const elapsed = Date.now() - requestMonitor.startTime;
+    console.log(`[${elapsed}ms] 第${requestMonitor.requestCount}个请求 - 图表${chartId} (${type})`);
+  }
+};
+
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [charts, setCharts] = useState<Chart[]>([]);
@@ -106,22 +117,69 @@ export const DashboardPage: React.FC = () => {
   const [createForm] = Form.useForm();
   const [draggedCard, setDraggedCard] = useState<DashboardCard | null>(null);
   const [chartDataCache, setChartDataCache] = useState<Record<number, any[]>>({});
+  
+  // 全局请求状态管理
+  const globalRequestStatus = useRef<Record<number, 'pending' | 'completed'>>({});
 
-  // 加载图表数据的函数
+  // 请求去重Map，用于防止同一时间的重复请求
+  const requestPendingMap = useRef<Record<number, Promise<any[]>>>({});
+  
+  // 加载图表数据的函数 - 增加请求去重机制
   const loadChartData = async (chartId: number) => {
+    // 首先检查内存缓存
     if (chartDataCache[chartId]) {
+      requestMonitor.logRequest(chartId, 'cache');
+      console.log(`从缓存获取图表数据: ${chartId}`);
       return chartDataCache[chartId];
     }
     
+    // 检查全局请求状态
+    if (globalRequestStatus.current[chartId] === 'pending') {
+      console.log(`图表${chartId}请求已在进行中，等待完成...`);
+      // 等待正在进行的请求完成
+      if (requestPendingMap.current[chartId]) {
+        return requestPendingMap.current[chartId];
+      }
+    }
+    
+    // 检查是否有正在进行的相同请求
+    if (requestPendingMap.current[chartId]) {
+      console.log(`发现重复请求，等待已有请求完成: ${chartId}`);
+      return requestPendingMap.current[chartId];
+    }
+    
     try {
+      requestMonitor.logRequest(chartId, 'network');
       console.log(`开始加载图表数据: ${chartId}`);
-      const data = await ChartService.executeChartQuery(chartId);
+      
+      // 设置全局请求状态
+      globalRequestStatus.current[chartId] = 'pending';
+      
+      // 创建新的请求Promise并存储到pending map
+      const requestPromise = ChartService.executeChartQuery(chartId);
+      requestPendingMap.current[chartId] = requestPromise;
+      
+      const data = await requestPromise;
       console.log(`图表${chartId}数据加载完成:`, data);
+      
+      // 更新缓存
       setChartDataCache(prev => ({ ...prev, [chartId]: data }));
+      
+      // 更新全局请求状态
+      globalRequestStatus.current[chartId] = 'completed';
+      
+      // 清除pending状态
+      delete requestPendingMap.current[chartId];
+      
       return data;
     } catch (error: any) {
       console.error('加载图表数据失败:', error);
       message.error(`加载图表数据失败: ${error.message || '未知错误'}`);
+      
+      // 清除状态
+      globalRequestStatus.current[chartId] = 'completed';
+      delete requestPendingMap.current[chartId];
+      
       return [];
     }
   };
@@ -365,10 +423,10 @@ export const DashboardPage: React.FC = () => {
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // 在组件挂载时加载数据
+    // 在组件挂载时加载数据 - 优化依赖项
     useEffect(() => {
       const loadData = async () => {
-        if (!card.chart) {
+        if (!card.chart?.id) {
           setError('图表数据缺失');
           return;
         }
@@ -376,7 +434,7 @@ export const DashboardPage: React.FC = () => {
         setDataLoading(true);
         setError(null);
         try {
-          console.log(`加载卡片${card.id}的图表数据`);
+          console.log(`加载卡片${card.id}的图表数据，图表ID: ${card.chart.id}`);
           const data = await loadChartData(card.chart.id);
           
           // 验证数据格式和内容
@@ -415,7 +473,7 @@ export const DashboardPage: React.FC = () => {
       };
       
       loadData();
-    }, [card.chart?.id]);
+    }, [card.chart?.id]); // 只依赖chart.id，避免因其他属性变化导致的重复请求
     
     if (!card.chart) {
       return (
