@@ -767,7 +767,7 @@ export const VisualizationBuilder: React.FC = () => {
                         </div>
                       </Col>
                       
-                      <Col span={8}>
+                      {/* <Col span={8}>
                         <div>
                           <label>启用动画:</label>
                           <Switch 
@@ -793,9 +793,7 @@ export const VisualizationBuilder: React.FC = () => {
                           </Select>
                         </div>
                       </Col>
-                    </Row>
-                    
-                    <Row gutter={16} style={{ marginTop: '16px' }}>
+                      
                       <Col span={8}>
                         <div>
                           <label>旋转标签:</label>
@@ -817,7 +815,7 @@ export const VisualizationBuilder: React.FC = () => {
                             style={{ marginLeft: '8px' }}
                           />
                         </div>
-                      </Col>
+                      </Col> */}
                     </Row>
                     
                     {/* 添加刷新预览按钮 */}
