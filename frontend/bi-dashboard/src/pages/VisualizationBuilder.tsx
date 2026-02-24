@@ -613,6 +613,38 @@ export const VisualizationBuilder: React.FC = () => {
                         <p>预览记录: {previewData.length} 条</p>
                       </div>
                     </Space>
+                    
+                    {/* 添加数据预览区域到这里 */}
+                    <div style={{ marginTop: '24px', border: '1px solid #d9d9d9', borderRadius: '8px', padding: '16px' }}>
+                      <h3 style={{ marginBottom: '16px', color: '#1890ff' }}>数据预览</h3>
+                      {previewData.length > 0 ? (
+                        <Table 
+                          dataSource={previewData} 
+                          columns={[
+                            ...Object.keys(previewData[0] || {}).map(key => ({
+                              title: key,
+                              dataIndex: key,
+                              key: key
+                            }))
+                          ]} 
+                          pagination={{ pageSize: 10 }}
+                          size="small"
+                          scroll={{ x: 'max-content' }}
+                        />
+                      ) : (
+                        <div style={{ 
+                          height: '200px', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          backgroundColor: '#f5f5f5',
+                          border: '2px dashed #d9d9d9',
+                          borderRadius: '8px'
+                        }}>
+                          <p style={{ color: '#999' }}>请先执行查询加载数据</p>
+                        </div>
+                      )}
+                    </div>
                   </Card>
                 </Col>
 
@@ -787,6 +819,81 @@ export const VisualizationBuilder: React.FC = () => {
                         </div>
                       </Col>
                     </Row>
+                    
+                    {/* 添加刷新预览按钮 */}
+                    <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button 
+                        type="primary" 
+                        onClick={() => {
+                          // 强制触发状态更新以重新渲染图表
+                          setPreviewData(prev => prev); // 触发重新渲染
+                        }}
+                        icon={<PlayCircleOutlined />}
+                      >
+                        刷新预览
+                      </Button>
+                    </div>
+                    
+                    {/* 图表预览区域 - 使用正确的变量名 */}
+                    <div style={{ marginTop: '24px', border: '1px solid #d9d9d9', borderRadius: '8px', padding: '16px' }}>
+                      <h3 style={{ marginBottom: '16px', color: '#1890ff' }}>图表预览</h3>
+                      {previewData.length > 0 && 
+                       chartData.visualization_settings.x_field && 
+                       chartData.visualization_settings.y_fields?.length > 0 ? (
+                        <div style={{ height: '400px' }}>
+                          <ChartFactory
+                            config={{
+                              type: chartData.chart_type,
+                              title: chartData.name,
+                              xField: chartData.visualization_settings.x_field,
+                              yFields: chartData.visualization_settings.y_fields || [],
+                              colorField: chartData.visualization_settings.color_field,
+                              series: [],
+                              xAxis: {
+                                name: chartData.visualization_settings.x_axis_title || 'X轴'
+                              },
+                              yAxis: {
+                                name: chartData.visualization_settings.y_axis_title || 'Y轴'
+                              },
+                              legend: {
+                                show: chartData.visualization_settings.show_legend !== false,
+                                bottom: 10
+                              },
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'cross' }
+                              },
+                              grid: {
+                                left: '3%',
+                                right: '4%',
+                                bottom: '15%',
+                                containLabel: true
+                              }
+                            }}
+                            data={previewData}
+                            style={{ height: '400px', width: '100%' }}
+                          />
+                        </div>
+                      ) : (
+                        <div style={{ 
+                          height: '400px', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          backgroundColor: '#f5f5f5',
+                          border: '2px dashed #d9d9d9',
+                          borderRadius: '8px'
+                        }}>
+                          <div style={{ textAlign: 'center', padding: '20px' }}>
+                            {previewData.length > 0 ? (
+                              <p style={{ color: '#999' }}>配置完成后点击"刷新预览"按钮</p>
+                            ) : (
+                              <p style={{ color: '#999' }}>请先执行查询加载数据</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </Card>
                 </Col>
               </Row>
@@ -794,83 +901,10 @@ export const VisualizationBuilder: React.FC = () => {
 
             </TabPane>
             
-            <TabPane tab="图表预览" key="2">
-              <Card title="图表预览">
-                {previewData.length > 0 && chartData.visualization_settings.x_field && chartData.visualization_settings.y_fields.length > 0 ? (
-                  <ChartFactory
-                    config={{
-                      type: chartData.chart_type,
-                      title: chartData.name,
-                      xAxis: {
-                        name: chartData.visualization_settings.x_axis_title || 'X轴'
-                      },
-                      yAxis: {
-                        name: chartData.visualization_settings.y_axis_title || 'Y轴'
-                      },
-                      series: chartData.visualization_settings.y_fields.map((field: string) => ({
-                        name: field,
-                        field: field
-                      })),
-                      xField: chartData.visualization_settings.x_field,
-                      colorField: chartData.visualization_settings.color_field
-                    }}
-                    data={queryResult}
-                    style={{ height: '500px' }}
-                  />
-                ) : (
-                  <div style={{ 
-                    height: '500px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: '4px'
-                  }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <p>请完成以下配置以查看图表预览：</p>
-                      <ul style={{ textAlign: 'left', display: 'inline-block' }}>
-                        <li>选择数据表</li>
-                        <li>选择图表类型</li>
-                        <li>配置X轴字段</li>
-                        <li>配置Y轴字段</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            </TabPane>
+            {/* 移除原来的图表预览TabPane */}
           </Tabs>
 
-          <Row gutter={24} style={{ marginTop: '24px' }}>
-            <Col span={24}>
-              <Card title="数据预览">
-                {queryResult.length > 0 ? (
-                  <Table
-                    dataSource={queryResult.map((item, index) => ({ ...item, key: index }))}
-                    columns={tableColumns}
-                    pagination={{ 
-                      pageSize: 5,
-                      size: 'small',
-                      showSizeChanger: false
-                    }}
-                    size="small"
-                    scroll={{ y: 300 }}
-                  />
-                ) : (
-                  <div style={{ 
-                    height: '350px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    backgroundColor: '#fafafa',
-                    borderRadius: '4px'
-                  }}>
-                    <p>暂无数据预览</p>
-                  </div>
-                )}
-              </Card>
-            </Col>
-          </Row>
+
         </Spin>
       </Card>
 

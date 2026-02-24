@@ -1,0 +1,37 @@
+/* e:\bi-dashboard\frontend\bi-dashboard\src\pages\VisualizationBuilder.css */
+
+.realtime-preview-card {
+  margin-top: 24px;
+}
+
+.realtime-preview-container {
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  border: 2px dashed #1890ff;
+}
+
+.realtime-preview-content {
+  text-align: center;
+}
+
+.realtime-preview-title {
+  color: #1890ff;
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.realtime-preview-subtitle {
+  color: #666;
+  margin-top: 8px;
+}
+
+.realtime-preview-info {
+  color: #999;
+  font-size: 12px;
+  margin-top: 4px;
+}
