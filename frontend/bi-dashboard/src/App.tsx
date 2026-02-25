@@ -6,7 +6,8 @@ import { MainLayout } from './components/layout/MainLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
-import { VisualizationBuilder } from './pages/VisualizationBuilder'; // 添加导入
+import { VisualizationBuilder } from './pages/VisualizationBuilder';
+import { ChartsManagementPage } from './pages/ChartsManagementPage'; // 添加图表管理页面导入
 import { AuthService } from './services/authService';
 
 // 认证保护组件
@@ -99,6 +100,18 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <VisualizationBuilder />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* 添加图表管理路由 */}
+          <Route 
+            path="/charts-management" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <ChartsManagementPage />
                 </MainLayout>
               </ProtectedRoute>
             } 

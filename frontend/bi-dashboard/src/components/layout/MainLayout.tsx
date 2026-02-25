@@ -52,6 +52,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="icon">🎨</span>
             <span>可视化构建</span>
           </Link>
+          
+          {/* 添加图表管理导航项 */}
+          <Link 
+            to="/charts-management" 
+            className={`nav-item ${isActive('/charts-management') ? 'active' : ''}`}
+          >
+            <span className="icon">📊</span>
+            <span>图表管理</span>
+          </Link>
         </nav>
         
         <div className="sidebar-footer">
@@ -79,6 +88,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             {location.pathname === '/dashboard' && '仪表盘'}
             {location.pathname === '/reports' && '报表中心'}
             {location.pathname === '/visualization-builder' && '可视化构建器'}
+            {location.pathname === '/charts-management' && '图表管理'}
             {location.pathname === '/analytics' && '数据分析'}
             {location.pathname === '/data-chain' && '数据链管理'}
             {location.pathname === '/settings' && '系统设置'}

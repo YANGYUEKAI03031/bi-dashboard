@@ -42,7 +42,7 @@ const CHART_TYPES = [
   { value: 'scatter', label: '散点图', icon: <DotChartOutlined /> },
 ];
 
-export const VisualizationBuilder: React.FC = () => {
+export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }) => {
   const { user, isAuthenticated, checkAuthStatus } = useAuth();
   const [chartData, setChartData] = useState<ChartData>({
     name: '新图表',
@@ -68,6 +68,67 @@ export const VisualizationBuilder: React.FC = () => {
     },
     database_id: 1
   });
+
+  // 如果有chartId参数，加载现有图表数据
+  useEffect(() => {
+    if (chartId) {
+      const loadChart = async () => {
+        try {
+          setLoading(true);
+          const chart = await ChartService.getChart(parseInt(chartId, 10));
+          
+          // 转换数据格式以匹配state结构
+          const convertedChartData: ChartData = {
+            id: chart.id,
+            name: chart.name || '新图表',
+            chart_type: chart.chart_type || 'bar',
+            dataset_query: chart.dataset_query || {
+              type: 'native',
+              native: { query: '' }
+            },
+            visualization_settings: chart.visualization_settings || {
+              graph_dimensions: [],
+              graph_metrics: [],
+              x_axis_title: "X轴",
+              y_axis_title: "Y轴",
+              x_field: "",
+              y_fields: [],
+              color_field: "",
+              show_legend: true,
+              show_tooltip: true,
+              grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+            },
+            database_id: chart.database_id || 1,
+            creator_id: chart.creator_id
+          };
+          
+          setChartData(convertedChartData);
+          
+          // 加载数据源信息
+          if (convertedChartData.database_id) {
+            try {
+              const dataSourcesList = await DataSourceService.getDataSources();
+              const dataSource = dataSourcesList.find(ds => parseInt(ds.id, 10) === convertedChartData.database_id);
+              if (dataSource) {
+                setSelectedDataSource(dataSource.id.toString());
+              }
+            } catch (error) {
+              console.warn('获取数据源信息失败:', error);
+            }
+          }
+          
+          message.success('图表加载成功');
+        } catch (error) {
+          console.error('加载图表失败:', error);
+          message.error('加载图表失败，请重试');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      loadChart();
+    }
+  }, [chartId]);
   
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [tables, setTables] = useState<TableInfo[]>([]);

@@ -1,0 +1,157 @@
+/* e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.css */
+
+.charts-management-page {
+  height: 100%;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+}
+
+.page-header {
+  background: white;
+  padding: 20px 32px;
+  border-bottom: 1px solid #e8e8e8;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.chart-list-panel {
+  height: calc(100% - 120px);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border: 1px solid rgba(0,0,0,0.05);
+  margin-top: 24px;
+  overflow: hidden;
+}
+
+.chart-table-container {
+  padding: 24px;
+  height: 100%;
+  overflow: auto;
+}
+
+.chart-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.chart-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 16px;
+  color: #595959;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.chart-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.chart-table tr:hover {
+  background-color: #fafafa;
+}
+
+.chart-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.chart-type {
+  color: #666;
+  font-size: 12px;
+}
+
+.chart-datasource {
+  color: #666;
+  font-size: 12px;
+}
+
+.chart-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chart-action-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-btn {
+  background-color: #1890ff;
+  color: white;
+}
+
+.edit-btn:hover {
+  background-color: #40a9ff;
+}
+
+.delete-btn {
+  background-color: #ff4d4f;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #ff7875;
+}
+
+.search-bar {
+  margin-bottom: 24px;
+}
+
+.search-input {
+  width: 300px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 0;
+  color: #999;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #ccc;
+}
+
+.empty-state-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.empty-state-description {
+  font-size: 14px;
+  color: #666;
+}

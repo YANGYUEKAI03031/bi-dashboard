@@ -141,7 +141,7 @@ class ChartService:
                 stmt = update(VisualizationCard).where(
                     VisualizationCard.id == chart_id,
                     VisualizationCard.created_by == user_id
-                ).values(**update_fields)
+                ).values(**{col.name: val for col, val in update_fields.items()})
                 
                 await self.db.execute(stmt)
                 await self.db.commit()
