@@ -1,6 +1,7 @@
 // e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox } from 'antd';
+import { DataSourceService } from '../services/dataSourceService';
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
@@ -16,6 +17,15 @@ interface ChartItem {
   chart_type: string;
   database_id: number;
   created_at: string;
+  visualization_settings?: {
+    x_field?: string;
+    y_fields?: string[];
+    color_field?: string;
+    x_axis_title?: string;
+    y_axis_title?: string;
+    show_legend?: boolean;
+    show_tooltip?: boolean;
+  };
 }
 
 export const ChartsManagementPage: React.FC = () => {
@@ -26,6 +36,42 @@ export const ChartsManagementPage: React.FC = () => {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [chartToDelete, setChartToDelete] = useState<number | null>(null);
   const [editingChart, setEditingChart] = useState<ChartItem | null>(null);
+
+  // 字段数据状态
+  const [xFields, setXFields] = useState<any[]>([]);
+  const [yFields, setYFields] = useState<any[]>([]);
+  const [colorFields, setColorFields] = useState<any[]>([]);
+
+  // 加载字段数据（简化版，实际需要根据具体数据库结构调整）
+  const loadFields = async (databaseId: number) => {
+    try {
+      // 示例：假设数据库 #1 对应 mysql，表名为 'sales'
+      // 实际应用中需要根据数据库类型和表名动态获取
+      const tables = await DataSourceService.getTables('mysql');
+      if (tables.length > 0) {
+        const columns = await DataSourceService.getTableColumns('mysql', tables[0].name);
+        
+        // 按类型分类字段
+        const categoryFields = columns.filter(col => 
+          col.type.includes('varchar') || col.type.includes('text') || col.type.includes('char') ||
+          col.type.includes('enum') || col.type.includes('string')
+        );
+        const dateFields = columns.filter(col => 
+          col.type.includes('date') || col.type.includes('datetime') || col.type.includes('timestamp')
+        );
+        const numericFields = columns.filter(col => 
+          col.type.includes('int') || col.type.includes('float') || col.type.includes('double') ||
+          col.type.includes('decimal') || col.type.includes('numeric')
+        );
+
+        setXFields([...categoryFields, ...dateFields]);
+        setYFields(numericFields);
+        setColorFields([...categoryFields, ...numericFields]);
+      }
+    } catch (error) {
+      console.error('加载字段失败:', error);
+    }
+  };
 
   // 获取图表列表
   const fetchCharts = async () => {
@@ -253,7 +299,7 @@ export const ChartsManagementPage: React.FC = () => {
               保存修改
             </Button>
           ]}
-          width={600}
+          width={800}
         >
           <div style={{ marginBottom: 16 }}>
             <label>图表名称:</label>
@@ -288,19 +334,150 @@ export const ChartsManagementPage: React.FC = () => {
           
           <div style={{ marginBottom: 16 }}>
             <label>数据源:</label>
-            <Select 
-              defaultValue={editingChart.database_id.toString()}
-              onChange={(value) => {
-                const newChart = { ...editingChart, database_id: parseInt(value, 10) };
-                setEditingChart(newChart);
-              }}
-              style={{ marginTop: 8 }}
-              placeholder="选择数据源"
-            >
-              <Option value="1">数据库 #1</Option>
-              <Option value="2">数据库 #2</Option>
-              <Option value="3">数据库 #3</Option>
-            </Select>
+            <div style={{ marginTop: 8, padding: '4px 12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+              {editingChart?.database_id === 1 ? 'sales' : 
+               editingChart?.database_id === 2 ? 'orders' : 
+               editingChart?.database_id === 3 ? 'customers' : '未知表'}
+            </div>
+          </div>
+
+          {/* X轴/Y轴配置区域 */}
+          <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
+            <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>坐标轴配置</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label>X轴字段:</label>
+                <Select 
+                  defaultValue={editingChart.visualization_settings?.x_field || ''}
+                  onChange={(value) => {
+                    const newSettings = { ...editingChart.visualization_settings, x_field: value };
+                    const newChart = { ...editingChart, visualization_settings: newSettings };
+                    setEditingChart(newChart);
+                  }}
+                  style={{ marginTop: 8, width: '100%' }}
+                  placeholder="选择X轴字段"
+                  disabled={!xFields.length}
+                >
+                  {xFields.map(field => (
+                    <Option key={field.name} value={field.name}>
+                      {field.name} ({field.type})
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+              
+              <div>
+                <label>Y轴字段:</label>
+                <Select 
+                  defaultValue={editingChart.visualization_settings?.y_fields?.[0] || ''}
+                  onChange={(value) => {
+                    const yFields = [value];
+                    const newSettings = { ...editingChart.visualization_settings, y_fields: yFields };
+                    const newChart = { ...editingChart, visualization_settings: newSettings };
+                    setEditingChart(newChart);
+                  }}
+                  style={{ marginTop: 8, width: '100%' }}
+                  placeholder="选择Y轴字段"
+                  disabled={!yFields.length}
+                >
+                  {yFields.map(field => (
+                    <Option key={field.name} value={field.name}>
+                      {field.name} ({field.type})
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            
+            <div style={{ marginTop: 16 }}>
+              <label>颜色字段:</label>
+              <Select 
+                defaultValue={editingChart.visualization_settings?.color_field || ''}
+                onChange={(value) => {
+                  const newSettings = { ...editingChart.visualization_settings, color_field: value };
+                  const newChart = { ...editingChart, visualization_settings: newSettings };
+                  setEditingChart(newChart);
+                }}
+                style={{ marginTop: 8, width: '100%' }}
+                placeholder="选择颜色字段"
+                disabled={!colorFields.length}
+              >
+                {colorFields.map(field => (
+                  <Option key={field.name} value={field.name}>
+                    {field.name} ({field.type})
+                  </Option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          {/* 高级设置区域 */}
+          <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
+            <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>高级设置</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label>X轴标题:</label>
+                <Input 
+                  defaultValue={editingChart.visualization_settings?.x_axis_title || 'X轴'}
+                  onChange={(e) => {
+                    const newSettings = { ...editingChart.visualization_settings, x_axis_title: e.target.value };
+                    const newChart = { ...editingChart, visualization_settings: newSettings };
+                    setEditingChart(newChart);
+                  }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+              
+              <div>
+                <label>Y轴标题:</label>
+                <Input 
+                  defaultValue={editingChart.visualization_settings?.y_axis_title || 'Y轴'}
+                  onChange={(e) => {
+                    const newSettings = { ...editingChart.visualization_settings, y_axis_title: e.target.value };
+                    const newChart = { ...editingChart, visualization_settings: newSettings };
+                    setEditingChart(newChart);
+                  }}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            </div>
+            
+            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Checkbox 
+                checked={editingChart.visualization_settings?.show_legend !== false}
+                onChange={(e) => {
+                  const newSettings = { ...editingChart.visualization_settings, show_legend: e.target.checked };
+                  const newChart = { ...editingChart, visualization_settings: newSettings };
+                  setEditingChart(newChart);
+                }}
+              >
+                显示图例
+              </Checkbox>
+              
+              <Checkbox 
+                checked={editingChart.visualization_settings?.show_tooltip !== false}
+                onChange={(e) => {
+                  const newSettings = { ...editingChart.visualization_settings, show_tooltip: e.target.checked };
+                  const newChart = { ...editingChart, visualization_settings: newSettings };
+                  setEditingChart(newChart);
+                }}
+              >
+                显示提示
+              </Checkbox>
+            </div>
+          </div>
+
+          {/* 图表预览区域 */}
+          <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
+            <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>图表预览</h3>
+            <div style={{ height: '300px', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>实时图表预览</div>
+                <div style={{ fontSize: '14px', color: '#666' }}>根据当前配置生成预览</div>
+              </div>
+            </div>
           </div>
         </Modal>
       )}
