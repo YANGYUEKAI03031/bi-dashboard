@@ -19,6 +19,7 @@ interface ChartData {
   dataset_query: any;
   visualization_settings: any;
   database_id: number;
+  table_name?: string;  // 新增：表名字段
   creator_id?: number;
 }
 

@@ -16,6 +16,7 @@ interface ChartItem {
   name: string;
   chart_type: string;
   database_id: number;
+  table_name?: string;  // 新增：表名字段
   created_at: string;
   visualization_settings?: {
     x_field?: string;

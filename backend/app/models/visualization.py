@@ -28,6 +28,7 @@ class VisualizationCard(Base):
     created_by = Column(Integer, ForeignKey("useraccount.userID"), nullable=False)  # 原来的 creator_id
     
     # 其他字段
+    table_name = Column(String(255), nullable=True)  # 新增：存储实际查询的表名
     is_public = Column(Boolean, default=False)
     archived = Column(Boolean, default=False)
     public_uuid = Column(String(36))  # 公开分享标识

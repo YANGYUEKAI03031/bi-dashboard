@@ -23,6 +23,7 @@ interface ChartResponse {
   visualization_settings: any;
   database_id: number;  // 恢复原始字段名
   creator_id: number;   // 恢复原始字段名
+  table_name?: string;  // 新增：表名字段
   created_at: string;
   updated_at: string;
 }

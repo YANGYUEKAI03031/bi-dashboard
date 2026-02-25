@@ -21,8 +21,9 @@ class ChartService:
     async def create_chart(self, chart_data: ChartCreate, user_id: int) -> VisualizationCard:
         """创建新图表 - 适配现有表结构"""
         try:
-            # 安全地提取SQL查询语句
+            # 安全地提取SQL查询语句和表名
             query_sql = ""
+            table_name = None
             try:
                 # 处理dataset_query可能是字典的情况
                 dataset_dict = chart_data.dataset_query.dict() if hasattr(chart_data.dataset_query, 'dict') else chart_data.dataset_query
@@ -31,6 +32,12 @@ class ChartService:
                     native_config = dataset_dict['native']
                     if isinstance(native_config, dict) and 'query' in native_config:
                         query_sql = native_config['query'] or ""
+                        
+                        # 提取表名（从SQL中解析）
+                        import re
+                        from_clause = re.search(r'FROM\s+([a-zA-Z0-9_]+)', query_sql, re.IGNORECASE)
+                        if from_clause:
+                            table_name = from_clause.group(1)
             except Exception as e:
                 logger.warning(f"提取SQL查询时出错: {e}")
                 query_sql = ""
@@ -44,6 +51,7 @@ class ChartService:
                 visualization_settings=json.dumps(chart_data.visualization_settings.dict() if hasattr(chart_data.visualization_settings, 'dict') else chart_data.visualization_settings),
                 config={},  # 为config字段提供默认值
                 query_sql=query_sql,  # 安全提取的SQL语句
+                table_name=table_name,  # 新增：表名信息
                 data_source_id=chart_data.database_id,
                 created_by=user_id,
                 is_public=chart_data.is_public if hasattr(chart_data, 'is_public') else False,
@@ -114,13 +122,21 @@ class ChartService:
                 update_fields[VisualizationCard.chart_type] = update_data.chart_type
             if update_data.dataset_query is not None:
                 update_fields[VisualizationCard.dataset_query] = json.dumps(update_data.dataset_query.dict() if hasattr(update_data.dataset_query, 'dict') else update_data.dataset_query)
-                # 安全地提取并更新query_sql字段
+                # 安全地提取并更新query_sql字段和table_name
                 try:
                     dataset_dict = update_data.dataset_query.dict() if hasattr(update_data.dataset_query, 'dict') else update_data.dataset_query
                     if isinstance(dataset_dict, dict) and 'native' in dataset_dict:
                         native_config = dataset_dict['native']
                         if isinstance(native_config, dict) and 'query' in native_config:
                             update_fields[VisualizationCard.query_sql] = native_config['query'] or ""
+                            
+                            # 提取表名（从SQL中解析）
+                            import re
+                            from_clause = re.search(r'FROM\s+([a-zA-Z0-9_]+)', native_config['query'], re.IGNORECASE)
+                            if from_clause:
+                                update_fields[VisualizationCard.table_name] = from_clause.group(1)
+                            else:
+                                update_fields[VisualizationCard.table_name] = None
                 except Exception as e:
                     logger.warning(f"更新时提取SQL查询时出错: {e}")
             if update_data.visualization_settings is not None:

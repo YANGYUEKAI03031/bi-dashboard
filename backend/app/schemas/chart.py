@@ -43,9 +43,11 @@ class ChartCreate(BaseModel):
     dataset_query: DatasetQuery
     visualization_settings: VisualizationSettings
     database_id: int
+    table_name: Optional[str] = None  # 新增：表名字段
     is_public: bool = False
     cache_enabled: bool = True
     cache_duration: int = 3600
+    
 
 class ChartUpdate(BaseModel):
     """更新图表请求"""
@@ -55,6 +57,7 @@ class ChartUpdate(BaseModel):
     dataset_query: Optional[DatasetQuery] = None
     visualization_settings: Optional[VisualizationSettings] = None
     database_id: Optional[int] = None
+    table_name: Optional[str] = None  # 新增：表名字段
     is_public: Optional[bool] = None
     cache_enabled: Optional[bool] = None
     cache_duration: Optional[int] = None
@@ -70,6 +73,7 @@ class ChartResponse(BaseModel):
     # 使用数据库中的实际字段名
     data_source_id: int  # 对应 database_id
     created_by: int  # 对应 creator_id
+    table_name: Optional[str] = None  # 新增：表名字段
     is_public: bool
     archived: bool
     cache_enabled: bool

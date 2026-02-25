@@ -34,6 +34,7 @@ async def create_chart(
             "visualization_settings": chart.visualization_settings,
             "database_id": chart.data_source_id,  # 字段名映射
             "creator_id": chart.created_by,  # 字段名映射
+            "table_name": chart.table_name,  # 新增：表名字段
             "is_public": chart.is_public,
             "archived": chart.archived,
             "cache_enabled": chart.cache_enabled,
@@ -104,6 +105,7 @@ async def get_user_charts(
         response_list = []
         for chart in charts:
             response_data = {
+                "table_name": chart.table_name,  # 新增：表名字段
                 "id": chart.id,
                 "name": chart.name,
                 "description": chart.description,
@@ -112,6 +114,7 @@ async def get_user_charts(
                 "visualization_settings": chart.visualization_settings,
                 "database_id": chart.data_source_id,
                 "creator_id": chart.created_by,
+                "table_name": chart.table_name,  # 新增：表名字段
                 "is_public": chart.is_public,
                 "archived": chart.archived,
                 "cache_enabled": chart.cache_enabled,
