@@ -126,11 +126,34 @@
 
 .search-input {
   width: 300px;
-  height: 32px;
+  height: 36px;
   padding: 0 12px;
-  border: 1px solid #d9d9d9;
+  border: none;
   border-radius: 4px;
   font-size: 14px;
+}
+
+/* 统一所有按钮高度为36px，与创建新图表按钮一致 */
+.search-input .ant-input-search-button,
+.search-input .ant-input-group-addon,
+.header-actions .ant-btn {
+  height: 36px !important;
+  line-height: 36px !important;
+  min-height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* 确保搜索按钮高度与搜索框一致 */
+.search-input .ant-input-search-button,
+.search-input .ant-input-group-addon {
+  height: 36px !important;
+  line-height: 36px !important;
+  padding: 0 12px !important;
+  background-color: #1890ff !important;
+  color: white !important;
+  border-left: 1px solid #d9d9d9 !important;
+  border-radius: 0 4px 4px 0 !important;
 }
 
 .empty-state {
