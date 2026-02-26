@@ -338,6 +338,163 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         }
         break;
         
+      case 'radar':
+        // 雷达图配置
+        const indicator = yFields.map(field => ({
+          name: field,
+          max: Math.max(...data.map(item => item[field] || 0)) * 1.1
+        }));
+        
+        baseOption.radar = {
+          indicator: indicator,
+          shape: 'polygon',
+          splitNumber: 5,
+          axisName: {
+            color: '#fff',
+            backgroundColor: '#999',
+            borderRadius: 3,
+            padding: [3, 5]
+          }
+        };
+        
+        baseOption.series = [{
+          type: 'radar',
+          data: [{
+            value: yFields.map(field => data[0]?.[field] || 0),
+            name: '数据'
+          }]
+        }];
+        
+        // 删除坐标轴配置
+        delete baseOption.xAxis;
+        delete baseOption.yAxis;
+        break;
+        
+      case 'boxplot':
+        // 箱线图需要特殊的数据格式
+        baseOption.series = [{
+          name: '箱线图',
+          type: 'boxplot',
+          data: data.map((item, index) => {
+            // 箱线图需要5个值：[min, Q1, median, Q3, max]
+            const values = yFields.map(field => item[field] || 0).sort((a, b) => a - b);
+            if (values.length >= 5) {
+              return values.slice(0, 5);
+            } else {
+              // 如果数据不足5个，补充数据
+              const median = values[Math.floor(values.length / 2)] || 0;
+              const q1 = values[Math.floor(values.length / 4)] || median;
+              const q3 = values[Math.floor(values.length * 3 / 4)] || median;
+              const min = Math.min(...values) || 0;
+              const max = Math.max(...values) || 0;
+              return [min, q1, median, q3, max];
+            }
+          })
+        }];
+        
+        baseOption.xAxis = {
+          type: 'category',
+          data: data.map((_, index) => `组${index + 1}`)
+        };
+        
+        baseOption.yAxis = {
+          type: 'value'
+        };
+        break;
+        
+      case 'stacked_bar':
+        // 堆积柱形图
+        baseOption.series = yFields.map((field, index) => ({
+          name: field,
+          type: 'bar',
+          stack: '总量',
+          data: data.map(item => item[field] || 0)
+        }));
+        break;
+        
+      case 'waterfall':
+        // 瀑布图 - 需要计算累积值
+        let cumulative = 0;
+        const waterfallData = data.map((item, index) => {
+          const value = item[yFields[0]] || 0;
+          const result = cumulative + value;
+          cumulative = result;
+          return {
+            name: item[xField] || `项目${index + 1}`,
+            value: value,
+            cumulative: result
+          };
+        });
+        
+        baseOption.series = [{
+          name: '瀑布图',
+          type: 'bar',
+          data: waterfallData.map(item => ({
+            value: item.value,
+            itemStyle: {
+              color: item.value >= 0 ? '#5470c6' : '#ee6666'
+            }
+          }))
+        }];
+        
+        // 添加辅助线显示累计值
+        baseOption.series.push({
+          name: '累计值',
+          type: 'line',
+          data: waterfallData.map(item => item.cumulative),
+          symbol: 'none',
+          lineStyle: {
+            type: 'dashed'
+          }
+        });
+        break;
+        
+      case 'funnel':
+        // 漏斗图
+        baseOption.series = [{
+          name: '漏斗图',
+          type: 'funnel',
+          left: '10%',
+          top: 60,
+          bottom: 60,
+          width: '80%',
+          min: 0,
+          max: 100,
+          minSize: '0%',
+          maxSize: '100%',
+          sort: 'descending',
+          gap: 2,
+          label: {
+            show: true,
+            position: 'inside'
+          },
+          labelLine: {
+            length: 10,
+            lineStyle: {
+              width: 1,
+              type: 'solid'
+            }
+          },
+          itemStyle: {
+            borderColor: '#fff',
+            borderWidth: 1
+          },
+          emphasis: {
+            label: {
+              fontSize: 20
+            }
+          },
+          data: data.map((item, index) => ({
+            name: item[xField] || `阶段${index + 1}`,
+            value: item[yFields[0]] || 0
+          }))
+        }];
+        
+        // 删除坐标轴配置
+        delete baseOption.xAxis;
+        delete baseOption.yAxis;
+        break;
+        
       case 'heatmap':
         // 热力图需要特殊的二维数据格式
         baseOption.visualMap = {

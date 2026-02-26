@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider } from 'antd';
-import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined } from '@ant-design/icons';
+import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,6 +41,11 @@ const CHART_TYPES = [
   { value: 'area', label: '面积图', icon: <AreaChartOutlined /> },
   { value: 'pie', label: '饼图', icon: <PieChartOutlined /> },
   { value: 'scatter', label: '散点图', icon: <DotChartOutlined /> },
+  { value: 'radar', label: '雷达图', icon: <RadarChartOutlined /> },
+  { value: 'boxplot', label: '箱线图', icon: <FundViewOutlined /> },
+  { value: 'stacked_bar', label: '堆积柱形图', icon: <ClusterOutlined /> },
+  { value: 'waterfall', label: '瀑布图', icon: <FallOutlined /> },
+  { value: 'funnel', label: '漏斗图', icon: <FilterOutlined /> },
 ];
 
 export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }) => {
