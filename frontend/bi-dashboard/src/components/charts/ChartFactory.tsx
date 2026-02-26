@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import * as echarts from 'echarts/core';
 import {
   BarChart,
@@ -107,6 +107,31 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   style = { height: '400px' },
   onEvents
 }) => {
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 监听容器大小变化
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    };
+    
+    updateSize();
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    return () => {
+      if (containerRef.current) {
+        resizeObserver.unobserve(containerRef.current);
+      }
+    };
+  }, []);
+  
   const option = useMemo(() => {
     // 处理xAxis数据 - 使用配置的xField
     const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
@@ -193,9 +218,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         bottom: 10
       },
       grid: config.grid || {
-        left: '3%',
-        right: '4%',
-        bottom: '15%',
+        left: containerSize.width > 800 ? '5%' : '10%',
+        right: containerSize.width > 800 ? '5%' : '10%',
+        bottom: containerSize.height > 400 ? '20%' : '25%',
+        top: containerSize.height > 400 ? '10%' : '15%',
         containLabel: true
       },
       xAxis: {
@@ -210,8 +236,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
               return value;
             }
+            // 对于长文本，进行截断或换行
+            if (typeof value === 'string' && value.length > 10) {
+              return value.substring(0, 8) + '...';
+            }
             return value;
-          }
+          },
+          rotate: containerSize.width < 600 ? 45 : 0,
+          margin: 15
         }
       },
       yAxis: {
@@ -374,12 +406,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   console.log('Generated option:', option);
 
   return (
-    <ReactECharts
-      option={option}
-      style={style}
-      onEvents={onEvents}
-      notMerge={true}
-      lazyUpdate={true}
-    />
+    <div ref={containerRef} style={{ width: '100%', ...style }}>
+      <ReactECharts
+        option={option}
+        notMerge={true}
+        lazyUpdate={true}
+        style={{ height: '100%' }}
+        onEvents={onEvents}
+      />
+    </div>
   );
 };

@@ -6,6 +6,12 @@ import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import './ChartsManagementPage.css';
+// 添加ChartFactory导入
+import { ChartFactory } from '../components/charts/ChartFactory';
+// 添加AuthService导入
+import { AuthService } from '../services/authService';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -19,6 +25,7 @@ interface ChartItem {
   table_name?: string;  // 新增：表名字段
   created_at: string;
   visualization_settings?: {
+    // 前端使用的字段
     x_field?: string;
     y_fields?: string[];
     color_field?: string;
@@ -26,6 +33,14 @@ interface ChartItem {
     y_axis_title?: string;
     show_legend?: boolean;
     show_tooltip?: boolean;
+    // 后端格式的字段（用于兼容）
+    "graph.dimensions"?: string[];
+    "graph.metrics"?: string[];
+    "graph.x_axis.title"?: string;
+    "graph.y_axis.title"?: string;
+    "graph.show_legend"?: boolean;
+    "graph.show_tooltip"?: boolean;
+    "graph.colors"?: string[];
   };
 }
 
@@ -37,40 +52,120 @@ export const ChartsManagementPage: React.FC = () => {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [chartToDelete, setChartToDelete] = useState<number | null>(null);
   const [editingChart, setEditingChart] = useState<ChartItem | null>(null);
-
+  
   // 字段数据状态
   const [xFields, setXFields] = useState<any[]>([]);
   const [yFields, setYFields] = useState<any[]>([]);
   const [colorFields, setColorFields] = useState<any[]>([]);
-
-  // 加载字段数据（简化版，实际需要根据具体数据库结构调整）
-  const loadFields = async (databaseId: number) => {
+  
+  // 预览数据状态
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  
+  // 加载预览数据
+  const loadPreviewData = async (databaseId: number, tableName: string) => {
     try {
-      // 示例：假设数据库 #1 对应 mysql，表名为 'sales'
-      // 实际应用中需要根据数据库类型和表名动态获取
-      const tables = await DataSourceService.getTables('mysql');
-      if (tables.length > 0) {
-        const columns = await DataSourceService.getTableColumns('mysql', tables[0].name);
-        
+      console.log('开始加载预览数据:', { databaseId, tableName });
+      
+      // 构建查询语句
+      const query = `SELECT * FROM \`${tableName}\` LIMIT 10`;
+      
+      // 调用后端API执行查询
+      const response = await fetch(`${API_BASE_URL}/visualization/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AuthService.getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          data_source_id: databaseId.toString(),
+          query: query
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`查询失败: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('预览数据结果:', result);
+      
+      setPreviewData(result.rows || []);
+      
+    } catch (error) {
+      console.error('加载预览数据失败:', error);
+      message.error('加载预览数据失败，请检查数据源连接');
+      setPreviewData([]);
+    }
+  };
+
+  // 加载字段数据
+  const loadFields = async (databaseId: number, tableName?: string) => {
+    try {
+      console.log('开始加载字段数据:', { databaseId, tableName });
+      
+      // 根据数据库ID确定表名
+      let actualTableName = tableName;
+      if (!actualTableName) {
+        // 如果没有表名，根据数据库ID推测
+        switch(databaseId) {
+          case 1: actualTableName = 'sales'; break;
+          case 2: actualTableName = 'orders'; break;
+          case 3: actualTableName = 'customers'; break;
+          default: actualTableName = 'sales'; // 默认表名
+        }
+      }
+      
+      console.log('使用的表名:', actualTableName);
+      
+      // 获取表的列信息
+      const columns = await DataSourceService.getTableColumns('mysql', actualTableName);
+      console.log('获取到的列信息:', columns);
+      
+      if (columns && columns.length > 0) {
         // 按类型分类字段
         const categoryFields = columns.filter(col => 
-          col.type.includes('varchar') || col.type.includes('text') || col.type.includes('char') ||
-          col.type.includes('enum') || col.type.includes('string')
+          col.type.toLowerCase().includes('varchar') || 
+          col.type.toLowerCase().includes('text') || 
+          col.type.toLowerCase().includes('char') ||
+          col.type.toLowerCase().includes('enum') || 
+          col.type.toLowerCase().includes('string')
         );
+        
         const dateFields = columns.filter(col => 
-          col.type.includes('date') || col.type.includes('datetime') || col.type.includes('timestamp')
+          col.type.toLowerCase().includes('date') || 
+          col.type.toLowerCase().includes('datetime') || 
+          col.type.toLowerCase().includes('timestamp')
         );
+        
         const numericFields = columns.filter(col => 
-          col.type.includes('int') || col.type.includes('float') || col.type.includes('double') ||
-          col.type.includes('decimal') || col.type.includes('numeric')
+          col.type.toLowerCase().includes('int') || 
+          col.type.toLowerCase().includes('float') || 
+          col.type.toLowerCase().includes('double') ||
+          col.type.toLowerCase().includes('decimal') || 
+          col.type.toLowerCase().includes('numeric')
         );
+
+        console.log('分类后的字段:', { 
+          categoryFields: categoryFields.length,
+          dateFields: dateFields.length, 
+          numericFields: numericFields.length 
+        });
 
         setXFields([...categoryFields, ...dateFields]);
         setYFields(numericFields);
         setColorFields([...categoryFields, ...numericFields]);
+      } else {
+        console.warn('未获取到列信息');
+        setXFields([]);
+        setYFields([]);
+        setColorFields([]);
       }
     } catch (error) {
       console.error('加载字段失败:', error);
+      message.error('加载字段数据失败，请检查数据源连接');
+      setXFields([]);
+      setYFields([]);
+      setColorFields([]);
     }
   };
 
@@ -104,19 +199,48 @@ export const ChartsManagementPage: React.FC = () => {
   };
 
   // 编辑图表
-  const handleEdit = (chart: ChartItem) => {
+  const handleEdit = async (chart: ChartItem) => {
     setEditingChart(chart);
+    // 加载字段数据
+    if (chart.database_id) {
+      await loadFields(chart.database_id, chart.table_name);
+    }
+    // 加载预览数据
+    if (chart.database_id && chart.table_name) {
+      await loadPreviewData(chart.database_id, chart.table_name);
+    }
   };
 
   // 保存编辑
   const handleEditSave = async () => {
     if (editingChart) {
       try {
-        await ChartService.updateChart(editingChart.id, {
+        // 构建完整的更新数据，包含visualization_settings和dataset_query
+        // 根据X轴和Y轴字段生成新的SQL查询
+        let selectFields = [];
+        if (editingChart.visualization_settings?.x_field) {
+          selectFields.push(editingChart.visualization_settings.x_field);
+        }
+        if (editingChart.visualization_settings?.y_fields && editingChart.visualization_settings.y_fields.length > 0) {
+          selectFields.push(...editingChart.visualization_settings.y_fields);
+        }
+        
+        const querySql = `SELECT ${selectFields.join(', ')} FROM ${editingChart.table_name || 'zfcount'} LIMIT 1000`;
+        
+        const updateData = {
           name: editingChart.name,
           chart_type: editingChart.chart_type,
-          database_id: editingChart.database_id
-        });
+          database_id: editingChart.database_id,
+          visualization_settings: editingChart.visualization_settings,
+          dataset_query: {
+            type: 'native',
+            native: {
+              query: querySql
+            }
+          }
+        };
+
+        await ChartService.updateChart(editingChart.id, updateData);
         message.success('图表更新成功');
         fetchCharts();
         setEditingChart(null);
@@ -335,14 +459,24 @@ export const ChartsManagementPage: React.FC = () => {
           
           <div style={{ marginBottom: 16 }}>
             <label>数据源:</label>
-            <div style={{ marginTop: 8, padding: '4px 12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-              {editingChart?.database_id === 1 ? 'sales' : 
-               editingChart?.database_id === 2 ? 'orders' : 
-               editingChart?.database_id === 3 ? 'customers' : '未知表'}
+            <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#f5f5f5', borderRadius: '4px', border: '1px solid #d9d9d9' }}>
+              <div><strong>数据库ID:</strong> #{editingChart?.database_id}</div>
+              <div><strong>表名:</strong> {editingChart?.table_name || '未指定'}</div>
             </div>
           </div>
 
-          {/* X轴/Y轴配置区域 */}
+          {/* 调试信息区域 */}
+          <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f0f8ff', border: '1px solid #d0e6ff', borderRadius: '4px' }}>
+            <h4 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>调试信息</h4>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              <div><strong>当前图表ID:</strong> {editingChart?.id}</div>
+              <div><strong>X轴字段数量:</strong> {xFields.length}</div>
+              <div><strong>Y轴字段数量:</strong> {yFields.length}</div>
+              <div><strong>颜色字段数量:</strong> {colorFields.length}</div>
+              <div><strong>当前X轴设置:</strong> {editingChart?.visualization_settings?.x_field || '未设置'}</div>
+              <div><strong>当前Y轴设置:</strong> {editingChart?.visualization_settings?.y_fields?.join(', ') || '未设置'}</div>
+            </div>
+          </div>
           <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
             <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>坐标轴配置</h3>
             
@@ -358,33 +492,33 @@ export const ChartsManagementPage: React.FC = () => {
                   }}
                   style={{ marginTop: 8, width: '100%' }}
                   placeholder="选择X轴字段"
-                  disabled={!xFields.length}
+                  notFoundContent={xFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
                 >
                   {xFields.map(field => (
                     <Option key={field.name} value={field.name}>
-                      {field.name} ({field.type})
+                      {field.name}
                     </Option>
                   ))}
                 </Select>
               </div>
               
               <div>
-                <label>Y轴字段:</label>
+                <label>Y轴字段 (可多选):</label>
                 <Select 
-                  defaultValue={editingChart.visualization_settings?.y_fields?.[0] || ''}
-                  onChange={(value) => {
-                    const yFields = [value];
-                    const newSettings = { ...editingChart.visualization_settings, y_fields: yFields };
+                  mode="multiple"
+                  defaultValue={editingChart.visualization_settings?.y_fields || []}
+                  onChange={(values) => {
+                    const newSettings = { ...editingChart.visualization_settings, y_fields: values };
                     const newChart = { ...editingChart, visualization_settings: newSettings };
                     setEditingChart(newChart);
                   }}
                   style={{ marginTop: 8, width: '100%' }}
-                  placeholder="选择Y轴字段"
-                  disabled={!yFields.length}
+                  placeholder="选择一个或多个Y轴字段"
+                  notFoundContent={yFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
                 >
                   {yFields.map(field => (
                     <Option key={field.name} value={field.name}>
-                      {field.name} ({field.type})
+                      {field.name}
                     </Option>
                   ))}
                 </Select>
@@ -402,11 +536,11 @@ export const ChartsManagementPage: React.FC = () => {
                 }}
                 style={{ marginTop: 8, width: '100%' }}
                 placeholder="选择颜色字段"
-                disabled={!colorFields.length}
+                notFoundContent={colorFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
               >
                 {colorFields.map(field => (
                   <Option key={field.name} value={field.name}>
-                    {field.name} ({field.type})
+                    {field.name}
                   </Option>
                 ))}
               </Select>
@@ -473,11 +607,38 @@ export const ChartsManagementPage: React.FC = () => {
           {/* 图表预览区域 */}
           <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
             <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>图表预览</h3>
-            <div style={{ height: '300px', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>实时图表预览</div>
-                <div style={{ fontSize: '14px', color: '#666' }}>根据当前配置生成预览</div>
-              </div>
+            <div style={{ height: '100%', minHeight: '300px', maxHeight: '600px' }}>
+              {editingChart && (
+                <div>
+                  {xFields.length > 0 && yFields.length > 0 ? (
+                    <ChartFactory
+                      config={{
+                        type: editingChart.chart_type,
+                        title: editingChart.name,
+                        xField: editingChart.visualization_settings?.x_field || '',
+                        yFields: editingChart.visualization_settings?.y_fields || [],
+                        colorField: editingChart.visualization_settings?.color_field || '',
+                        xAxis: {
+                          name: editingChart.visualization_settings?.x_axis_title || 'X轴'
+                        },
+                        yAxis: {
+                          name: editingChart.visualization_settings?.y_axis_title || 'Y轴'
+                        },
+                        series: [] // 添加空的series数组以满足类型要求
+                      }}
+                      data={previewData}
+                      style={{ height: '100%', width: '100%' }}
+                    />
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
+                      <div style={{ textAlign: 'center', padding: '20px' }}>
+                        <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>需要配置字段</div>
+                        <div style={{ fontSize: '14px', color: '#666' }}>请先选择X轴和Y轴字段以生成预览</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </Modal>
