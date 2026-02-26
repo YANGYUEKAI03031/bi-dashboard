@@ -200,7 +200,72 @@ export const ChartsManagementPage: React.FC = () => {
 
   // 编辑图表
   const handleEdit = async (chart: ChartItem) => {
-    setEditingChart(chart);
+    console.log('编辑图表数据:', chart);
+    console.log('visualization_settings:', chart.visualization_settings);
+    
+    // 处理后端格式到前端格式的转换
+    let chartWithFrontendSettings = { ...chart };
+    
+    // 确保visualization_settings存在
+    if (!chartWithFrontendSettings.visualization_settings) {
+      chartWithFrontendSettings.visualization_settings = {};
+    }
+    
+    const settings = chartWithFrontendSettings.visualization_settings;
+    
+    // 尝试各种可能的字段名（使用类型断言避免编译错误）
+    const graphDimensions = (settings as any)["graph.dimensions"] || 
+                           (settings as any)["graph_dimensions"] || 
+                           (settings as any).graphDimensions;
+    
+    const graphMetrics = (settings as any)["graph.metrics"] || 
+                        (settings as any)["graph_metrics"] || 
+                        (settings as any).graphMetrics;
+    
+    const xAxisTitle = (settings as any)["graph.x_axis.title"] || 
+                      (settings as any)["graph_x_axis_title"] || 
+                      (settings as any).xAxisTitle ||
+                      (settings as any)["x_axis_title"];
+    
+    const yAxisTitle = (settings as any)["graph.y_axis.title"] || 
+                      (settings as any)["graph_y_axis_title"] || 
+                      (settings as any).yAxisTitle ||
+                      (settings as any)["y_axis_title"];
+    
+    // 设置X轴字段
+    if (graphDimensions && Array.isArray(graphDimensions) && graphDimensions.length > 0) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...settings,
+        x_field: graphDimensions[0]
+      };
+    }
+    
+    // 设置Y轴字段
+    if (graphMetrics && Array.isArray(graphMetrics)) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        y_fields: graphMetrics
+      };
+    }
+    
+    // 设置标题
+    if (xAxisTitle) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        x_axis_title: xAxisTitle
+      };
+    }
+    
+    if (yAxisTitle) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        y_axis_title: yAxisTitle
+      };
+    }
+    
+    console.log('处理后的图表数据:', chartWithFrontendSettings);
+    setEditingChart(chartWithFrontendSettings);
+    
     // 加载字段数据
     if (chart.database_id) {
       await loadFields(chart.database_id, chart.table_name);

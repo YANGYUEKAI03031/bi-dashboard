@@ -197,7 +197,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         
         if (numericFields.length > 0) {
           console.log('自动检测到数值字段:', numericFields);
-          yFields = numericFields.slice(0, 3); // 最多3个字段
+          yFields = numericFields; // 使用所有检测到的数值字段
         }
       }
     }
