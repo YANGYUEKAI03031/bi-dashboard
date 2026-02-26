@@ -175,27 +175,30 @@ class DashboardService:
                 return None
             
             # 更新字段
-            update_fields = {}
+            # 注意：SQLAlchemy 的 values(**kwargs) 要求 kwargs 的 key 必须是字符串
+            # 之前使用 Column 作为 key 会触发 TypeError: keywords must be strings
+            update_fields: Dict[str, Any] = {}
             if update_data.card_row is not None:
-                update_fields[DashboardCard.card_row] = update_data.card_row
+                update_fields["card_row"] = update_data.card_row
             if update_data.card_col is not None:
-                update_fields[DashboardCard.card_col] = update_data.card_col
+                update_fields["card_col"] = update_data.card_col
             if update_data.size_x is not None:
-                update_fields[DashboardCard.size_x] = update_data.size_x
+                update_fields["size_x"] = update_data.size_x
             if update_data.size_y is not None:
-                update_fields[DashboardCard.size_y] = update_data.size_y
+                update_fields["size_y"] = update_data.size_y
             if update_data.visualization_settings is not None:
-                update_fields[DashboardCard.visualization_settings] = json.dumps(update_data.visualization_settings)
+                # 模型字段类型是 JSON，直接存 dict 即可
+                update_fields["visualization_settings"] = update_data.visualization_settings
             if update_data.parameter_mappings is not None:
-                update_fields[DashboardCard.parameter_mappings] = json.dumps(update_data.parameter_mappings)
+                update_fields["parameter_mappings"] = update_data.parameter_mappings
             
             # 更新时间戳
-            update_fields[DashboardCard.updated_at] = datetime.utcnow()
+            update_fields["updated_at"] = datetime.utcnow()
             
             if update_fields:
                 stmt = update(DashboardCard).where(
                     DashboardCard.id == card_id
-                ).values(**update_fields)
+                ).values(update_fields)
                 
                 await self.db.execute(stmt)
                 await self.db.commit()

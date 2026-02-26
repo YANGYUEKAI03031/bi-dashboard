@@ -9,22 +9,24 @@ import { ChartService } from '../services/chartService';
 import { DashboardService } from '../services/dashboardService';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import './DashboardPage.css';
+import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 
 // 添加拖拽相关的CSS类
 const gridStyles = `
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  grid-auto-rows: 60px;
-  gap: 16px;
   padding: 16px;
   min-height: 600px;
+  width: 100%;
+  display: block;
 }
 
 .dashboard-card-wrapper {
   position: relative;
   border-radius: 8px;
   transition: all 0.3s ease;
+  height: 100%;
 }
 
 .dashboard-card-wrapper:hover {
@@ -46,7 +48,48 @@ const gridStyles = `
   height: 100%;
   overflow: hidden;
 }
+
+.dashboard-card-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-card-inner .ant-card-body {
+  flex: 1 1 auto;
+  height: auto !important;
+  overflow: hidden;
+}
+
+.dashboard-grid .react-grid-layout {
+  min-height: 600px;
+}
+
+.dashboard-grid .react-grid-item {
+  transition: all 0.2s ease;
+}
+
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  background: rgba(24, 144, 255, 0.15);
+  border: 1px dashed #1890ff;
+}
+
+.dashboard-grid .react-resizable-handle {
+  z-index: 20;
+}
 `;
+
+const AutoWidthGridLayout: React.FC<any> = (props) => {
+  const { width, containerRef, mounted } = useContainerWidth();
+
+  return (
+    <div ref={containerRef} style={{ width: '100%' }}>
+      {mounted && width > 0 && (
+        <ReactGridLayout width={width} {...props} />
+      )}
+    </div>
+  );
+};
 
 // 在组件顶部添加样式
 const styleSheet = document.createElement("style");
@@ -83,6 +126,14 @@ interface Dashboard {
   cards: DashboardCard[];
 }
 
+interface GridLayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 // 类型转换函数：将ChartResponse转换为Chart
 const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
   return {
@@ -115,7 +166,6 @@ export const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
-  const [draggedCard, setDraggedCard] = useState<DashboardCard | null>(null);
   const [chartDataCache, setChartDataCache] = useState<Record<number, any[]>>({});
   
   // 全局请求状态管理
@@ -417,7 +467,7 @@ export const DashboardPage: React.FC = () => {
     </div>
   );
 
-  // 渲染仪表盘卡片组件 - 增强版本
+  // 渲染仪表盘卡片组件 - 使用网格布局的卡片内容
   const DashboardCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
@@ -508,36 +558,7 @@ export const DashboardPage: React.FC = () => {
       <div 
         key={card.id}
         className="dashboard-card-wrapper"
-        style={{
-          gridRow: `span ${card.size_y}`,
-          gridColumn: `span ${card.size_x}`,
-          zIndex: draggedCard?.id === card.id ? 1000 : 1
-        }}
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = 'move';
-          setDraggedCard(card);
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-        }}
-        onDrop={async (e) => {
-          e.preventDefault();
-          if (draggedCard && draggedCard.id !== card.id) {
-            // 计算新的位置
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / (rect.width / card.size_x));
-            const y = Math.floor((e.clientY - rect.top) / (rect.height / card.size_y));
-            
-            // 更新位置
-            await handleCardResizeOrMove(draggedCard.id, {
-              card_row: Math.max(0, card.card_row + y),
-              card_col: Math.max(0, card.card_col + x)
-            });
-            setDraggedCard(null);
-          }
-        }}
+        style={{ height: '100%', position: 'relative' }}
       >
         <div className="drag-handle">
           <DragOutlined />
@@ -561,7 +582,8 @@ export const DashboardPage: React.FC = () => {
             />
           }
           className="dashboard-card-inner"
-          bodyStyle={{ padding: '12px', height: 'calc(100% - 56px)' }}
+          style={{ height: '100%' }}
+          bodyStyle={{ padding: '12px' }}
         >
           {dataLoading ? (
             <div style={{ 
@@ -747,35 +769,49 @@ export const DashboardPage: React.FC = () => {
                 }
               >
                 <div className="dashboard-grid">
-                  {selectedDashboard.cards.map(card => (
-                    <DashboardCardComponent key={card.id} card={card} />
-                  ))}
-                  
-                  {/* 空白占位符用于放置新卡片 */}
-                  <div 
-                    className="grid-placeholder"
-                    style={{
-                      gridRow: 'span 4',
-                      gridColumn: 'span 6',
-                      border: '2px dashed #ddd',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#999'
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={async (e) => {
-                      e.preventDefault();
-                      if (draggedCard) {
-                        // 添加到仪表盘的新位置
-                        await handleAddChartToDashboard(draggedCard.chart_id);
-                        setDraggedCard(null);
-                      }
+                  <AutoWidthGridLayout
+                    cols={12}
+                    rowHeight={60}
+                    margin={[16, 16]}
+                    draggableHandle=".drag-handle"
+                    onLayoutChange={(layout: GridLayoutItem[]) => {
+                      if (!selectedDashboard) return;
+                      const cardMap = new Map(
+                        selectedDashboard.cards.map(card => [card.id.toString(), card])
+                      );
+
+                      layout.forEach(item => {
+                        const card = cardMap.get(item.i);
+                        if (!card) return;
+
+                        const updates: any = {};
+                        if (card.card_row !== item.y) updates.card_row = item.y;
+                        if (card.card_col !== item.x) updates.card_col = item.x;
+                        if (card.size_x !== item.w) updates.size_x = item.w;
+                        if (card.size_y !== item.h) updates.size_y = item.h;
+
+                        if (Object.keys(updates).length > 0) {
+                          handleCardResizeOrMove(card.id, updates);
+                        }
+                      });
                     }}
                   >
-                    拖拽图表到这里
-                  </div>
+                    {selectedDashboard.cards.map(card => (
+                      <div
+                        key={card.id.toString()}
+                        data-grid={{
+                          x: card.card_col ?? 0,
+                          y: card.card_row ?? 0,
+                          w: card.size_x ?? 6,
+                          h: card.size_y ?? 4,
+                          minW: 3,
+                          minH: 3
+                        }}
+                      >
+                        <DashboardCardComponent card={card} />
+                      </div>
+                    ))}
+                  </AutoWidthGridLayout>
                 </div>
               </Card>
             ) : (
