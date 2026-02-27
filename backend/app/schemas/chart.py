@@ -32,6 +32,10 @@ class VisualizationSettings(BaseModel):
     tooltip_enabled: Optional[bool] = Field(True, alias="graph.tooltip.enabled")
     animation_enabled: Optional[bool] = Field(True, alias="graph.animation.enabled")
     
+    # 排序设置
+    sort_by: Optional[str] = Field(None, alias="graph.sort_by")
+    sort_order: Optional[str] = Field(None, alias="graph.sort_order")
+    
     class Config:
         populate_by_name = True
 

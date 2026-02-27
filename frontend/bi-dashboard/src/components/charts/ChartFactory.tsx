@@ -140,33 +140,57 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     
     // 排序处理
     let sortedData = [...data];
+    console.log('=== 排序处理开始 ===');
+    console.log('原始数据:', data);
+    console.log('配置信息:', { sort_by: config.sort_by, sort_order: config.sort_order, xField: xField });
+    
     if (config.sort_by && config.sort_order) {
+      console.log('开始执行排序逻辑');
       if (config.sort_by === 'x') {
         // 按X轴字段排序
+        console.log('按X轴排序:', xField);
         sortedData.sort((a, b) => {
           const valA = a[xField];
           const valB = b[xField];
+          console.log('比较值:', { valA, valB });
+          
           if (typeof valA === 'number' && typeof valB === 'number') {
-            return config.sort_order === 'asc' ? valA - valB : valB - valA;
+            const result = config.sort_order === 'asc' ? valA - valB : valB - valA;
+            console.log('数字排序结果:', result);
+            return result;
           }
-          return config.sort_order === 'asc' 
+          
+          const result = config.sort_order === 'asc' 
             ? String(valA).localeCompare(String(valB)) 
             : String(valB).localeCompare(String(valA));
+          console.log('字符串排序结果:', result);
+          return result;
         });
       } else if (config.sort_by === 'y' && config.yFields && config.yFields.length > 0) {
         // 按第一个Y轴字段排序
         const yField = config.yFields[0];
+        console.log('按Y轴排序:', yField);
         sortedData.sort((a, b) => {
           const valA = a[yField];
           const valB = b[yField];
+          console.log('比较值:', { valA, valB });
+          
           if (typeof valA === 'number' && typeof valB === 'number') {
-            return config.sort_order === 'asc' ? valA - valB : valB - valA;
+            const result = config.sort_order === 'asc' ? valA - valB : valB - valA;
+            console.log('数字排序结果:', result);
+            return result;
           }
-          return config.sort_order === 'asc' 
+          
+          const result = config.sort_order === 'asc' 
             ? String(valA).localeCompare(String(valB)) 
             : String(valB).localeCompare(String(valA));
+          console.log('字符串排序结果:', result);
+          return result;
         });
       }
+      console.log('排序后数据:', sortedData);
+    } else {
+      console.log('跳过排序 - 缺少必要配置');
     }
     
     const xAxisData = sortedData.map(item => {
@@ -594,6 +618,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
   // 添加调试信息
   console.log('ChartFactory props:', { config, data });
+  console.log('排序配置检查:', { 
+    sort_by: config.sort_by, 
+    sort_order: config.sort_order,
+    hasSortConfig: !!(config.sort_by && config.sort_order)
+  });
   console.log('Generated option:', option);
 
   return (

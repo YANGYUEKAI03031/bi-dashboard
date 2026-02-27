@@ -672,13 +672,19 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           }
         },
         visualization_settings: {
-          ...chartData.visualization_settings,
-          // 确保必要的配置项存在
+          // 使用后端期望的原始字段名
+          graph_dimensions: chartData.visualization_settings.x_field ? [chartData.visualization_settings.x_field] : [],
+          graph_metrics: chartData.visualization_settings.y_fields || [],
           x_axis_title: chartData.visualization_settings.x_axis_title || 'X轴',
           y_axis_title: chartData.visualization_settings.y_axis_title || 'Y轴',
-          // 确保x_field和y_fields存在
-          x_field: chartData.visualization_settings.x_field ?? (availableFields?.length > 0 ? availableFields[0] : ''),
-          y_fields: chartData.visualization_settings.y_fields ?? (availableFields?.length > 1 ? availableFields.slice(1, Math.min(3, availableFields?.length || 0)) : [])
+          show_legend: chartData.visualization_settings.show_legend !== false,
+          tooltip_enabled: chartData.visualization_settings.show_tooltip !== false,
+          // 排序配置
+          sort_by: chartData.visualization_settings.sort_by || 'x',
+          sort_order: chartData.visualization_settings.sort_order || 'asc',
+          // 保留原有的前端字段以便本地使用
+          x_field: chartData.visualization_settings.x_field,
+          y_fields: chartData.visualization_settings.y_fields
         },
         database_id: chartData.database_id,
         creator_id: user.id,

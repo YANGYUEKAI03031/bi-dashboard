@@ -183,7 +183,10 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
                     config={{
                       type: card.chart_data.chart_type,
                       title: card.chart_data.name,
-                      ...card.chart_data.visualization_settings
+                      ...card.chart_data.visualization_settings,
+                      // 确保排序配置被传递（处理Pydantic别名）
+                      sort_by: card.chart_data.visualization_settings?.['graph.sort_by'] || card.chart_data.visualization_settings?.sort_by || 'x',
+                      sort_order: card.chart_data.visualization_settings?.['graph.sort_order'] || card.chart_data.visualization_settings?.sort_order || 'asc'
                     }}
                     data={[]} // 实际数据需要从API获取
                     style={{ height: '100%' }}

@@ -357,7 +357,18 @@ export const ChartsManagementPage: React.FC = () => {
           name: editingChart.name,
           chart_type: editingChart.chart_type,
           database_id: editingChart.database_id,
-          visualization_settings: editingChart.visualization_settings,
+          visualization_settings: {
+            // 使用后端期望的原始字段名
+            graph_dimensions: editingChart.visualization_settings?.x_field ? [editingChart.visualization_settings.x_field] : [],
+            graph_metrics: editingChart.visualization_settings?.y_fields || [],
+            x_axis_title: editingChart.visualization_settings?.x_axis_title || 'X轴',
+            y_axis_title: editingChart.visualization_settings?.y_axis_title || 'Y轴',
+            show_legend: editingChart.visualization_settings?.show_legend !== false,
+            tooltip_enabled: editingChart.visualization_settings?.show_tooltip !== false,
+            // 排序配置
+            'graph.sort_by': editingChart.visualization_settings?.sort_by || 'x',
+            'graph.sort_order': editingChart.visualization_settings?.sort_order || 'asc'
+          },
           dataset_query: {
             type: 'native',
             native: {
