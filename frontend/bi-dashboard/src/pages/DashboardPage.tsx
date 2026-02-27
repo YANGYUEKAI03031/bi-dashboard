@@ -660,8 +660,8 @@ export const DashboardPage: React.FC = () => {
                   yFields: card.chart.visualization_settings?.y_fields,
                   colorField: card.chart.visualization_settings?.color_field,
                   // 排序配置（处理Pydantic别名）
-                  sort_by: card.chart.visualization_settings?.['graph.sort_by'] || card.chart.visualization_settings?.sort_by || 'x',
-                  sort_order: card.chart.visualization_settings?.['graph.sort_order'] || card.chart.visualization_settings?.sort_order || 'asc',
+                  sort_by: card.chart.visualization_settings?.['graph.sort_by'] || card.chart.visualization_settings?.sort_by,
+                  sort_order: card.chart.visualization_settings?.['graph.sort_order'] || card.chart.visualization_settings?.sort_order,
                   // 添加更多配置
                   legend: {
                     show: card.chart.visualization_settings?.show_legend !== false,
