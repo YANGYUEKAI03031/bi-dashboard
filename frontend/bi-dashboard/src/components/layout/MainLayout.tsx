@@ -1,13 +1,65 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import './MainLayout.css';
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bi-dashboard.sidebarCollapsed';
+
+const getSidebarCollapsedKey = (userId?: number | null) =>
+  userId ? `${SIDEBAR_COLLAPSED_STORAGE_KEY}.${userId}` : SIDEBAR_COLLAPSED_STORAGE_KEY;
+
+const parseCollapsed = (raw: string | null): boolean | null => {
+  if (raw == null) return null;
+  if (raw === 'true' || raw === '1') return true;
+  if (raw === 'false' || raw === '0') return false;
+  return null;
+};
+
+const readCollapsedFromStorage = (userId?: number | null): boolean | null => {
+  // Prefer per-user key; fallback to global key.
+  const raw =
+    localStorage.getItem(getSidebarCollapsedKey(userId)) ??
+    (userId ? localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) : null);
+  return parseCollapsed(raw);
+};
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return readCollapsedFromStorage(null) ?? false;
+    } catch {
+      return false;
+    }
+  });
+
+  // When user info arrives, restore user-scoped preference (or fallback to global preference).
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const v = readCollapsedFromStorage(user.id);
+      if (v !== null) setSidebarCollapsed(v);
+    } catch {
+      // ignore
+    }
+  }, [user?.id]);
+
+  // Persist preference so refresh doesn't reset the sidebar.
+  useEffect(() => {
+    try {
+      const value = sidebarCollapsed ? '1' : '0';
+      localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, value);
+      if (user?.id) {
+        localStorage.setItem(getSidebarCollapsedKey(user.id), value);
+      }
+    } catch {
+      // ignore (e.g. storage disabled)
+    }
+  }, [sidebarCollapsed, user?.id]);
 
   const handleLogout = async () => {
     await logout();
@@ -19,10 +71,31 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     return location.pathname === path;
   };
 
+  const pageTitle = useMemo(() => {
+    switch (location.pathname) {
+      case '/dashboard':
+        return '仪表盘';
+      case '/reports':
+        return '报表中心';
+      case '/visualization-builder':
+        return '可视化构建器';
+      case '/charts-management':
+        return '图表管理';
+      case '/analytics':
+        return '数据分析';
+      case '/data-chain':
+        return '数据链管理';
+      case '/settings':
+        return '系统设置';
+      default:
+        return '';
+    }
+  }, [location.pathname]);
+
   return (
     <div className="main-layout">
       {/* 侧边栏 */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} aria-hidden={sidebarCollapsed}>
         <div className="logo">
           <h2>BI Dashboard</h2>
         </div>
@@ -84,14 +157,17 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       {/* 主内容区域 */}
       <main className="main-content">
         <header className="top-bar">
-          <div className="page-title">
-            {location.pathname === '/dashboard' && '仪表盘'}
-            {location.pathname === '/reports' && '报表中心'}
-            {location.pathname === '/visualization-builder' && '可视化构建器'}
-            {location.pathname === '/charts-management' && '图表管理'}
-            {location.pathname === '/analytics' && '数据分析'}
-            {location.pathname === '/data-chain' && '数据链管理'}
-            {location.pathname === '/settings' && '系统设置'}
+          <div className="top-bar-left">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed(v => !v)}
+              aria-label={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
+              title={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
+            >
+              {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </button>
+            <div className="page-title">{pageTitle}</div>
           </div>
           <div className="user-actions">
             <button className="notification-btn">

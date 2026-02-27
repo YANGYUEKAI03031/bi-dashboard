@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { MainLayout } from './components/layout/MainLayout';
-import { DashboardPage } from './pages/DashboardPage';
+import { DashboardListPage } from './pages/DashboardListPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
 import { VisualizationBuilder } from './pages/VisualizationBuilder';
 import { ChartsManagementPage } from './pages/ChartsManagementPage'; // 添加图表管理页面导入
+import { DashboardEditorPage } from './pages/DashboardEditorPage';
 import { AuthService } from './services/authService';
 
 // 认证保护组件
@@ -71,17 +72,42 @@ function App() {
             element={<Navigate to="/login" replace />} 
           />
           
-          {/* 受保护的路由使用 MainLayout */}
+          {/* 仪表盘列表页 */}
           <Route 
             path="/dashboard" 
             element={
               <ProtectedRoute>
                 <MainLayout>
-                  <DashboardPage />
+                  <DashboardListPage />
                 </MainLayout>
               </ProtectedRoute>
             } 
           />
+
+          {/* 新建仪表盘 - 全画布编辑页 */}
+          <Route 
+            path="/dashboard/new" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <DashboardEditorPage mode="create" />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* 编辑仪表盘 - 全画布编辑页 */}
+          <Route 
+            path="/dashboard/edit/:id" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <DashboardEditorPage mode="edit" />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+
           <Route 
             path="/reports" 
             element={
@@ -124,3 +150,4 @@ function App() {
 }
 
 export default App;
+
