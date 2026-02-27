@@ -92,6 +92,8 @@ interface ChartConfig {
   xField?: string; // X轴字段
   yFields?: string[]; // Y轴字段数组
   colorField?: string; // 颜色分组字段
+  sort_by?: 'x' | 'y'; // 排序方式: 'x' 或 'y'
+  sort_order?: 'asc' | 'desc'; // 排序顺序: 'asc' 或 'desc'
 }
 
 interface ChartFactoryProps {
@@ -135,7 +137,39 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const option = useMemo(() => {
     // 处理xAxis数据 - 使用配置的xField
     const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
-    const xAxisData = data.map(item => {
+    
+    // 排序处理
+    let sortedData = [...data];
+    if (config.sort_by && config.sort_order) {
+      if (config.sort_by === 'x') {
+        // 按X轴字段排序
+        sortedData.sort((a, b) => {
+          const valA = a[xField];
+          const valB = b[xField];
+          if (typeof valA === 'number' && typeof valB === 'number') {
+            return config.sort_order === 'asc' ? valA - valB : valB - valA;
+          }
+          return config.sort_order === 'asc' 
+            ? String(valA).localeCompare(String(valB)) 
+            : String(valB).localeCompare(String(valA));
+        });
+      } else if (config.sort_by === 'y' && config.yFields && config.yFields.length > 0) {
+        // 按第一个Y轴字段排序
+        const yField = config.yFields[0];
+        sortedData.sort((a, b) => {
+          const valA = a[yField];
+          const valB = b[yField];
+          if (typeof valA === 'number' && typeof valB === 'number') {
+            return config.sort_order === 'asc' ? valA - valB : valB - valA;
+          }
+          return config.sort_order === 'asc' 
+            ? String(valA).localeCompare(String(valB)) 
+            : String(valB).localeCompare(String(valA));
+        });
+      }
+    }
+    
+    const xAxisData = sortedData.map(item => {
       if (!item) return '';
       
       // 支持多种数据格式
@@ -259,7 +293,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = yFields.map(field => ({
           name: field,
           type: 'bar',
-          data: data.map(item => item[field] || 0),
+          data: sortedData.map(item => item[field] || 0),
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -270,7 +304,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = yFields.map(field => ({
           name: field,
           type: 'line',
-          data: data.map(item => item[field] || 0),
+          data: sortedData.map(item => item[field] || 0),
           smooth: true,
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
@@ -282,7 +316,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = yFields.map(field => ({
           name: field,
           type: 'line',
-          data: data.map(item => item[field] || 0),
+          data: sortedData.map(item => item[field] || 0),
           smooth: true,
           areaStyle: {},
           ...(config.colorField ? {
@@ -306,7 +340,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           baseOption.series = [{
             type: 'pie',
             radius: ['40%', '70%'],
-            data: data.map((item, index) => ({
+            data: sortedData.map((item, index) => ({
               name: item[xField] || `数据${index + 1}`,
               value: item[fieldValue] || 0
             })),
@@ -328,7 +362,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           baseOption.series = [{
             name: '散点图',
             type: 'scatter',
-            data: data.map(item => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
+            data: sortedData.map(item => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
             symbolSize: 10
           }];
           // 移除不必要的轴配置
@@ -375,7 +409,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = [{
           name: '箱线图',
           type: 'boxplot',
-          data: data.map((item, index) => {
+          data: sortedData.map((item, index) => {
             // 箱线图需要5个值：[min, Q1, median, Q3, max]
             const values = yFields.map(field => item[field] || 0).sort((a, b) => a - b);
             if (values.length >= 5) {
@@ -408,14 +442,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           name: field,
           type: 'bar',
           stack: '总量',
-          data: data.map(item => item[field] || 0)
+          data: sortedData.map(item => item[field] || 0)
         }));
         break;
         
       case 'waterfall':
         // 瀑布图 - 需要计算累积值
         let cumulative = 0;
-        const waterfallData = data.map((item, index) => {
+        const waterfallData = sortedData.map((item, index) => {
           const value = item[yFields[0]] || 0;
           const result = cumulative + value;
           cumulative = result;
@@ -484,7 +518,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               fontSize: 20
             }
           },
-          data: data.map((item, index) => ({
+          data: sortedData.map((item, index) => ({
             name: item[xField] || `阶段${index + 1}`,
             value: item[yFields[0]] || 0
           }))
@@ -508,7 +542,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = [{
           name: '热力图',
           type: 'heatmap',
-          data: data.map((item, rowIndex) => 
+          data: sortedData.map((item, rowIndex) => 
             yFields.map((field, colIndex) => [colIndex, rowIndex, item[field] || 0])
           ).flat(),
           label: {
@@ -536,7 +570,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = yFields.map(field => ({
           name: field,
           type: 'bar',
-          data: data.map(item => item[field] || 0)
+          data: sortedData.map(item => item[field] || 0)
         }));
     }
 

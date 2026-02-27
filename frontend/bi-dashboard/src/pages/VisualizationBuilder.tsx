@@ -66,11 +66,13 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       y_axis_title: "Y轴",
       x_field: "",
       y_fields: [],
-      color_field: "",
       // 添加更多配置项
       show_legend: true,
       show_tooltip: true,
-      grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+      grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+      // 排序配置
+      sort_by: 'x', // 'x' 或 'y'
+      sort_order: 'asc' // 'asc' 或 'desc'
     },
     database_id: 1
   });
@@ -99,7 +101,6 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
               y_axis_title: "Y轴",
               x_field: "",
               y_fields: [],
-              color_field: "",
               show_legend: true,
               show_tooltip: true,
               grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
@@ -285,7 +286,11 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     };
   }, [checkAuthStatus]);
 
-  // 当queryResult变化时，更新表格列定义和可用字段
+  // 监听排序配置变化，强制重新渲染图表
+  useEffect(() => {
+    // 当排序配置发生变化时，强制更新previewData以触发重新渲染
+    setPreviewData(prev => [...prev]);
+  }, [chartData.visualization_settings.sort_by, chartData.visualization_settings.sort_order]);
   useEffect(() => {
     if (queryResult.length > 0) {
       console.log('=== Query Result Data ===');
@@ -513,6 +518,11 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         }
       }
       
+      // 处理排序配置
+      if (fieldType === 'sort_by' || fieldType === 'sort_order') {
+        newSettings[fieldType] = value;
+      }
+      
       // 处理样式配置字段
       if (['show_legend', 'animation', 'rotate_labels', 'show_grid'].includes(fieldType)) {
         newSettings[fieldType] = value;
@@ -524,7 +534,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       }
       
       // 其他字段正常处理
-      if (!['x_field', 'y_fields', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position'].includes(fieldType)) {
+      if (!['x_field', 'y_fields', 'sort_by', 'sort_order', 'color_field', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position'].includes(fieldType)) {
         newSettings[fieldType] = value;
       }
       
@@ -905,28 +915,35 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                     <Row gutter={16} style={{ marginTop: '16px' }}>
                       <Col span={8}>
                         <div>
-                          <label>颜色分组字段:</label>
-                          {getChartFieldConfig(chartData.chart_type).showColorField && (
-                            <Select
-                              value={chartData.visualization_settings.color_field}
-                              onChange={(value) => handleFieldMappingChange('color_field', value)}
-                              style={{ width: '100%' }}
-                              placeholder="选择颜色分组字段"
-                              disabled={availableFields.length === 0}
-                              allowClear
-                            >
-                              {availableFields.map(field => (
-                                <Option key={field} value={field}>
-                                  {field}
-                                </Option>
-                              ))}
-                            </Select>
-                          )}
-                          {!getChartFieldConfig(chartData.chart_type).showColorField && (
-                            <div style={{ color: '#999', fontStyle: 'italic' }}>该图表类型不支持颜色分组</div>
-                          )}
+                          <label>排序方式:</label>
+                          <Select
+                            value={chartData.visualization_settings.sort_by}
+                            onChange={(value) => handleFieldMappingChange('sort_by', value)}
+                            style={{ width: '100%' }}
+                            placeholder="选择排序方式"
+                          >
+                            <Option value="x">按X轴排序</Option>
+                            <Option value="y">按Y轴排序</Option>
+                          </Select>
                         </div>
                       </Col>
+                      
+                      <Col span={8}>
+                        <div>
+                          <label>排序顺序:</label>
+                          <Select
+                            value={chartData.visualization_settings.sort_order}
+                            onChange={(value) => handleFieldMappingChange('sort_order', value)}
+                            style={{ width: '100%' }}
+                            placeholder="选择排序顺序"
+                          >
+                            <Option value="asc">升序</Option>
+                            <Option value="desc">降序</Option>
+                          </Select>
+                        </div>
+                      </Col>
+                      
+
                       
                       <Col span={8}>
                         <div>
@@ -1043,7 +1060,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                               title: chartData.name,
                               xField: chartData.visualization_settings.x_field,
                               yFields: chartData.visualization_settings.y_fields || [],
-                              colorField: chartData.visualization_settings.color_field,
+                              sort_by: chartData.visualization_settings.sort_by,
+                              sort_order: chartData.visualization_settings.sort_order,
+                              
                               series: [],
                               xAxis: {
                                 name: chartData.visualization_settings.x_axis_title || 'X轴'
