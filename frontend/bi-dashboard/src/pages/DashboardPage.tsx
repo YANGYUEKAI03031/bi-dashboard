@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input } from 'antd';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input, Select, Empty } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthService } from '../services/authService';
@@ -169,6 +169,8 @@ export const DashboardPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
   const [chartDataCache, setChartDataCache] = useState<Record<number, any[]>>({});
+  const [chartSearchText, setChartSearchText] = useState('');
+  const [chartDropdownOpen, setChartDropdownOpen] = useState(false);
   
   // 全局请求状态管理
   const globalRequestStatus = useRef<Record<number, 'pending' | 'completed'>>({});
@@ -360,6 +362,49 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  // 向仪表盘添加图表（可指定落点网格坐标）
+  const handleAddChartToDashboardAt = async (
+    chartId: number,
+    pos: { x: number; y: number; w?: number; h?: number }
+  ) => {
+    if (!selectedDashboard) {
+      message.warning('请先选择一个仪表盘');
+      return;
+    }
+
+    const sizeX = pos.w ?? 6;
+    const sizeY = pos.h ?? 4;
+
+    try {
+      const newCard = await DashboardService.addChartToDashboard(selectedDashboard.id, {
+        chart_id: chartId,
+        card_row: pos.y ?? 0,
+        card_col: pos.x ?? 0,
+        size_x: sizeX,
+        size_y: sizeY
+      });
+
+      // 手动关联 chart 数据
+      const chartData = charts.find(c => c.id === chartId);
+      const cardWithChart = {
+        ...newCard,
+        chart: chartData
+      };
+
+      // 更新本地状态
+      const updatedDashboard = {
+        ...selectedDashboard,
+        cards: [...selectedDashboard.cards, cardWithChart]
+      };
+
+      setSelectedDashboard(updatedDashboard);
+      setDashboards(dashboards.map(d => (d.id === selectedDashboard.id ? updatedDashboard : d)));
+      message.success('图表已添加到仪表盘');
+    } catch (error: any) {
+      message.error(error.message || '添加图表失败');
+    }
+  };
+
   // 从仪表盘移除图表
   const handleRemoveChartFromDashboard = async (cardId: number) => {
     try {
@@ -458,7 +503,10 @@ export const DashboardPage: React.FC = () => {
       className="draggable-chart-item"
       draggable
       onDragStart={(e) => {
+        // react-grid-layout 外部拖拽需要 dataTransfer 有内容（部分浏览器）
+        e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('chartId', chart.id.toString());
+        e.dataTransfer.setData('text/plain', chart.id.toString());
       }}
     >
       <Card 
@@ -485,6 +533,16 @@ export const DashboardPage: React.FC = () => {
       </Card>
     </div>
   );
+
+  const filteredCharts = useMemo(() => {
+    const q = chartSearchText.trim().toLowerCase();
+    if (!q) return charts;
+    return charts.filter(c => {
+      const name = (c.name || '').toLowerCase();
+      const type = (c.chart_type || '').toLowerCase();
+      return name.includes(q) || type.includes(q);
+    });
+  }, [charts, chartSearchText]);
 
   // 渲染仪表盘卡片组件 - 使用网格布局的卡片内容
   const DashboardCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
@@ -777,7 +835,7 @@ export const DashboardPage: React.FC = () => {
           {/* 左侧图表列表 - 增强版本 */}
           <Col span={6}>
             <Card 
-              title="可用图表" 
+              title="添加图表"
               className="chart-list-panel"
               extra={
                 <Button 
@@ -790,31 +848,100 @@ export const DashboardPage: React.FC = () => {
                 </Button>
               }
             >
-              <div className="chart-list">
-                {charts.length === 0 ? (
-                  <div style={{ 
-                    textAlign: 'center', 
-                    padding: '24px', 
-                    color: '#888' 
-                  }}>
-                    <div style={{ marginBottom: '8px' }}>📊</div>
-                    <div>暂无可用图表</div>
-                    <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      请先创建图表
-                    </div>
-                    <Button 
-                      type="primary" 
-                      size="small" 
-                      style={{ marginTop: '12px' }}
-                      onClick={() => window.location.hash = '#/visualization-builder'}
-                    >
-                      创建图表
-                    </Button>
+              {charts.length === 0 ? (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '24px', 
+                  color: '#888' 
+                }}>
+                  <div style={{ marginBottom: '8px' }}>📊</div>
+                  <div>暂无可用图表</div>
+                  <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                    请先创建图表
                   </div>
-                ) : (
-                  charts.map(chart => renderDraggableChartItem(chart))
-                )}
-              </div>
+                  <Button 
+                    type="primary" 
+                    size="small" 
+                    style={{ marginTop: '12px' }}
+                    onClick={() => window.location.hash = '#/visualization-builder'}
+                  >
+                    创建图表
+                  </Button>
+                </div>
+              ) : (
+                <div className="chart-search-panel">
+                  <Select
+                    showSearch
+                    value={undefined}
+                    placeholder="输入搜索图表（可拖拽到右侧画布）"
+                    style={{ width: '100%' }}
+                    searchValue={chartSearchText}
+                    onSearch={(val) => setChartSearchText(val)}
+                    open={chartDropdownOpen}
+                    onDropdownVisibleChange={(open) => setChartDropdownOpen(open)}
+                    filterOption={false}
+                    options={[]}
+                    notFoundContent={null}
+                    dropdownRender={() => (
+                      <div className="chart-search-dropdown">
+                        <div className="chart-search-dropdown-hint">
+                          提示：拖拽图表到右侧画布即可添加
+                        </div>
+
+                        {filteredCharts.length === 0 ? (
+                          <div style={{ padding: 12 }}>
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到匹配图表" />
+                          </div>
+                        ) : (
+                          <div className="chart-search-results">
+                            {filteredCharts.map(chart => (
+                              <div
+                                key={chart.id}
+                                className="chart-search-item"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.effectAllowed = 'copy';
+                                  e.dataTransfer.setData('chartId', chart.id.toString());
+                                  e.dataTransfer.setData('text/plain', chart.id.toString());
+                                }}
+                                onClick={() => {
+                                  handleAddChartToDashboard(chart.id);
+                                  setChartDropdownOpen(false);
+                                  setChartSearchText('');
+                                }}
+                              >
+                                <div className="chart-search-item-main">
+                                  <div className="chart-search-item-title">{chart.name}</div>
+                                  <div className="chart-search-item-meta">{chart.chart_type}</div>
+                                </div>
+                                <Button
+                                  type="primary"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddChartToDashboard(chart.id);
+                                    setChartDropdownOpen(false);
+                                    setChartSearchText('');
+                                  }}
+                                >
+                                  添加
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  />
+
+                  <div className="chart-search-below">
+                    <div className="chart-search-below-title">或从列表拖拽</div>
+                    <div className="chart-list">
+                      {charts.map(chart => renderDraggableChartItem(chart))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </Card>
           </Col>
           
@@ -835,6 +962,21 @@ export const DashboardPage: React.FC = () => {
                     rowHeight={60}
                     margin={[16, 16]}
                     draggableHandle=".drag-handle"
+                    isDroppable
+                    droppingItem={{ i: '__dropping-elem__', w: 6, h: 4 }}
+                    onDrop={(layout: GridLayoutItem[], item: GridLayoutItem, e: DragEvent) => {
+                      try {
+                        const raw =
+                          e.dataTransfer?.getData('chartId') ||
+                          e.dataTransfer?.getData('text/plain') ||
+                          '';
+                        const chartId = Number.parseInt(raw, 10);
+                        if (!Number.isFinite(chartId)) return;
+                        handleAddChartToDashboardAt(chartId, { x: item.x, y: item.y, w: item.w, h: item.h });
+                      } catch {
+                        // ignore drop parse error
+                      }
+                    }}
                     onLayoutChange={(layout: GridLayoutItem[]) => {
                       // 去抖合并：只在用户停止一小段时间后再提交更新
                       pendingLayoutRef.current = layout;

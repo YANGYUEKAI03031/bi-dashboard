@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import logging
+import json
 
 from app.db.session import get_db
 from app.services.dashboard_service import DashboardService
@@ -15,6 +16,77 @@ from app.core.security import get_current_user_id
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 logger = logging.getLogger(__name__)
+
+def _maybe_json_loads(value):
+    """兼容历史数据：JSON 字段如果被错误地存成了 str，这里尽量解析回 dict/list。"""
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    return value
+
+def _serialize_dashboard_card(card):
+    return {
+        "id": card.id,
+        "dashboard_id": card.dashboard_id,
+        "chart_id": card.chart_id,
+        "card_row": card.card_row,
+        "card_col": card.card_col,
+        "size_x": card.size_x,
+        "size_y": card.size_y,
+        "visualization_settings": _maybe_json_loads(getattr(card, "visualization_settings", None)),
+        "parameter_mappings": _maybe_json_loads(getattr(card, "parameter_mappings", None)),
+        "created_at": card.created_at,
+        "updated_at": card.updated_at,
+        "chart": None,
+    }
+
+def _serialize_chart(chart):
+    return {
+        "id": chart.id,
+        "name": chart.name,
+        "description": chart.description,
+        "chart_type": chart.chart_type,
+        "dataset_query": chart.dataset_query,
+        "visualization_settings": chart.visualization_settings,
+        "data_source_id": chart.data_source_id,
+        "created_by": chart.created_by,
+        "is_public": chart.is_public,
+        "archived": chart.archived,
+        "cache_enabled": chart.cache_enabled,
+        "cache_duration": chart.cache_duration,
+        "created_at": chart.created_at,
+        "updated_at": chart.updated_at,
+    }
+
+def _serialize_dashboard(dashboard):
+    response_data = {
+        "id": dashboard.id,
+        "name": dashboard.name,
+        "description": dashboard.description,
+        "layout": _maybe_json_loads(getattr(dashboard, "layout", None)),
+        "settings": _maybe_json_loads(getattr(dashboard, "settings", None)),
+        "creator_id": dashboard.creator_id,
+        "is_public": dashboard.is_public,
+        "archived": dashboard.archived,
+        "created_at": dashboard.created_at,
+        "updated_at": dashboard.updated_at,
+        "cards": [],
+    }
+
+    cards = getattr(dashboard, "cards", []) or getattr(dashboard, "dashboard_cards", [])
+    for card in cards:
+        card_data = _serialize_dashboard_card(card)
+        if hasattr(card, "chart") and card.chart:
+            card_data["chart"] = _serialize_chart(card.chart)
+        response_data["cards"].append(card_data)
+
+    return response_data
 
 @router.post("/", response_model=DashboardResponse)
 async def create_dashboard(
@@ -46,62 +118,7 @@ async def get_dashboard(
         if not dashboard:
             raise HTTPException(status_code=404, detail="仪表板不存在")
         
-        # 构建完整的响应数据
-        response_data = {
-            "id": dashboard.id,
-            "name": dashboard.name,
-            "description": dashboard.description,
-            "layout": dashboard.layout,
-            "settings": dashboard.settings,
-            "creator_id": dashboard.creator_id,
-            "is_public": dashboard.is_public,
-            "archived": dashboard.archived,
-            "created_at": dashboard.created_at,
-            "updated_at": dashboard.updated_at,
-            "cards": []
-        }
-        
-        # 处理卡片数据
-        cards = getattr(dashboard, 'cards', []) or getattr(dashboard, 'dashboard_cards', [])
-        for card in cards:
-            card_data = {
-                "id": card.id,
-                "dashboard_id": card.dashboard_id,
-                "chart_id": card.chart_id,
-                "card_row": card.card_row,
-                "card_col": card.card_col,
-                "size_x": card.size_x,
-                "size_y": card.size_y,
-                "visualization_settings": card.visualization_settings,
-                "parameter_mappings": card.parameter_mappings,
-                "created_at": card.created_at,
-                "updated_at": card.updated_at,
-                "chart": None
-            }
-            
-            # 添加关联的图表数据
-            if hasattr(card, 'chart') and card.chart:
-                chart = card.chart
-                card_data["chart"] = {
-                    "id": chart.id,
-                    "name": chart.name,
-                    "description": chart.description,
-                    "chart_type": chart.chart_type,
-                    "dataset_query": chart.dataset_query,
-                    "visualization_settings": chart.visualization_settings,
-                    "data_source_id": chart.data_source_id,
-                    "created_by": chart.created_by,
-                    "is_public": chart.is_public,
-                    "archived": chart.archived,
-                    "cache_enabled": chart.cache_enabled,
-                    "cache_duration": chart.cache_duration,
-                    "created_at": chart.created_at,
-                    "updated_at": chart.updated_at
-                }
-            
-            response_data["cards"].append(card_data)
-        
-        return response_data
+        return _serialize_dashboard(dashboard)
         
     except HTTPException:
         raise
@@ -121,70 +138,33 @@ async def list_dashboards(
         service = DashboardService(db)
         dashboards = await service.get_user_dashboards(user_id, skip, limit)
         
-        # 构建完整的响应数据列表
-        response_list = []
-        
-        for dashboard in dashboards:
-            dashboard_data = {
-                "id": dashboard.id,
-                "name": dashboard.name,
-                "description": dashboard.description,
-                "layout": dashboard.layout,
-                "settings": dashboard.settings,
-                "creator_id": dashboard.creator_id,
-                "is_public": dashboard.is_public,
-                "archived": dashboard.archived,
-                "created_at": dashboard.created_at,
-                "updated_at": dashboard.updated_at,
-                "cards": []
-            }
-            
-            # 处理卡片数据
-            cards = getattr(dashboard, 'cards', []) or getattr(dashboard, 'dashboard_cards', [])
-            for card in cards:
-                card_data = {
-                    "id": card.id,
-                    "dashboard_id": card.dashboard_id,
-                    "chart_id": card.chart_id,
-                    "card_row": card.card_row,
-                    "card_col": card.card_col,
-                    "size_x": card.size_x,
-                    "size_y": card.size_y,
-                    "visualization_settings": card.visualization_settings,
-                    "parameter_mappings": card.parameter_mappings,
-                    "created_at": card.created_at,
-                    "updated_at": card.updated_at,
-                    "chart": None
-                }
-                
-                # 添加关联的图表数据
-                if hasattr(card, 'chart') and card.chart:
-                    chart = card.chart
-                    card_data["chart"] = {
-                        "id": chart.id,
-                        "name": chart.name,
-                        "description": chart.description,
-                        "chart_type": chart.chart_type,
-                        "dataset_query": chart.dataset_query,
-                        "visualization_settings": chart.visualization_settings,
-                        "data_source_id": chart.data_source_id,
-                        "created_by": chart.created_by,
-                        "is_public": chart.is_public,
-                        "archived": chart.archived,
-                        "cache_enabled": chart.cache_enabled,
-                        "cache_duration": chart.cache_duration,
-                        "created_at": chart.created_at,
-                        "updated_at": chart.updated_at
-                    }
-                
-                dashboard_data["cards"].append(card_data)
-            
-            response_list.append(dashboard_data)
-        
-        return response_list
+        return [_serialize_dashboard(d) for d in dashboards]
         
     except Exception as e:
         logger.error(f"获取仪表板列表API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/{dashboard_id}")
+async def update_dashboard(
+    dashboard_id: int,
+    dashboard_data: DashboardUpdate,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """更新仪表板（名称/描述/layout/settings/is_public）"""
+    try:
+        service = DashboardService(db)
+        dashboard = await service.update_dashboard(dashboard_id, dashboard_data, user_id)
+
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="仪表板不存在")
+
+        return _serialize_dashboard(dashboard)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新仪表板API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{dashboard_id}/cards")

@@ -1,0 +1,73 @@
+.dashboard-editor-chart-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-editor-chart-search-hint {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.dashboard-editor-chart-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+}
+
+.dashboard-editor-chart-search-item:hover {
+  background: rgba(24, 144, 255, 0.08);
+}
+
+.dashboard-editor-chart-search-item:active {
+  cursor: grabbing;
+}
+
+.dashboard-editor-chart-search-item-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dashboard-editor-chart-search-item-title {
+  font-weight: 600;
+  color: #262626;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-editor-chart-search-item-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #8c8c8c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-editor-chart-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.dashboard-editor-grid {
+  height: 100%;
+  overflow: auto;
+  align-content: flex-start;
+}
+
+.dashboard-editor-grid .react-grid-layout {
+  min-height: 600px;
+}
+
+.dashboard-editor-grid .react-grid-item.react-grid-placeholder {
+  background: rgba(24, 144, 255, 0.15);
+  border: 1px dashed #1890ff;
+}
+

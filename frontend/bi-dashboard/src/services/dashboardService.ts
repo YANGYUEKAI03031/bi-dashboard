@@ -10,6 +10,14 @@ interface DashboardCreateRequest {
   is_public?: boolean;
 }
 
+interface DashboardUpdateRequest {
+  name?: string;
+  description?: string;
+  layout?: any;
+  settings?: any;
+  is_public?: boolean;
+}
+
 interface DashboardCardCreateRequest {
   chart_id: number;
   card_row: number;
@@ -98,6 +106,30 @@ export class DashboardService {
       return data;
     } catch (error) {
       console.error('获取仪表盘失败:', error);
+      throw error;
+    }
+  }
+
+  static async updateDashboard(dashboardId: number, dashboardData: DashboardUpdateRequest): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dashboardData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('更新仪表盘失败:', error);
       throw error;
     }
   }

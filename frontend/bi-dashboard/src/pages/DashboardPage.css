@@ -40,6 +40,79 @@
   padding-right: 8px;
 }
 
+.chart-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-search-dropdown {
+  padding: 8px;
+}
+
+.chart-search-dropdown-hint {
+  font-size: 12px;
+  color: #8c8c8c;
+  padding: 4px 4px 8px 4px;
+}
+
+.chart-search-results {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.chart-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+}
+
+.chart-search-item:hover {
+  background: rgba(24, 144, 255, 0.08);
+}
+
+.chart-search-item:active {
+  cursor: grabbing;
+}
+
+.chart-search-item-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chart-search-item-title {
+  font-weight: 600;
+  color: #262626;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-search-item-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #8c8c8c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-search-below {
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 12px;
+}
+
+.chart-search-below-title {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-bottom: 8px;
+}
+
 .chart-list::-webkit-scrollbar {
   width: 6px;
 }

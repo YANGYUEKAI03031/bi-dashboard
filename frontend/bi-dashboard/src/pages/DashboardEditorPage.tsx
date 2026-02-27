@@ -7,24 +7,53 @@ import {
   Button,
   Card,
   Space,
-  List,
   message,
   Popconfirm,
   Spin,
+  Modal,
+  Select,
+  Typography,
+  Empty,
 } from 'antd';
 import {
-  PlusOutlined,
   DeleteOutlined,
   ArrowLeftOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  FontSizeOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
 import { useAuth } from '../contexts/AuthContext';
+import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import './DashboardEditorPage.css';
 
 const { Sider, Content } = Layout;
+
+const EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY = 'bi-dashboard.dashboardEditor.sidebarCollapsed';
+
+const getEditorSidebarCollapsedKey = (userId?: number | null) =>
+  userId
+    ? `${EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY}.${userId}`
+    : EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY;
+
+const parseCollapsed = (raw: string | null): boolean | null => {
+  if (raw == null) return null;
+  if (raw === 'true' || raw === '1') return true;
+  if (raw === 'false' || raw === '0') return false;
+  return null;
+};
+
+const readCollapsedFromStorage = (userId?: number | null): boolean | null => {
+  // Prefer per-user key; fallback to global key.
+  const raw =
+    localStorage.getItem(getEditorSidebarCollapsedKey(userId)) ??
+    (userId ? localStorage.getItem(EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY) : null);
+  return parseCollapsed(raw);
+};
 
 type ChartResponse = Awaited<ReturnType<typeof ChartService.getUserCharts>>[0];
 
@@ -53,6 +82,8 @@ interface Dashboard {
   name: string;
   description: string;
   cards: DashboardCard[];
+  settings?: any;
+  layout?: any;
 }
 
 const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
@@ -71,6 +102,19 @@ interface DashboardEditorPageProps {
   mode: 'create' | 'edit';
 }
 
+type TitleWidgetAlign = 'left' | 'center' | 'right';
+
+interface DashboardTitleWidget {
+  id: string;
+  type: 'title';
+  title: string;
+  subtitle?: string;
+  align: TitleWidgetAlign;
+  level: 1 | 2 | 3;
+  size_x: number;
+  size_y: number;
+}
+
 export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }) => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -82,9 +126,78 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingChart, setAddingChart] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [chartSearchText, setChartSearchText] = useState('');
+  const [widgets, setWidgets] = useState<DashboardTitleWidget[]>([]);
+  const [widgetModalOpen, setWidgetModalOpen] = useState(false);
+  const [widgetSaving, setWidgetSaving] = useState(false);
+  const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
+  const [widgetForm] = Form.useForm();
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return readCollapsedFromStorage(null) ?? false;
+    } catch {
+      return false;
+    }
+  });
 
   const isEditMode = mode === 'edit';
+
+  /**
+   * Refreshing the "available charts list" should NEVER reset existing canvas cards.
+   * We only "hydrate" missing card.chart (name/type/settings) from latest charts.
+   * If card.chart already exists, we keep it to preserve any in-canvas state.
+   */
+  const hydrateDashboardCards = (d: Dashboard, latestCharts: Chart[]): Dashboard => {
+    if (!d?.cards || d.cards.length === 0) return d;
+    const chartMap = new Map<number, Chart>(latestCharts.map(c => [c.id, c]));
+
+    const nextCards = d.cards.map(card => {
+      // Keep existing chart object to avoid resetting canvas rendering/state.
+      if (card.chart) return card;
+      const hydrated = chartMap.get(card.chart_id);
+      return hydrated ? { ...card, chart: hydrated } : card;
+    });
+
+    // Avoid unnecessary state updates if nothing changed.
+    const changed = nextCards.some((c, idx) => c !== d.cards[idx]);
+    return changed ? { ...d, cards: nextCards } : d;
+  };
+
+  const AutoWidthGridLayout: React.FC<any> = (props) => {
+    const { width, containerRef, mounted } = useContainerWidth();
+
+    return (
+      <div ref={containerRef} style={{ width: '100%' }}>
+        {mounted && width > 0 && (
+          <ReactGridLayout width={width} {...props} />
+        )}
+      </div>
+    );
+  };
+
+  // When user info arrives, restore user-scoped preference (or fallback to global preference).
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const v = readCollapsedFromStorage(user.id);
+      if (v !== null) setCollapsed(v);
+    } catch {
+      // ignore
+    }
+  }, [user?.id]);
+
+  // Persist preference so refresh doesn't reset the editor sidebar.
+  useEffect(() => {
+    try {
+      const value = collapsed ? '1' : '0';
+      localStorage.setItem(EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY, value);
+      if (user?.id) {
+        localStorage.setItem(getEditorSidebarCollapsedKey(user.id), value);
+      }
+    } catch {
+      // ignore
+    }
+  }, [collapsed, user?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -94,7 +207,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         setLoading(true);
         // 加载可用图表列表
         const userCharts = await ChartService.getUserCharts();
-        setCharts(userCharts.map(convertChartResponseToChart));
+        const convertedCharts = userCharts.map(convertChartResponseToChart);
+        setCharts(convertedCharts);
 
         // 编辑模式下加载当前仪表盘
         if (isEditMode && id) {
@@ -105,7 +219,28 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             return;
           }
           const d = await DashboardService.getDashboard(dashboardId);
-          setDashboard(d);
+          // If backend doesn't embed card.chart, hydrate from latest charts.
+          setDashboard(hydrateDashboardCards(d, convertedCharts));
+          // 从 settings 中恢复 widgets
+          const rawWidgets = (d?.settings as any)?.widgets;
+          if (Array.isArray(rawWidgets)) {
+            setWidgets(
+              rawWidgets
+                .filter((w: any) => w && w.type === 'title')
+                .map((w: any) => ({
+                  id: String(w.id),
+                  type: 'title',
+                  title: String(w.title ?? ''),
+                  subtitle: w.subtitle ? String(w.subtitle) : undefined,
+                  align: (w.align === 'center' || w.align === 'right') ? w.align : 'left',
+                  level: (w.level === 2 || w.level === 3) ? w.level : 1,
+                  size_x: Number.isFinite(w.size_x) ? w.size_x : 12,
+                  size_y: Number.isFinite(w.size_y) ? w.size_y : 2,
+                }))
+            );
+          } else {
+            setWidgets([]);
+          }
           form.setFieldsValue({
             name: d.name,
             description: d.description,
@@ -146,14 +281,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         // 跳转到编辑模式
         navigate(`/dashboard/edit/${created.id}`, { replace: true });
       } else {
-        // 更新已有仪表盘（仅本地名称/描述，后端暂未提供更新接口时不发请求）
-        const updated: Dashboard = {
-          ...dashboard,
+        // 更新已有仪表盘（后端已提供 PUT /dashboards/{id}）
+        const updated = await DashboardService.updateDashboard(dashboard.id, {
           name: values.name.trim(),
           description: values.description ? values.description.trim() : '',
-        };
+        });
         setDashboard(updated);
-        message.success('仪表盘信息已更新');
+        message.success('仪表盘信息已保存');
       }
     } catch (error: any) {
       if (error?.errorFields) {
@@ -163,6 +297,106 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       message.error(error?.message || '保存仪表盘信息失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const persistWidgets = async (nextWidgets: DashboardTitleWidget[]) => {
+    if (!dashboard) return;
+    const nextSettings = {
+      ...(dashboard.settings || {}),
+      widgets: nextWidgets,
+    };
+    const updated = await DashboardService.updateDashboard(dashboard.id, {
+      settings: nextSettings,
+    });
+    setDashboard(updated);
+  };
+
+  const openAddTitleWidget = () => {
+    setEditingWidgetId(null);
+    widgetForm.setFieldsValue({
+      title: '',
+      subtitle: '',
+      align: 'left',
+      level: 1,
+    });
+    setWidgetModalOpen(true);
+  };
+
+  const openEditTitleWidget = (w: DashboardTitleWidget) => {
+    setEditingWidgetId(w.id);
+    widgetForm.setFieldsValue({
+      title: w.title,
+      subtitle: w.subtitle || '',
+      align: w.align,
+      level: w.level,
+    });
+    setWidgetModalOpen(true);
+  };
+
+  const handleSaveWidget = async () => {
+    if (!dashboard) {
+      message.warning('请先保存仪表盘基本信息');
+      return;
+    }
+    try {
+      const values = await widgetForm.validateFields();
+      const title = String(values.title || '').trim();
+      if (!title) {
+        message.error('请输入标题内容');
+        return;
+      }
+      const subtitle = String(values.subtitle || '').trim();
+      const align: TitleWidgetAlign =
+        values.align === 'center' || values.align === 'right' ? values.align : 'left';
+      const level: 1 | 2 | 3 = values.level === 2 || values.level === 3 ? values.level : 1;
+
+      setWidgetSaving(true);
+      let nextWidgets: DashboardTitleWidget[];
+      if (editingWidgetId) {
+        nextWidgets = widgets.map(w =>
+          w.id === editingWidgetId
+            ? { ...w, title, subtitle: subtitle || undefined, align, level }
+            : w
+        );
+      } else {
+        const id = `title_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        nextWidgets = [
+          ...widgets,
+          {
+            id,
+            type: 'title',
+            title,
+            subtitle: subtitle || undefined,
+            align,
+            level,
+            size_x: 12,
+            size_y: subtitle ? 3 : 2,
+          },
+        ];
+      }
+
+      setWidgets(nextWidgets);
+      await persistWidgets(nextWidgets);
+      message.success('标题组件已保存');
+      setWidgetModalOpen(false);
+    } catch (error: any) {
+      if (error?.errorFields) return;
+      message.error(error?.message || '保存标题组件失败');
+    } finally {
+      setWidgetSaving(false);
+    }
+  };
+
+  const handleRemoveWidget = async (widgetId: string) => {
+    if (!dashboard) return;
+    try {
+      const nextWidgets = widgets.filter(w => w.id !== widgetId);
+      setWidgets(nextWidgets);
+      await persistWidgets(nextWidgets);
+      message.success('标题组件已移除');
+    } catch (error: any) {
+      message.error(error?.message || '移除标题组件失败');
     }
   };
 
@@ -201,6 +435,86 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       setAddingChart(false);
     }
   };
+
+  const handleAddChartAt = async (
+    chartId: number,
+    pos: { x: number; y: number; w?: number; h?: number }
+  ) => {
+    if (!dashboard) {
+      message.warning('请先在左侧保存仪表盘基本信息');
+      return;
+    }
+
+    try {
+      setAddingChart(true);
+      const newCard = await DashboardService.addChartToDashboard(dashboard.id, {
+        chart_id: chartId,
+        card_row: Math.max(0, pos.y),
+        card_col: Math.max(0, pos.x),
+        size_x: pos.w ?? 6,
+        size_y: pos.h ?? 4,
+      });
+
+      const chartData = charts.find(c => c.id === chartId);
+      const cardWithChart: DashboardCard = {
+        ...newCard,
+        chart: chartData,
+      };
+
+      const updatedDashboard: Dashboard = {
+        ...dashboard,
+        cards: [...(dashboard.cards || []), cardWithChart],
+      };
+
+      setDashboard(updatedDashboard);
+      message.success('图表已添加到仪表盘');
+    } catch (error: any) {
+      message.error(error?.message || '添加图表失败');
+    } finally {
+      setAddingChart(false);
+    }
+  };
+
+  const filteredCharts = charts.filter(c => {
+    const q = chartSearchText.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.chart_type.toLowerCase().includes(q)
+    );
+  });
+
+  const renderDraggableChartItem = (chart: Chart) => (
+    <div
+      key={chart.id}
+      className="dashboard-editor-chart-search-item"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('chartId', chart.id.toString());
+        e.dataTransfer.setData('text/plain', chart.id.toString());
+      }}
+      onClick={() => {
+        handleAddChart(chart.id);
+      }}
+    >
+      <div className="dashboard-editor-chart-search-item-main">
+        <div className="dashboard-editor-chart-search-item-title">{chart.name}</div>
+        <div className="dashboard-editor-chart-search-item-meta">{chart.chart_type}</div>
+      </div>
+      <Button
+        type="primary"
+        size="small"
+        loading={addingChart}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAddChart(chart.id);
+        }}
+      >
+        添加
+      </Button>
+    </div>
+  );
 
   const handleRemoveCard = async (cardId: number) => {
     if (!dashboard) return;
@@ -250,7 +564,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             返回仪表盘列表
           </Button>
 
-          <Card title="基本信息" size="small">
+          {!isEditMode && (
+            <Card title="基本信息" size="small">
             <Form
               layout="vertical"
               form={form}
@@ -283,6 +598,21 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 </Button>
               </Form.Item>
             </Form>
+            </Card>
+          )}
+
+          <Card
+            title="添加组件"
+            size="small"
+            extra={
+              <Button type="link" size="small" icon={<FontSizeOutlined />} onClick={openAddTitleWidget}>
+                标题
+              </Button>
+            }
+          >
+            <div style={{ fontSize: 12, color: '#999' }}>
+              用于添加章节标题/说明文字（无需绑定图表）。
+            </div>
           </Card>
 
           <Card
@@ -295,7 +625,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 onClick={async () => {
                   try {
                     const latest = await ChartService.getUserCharts();
-                    setCharts(latest.map(convertChartResponseToChart));
+                    const converted = latest.map(convertChartResponseToChart);
+                    setCharts(converted);
+                    // Important: do NOT reset canvas cards; only hydrate missing card.chart.
+                    setDashboard(prev => (prev ? hydrateDashboardCards(prev, converted) : prev));
                     message.success('图表列表已刷新');
                   } catch (e: any) {
                     message.error(e?.message || '刷新图表列表失败');
@@ -311,37 +644,29 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 暂无可用图表，请先在“图表管理”中创建图表。
               </div>
             ) : (
-              <List
-                size="small"
-                dataSource={charts}
-                style={{ maxHeight: 260, overflow: 'auto' }}
-                renderItem={chart => (
-                  <List.Item
-                    key={chart.id}
-                    actions={[
-                      <Button
-                        key="add"
-                        type="link"
-                        size="small"
-                        icon={<PlusOutlined />}
-                        loading={addingChart}
-                        onClick={() => handleAddChart(chart.id)}
-                      >
-                        添加
-                      </Button>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={chart.name}
-                      description={
-                        <span style={{ fontSize: 12, color: '#999' }}>
-                          类型：{chart.chart_type}
-                        </span>
-                      }
-                    />
-                  </List.Item>
+              <div className="dashboard-editor-chart-search-panel">
+                <Input
+                  allowClear
+                  value={chartSearchText}
+                  placeholder="搜索图表（可拖拽到右侧画布）"
+                  style={{ width: '100%' }}
+                  onChange={(e) => setChartSearchText(e.target.value)}
+                />
+
+                <div className="dashboard-editor-chart-search-hint">
+                  提示：拖拽图表到右侧画布即可添加（也可点击“添加”）。
+                </div>
+
+                {filteredCharts.length === 0 ? (
+                  <div style={{ padding: 12 }}>
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到匹配图表" />
+                  </div>
+                ) : (
+                  <div className="dashboard-editor-chart-list">
+                    {filteredCharts.map(renderDraggableChartItem)}
+                  </div>
                 )}
-              />
+              </div>
             )}
           </Card>
 
@@ -406,92 +731,181 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 创建完成后，可以在这里添加并排布图表。
               </div>
             </div>
-          ) : dashboard.cards && dashboard.cards.length > 0 ? (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(12, 1fr)',
-                gridAutoRows: 80,
-                gap: 16,
-                height: '100%',
-                alignContent: 'flex-start',
-                overflow: 'auto',
-              }}
-            >
-              {dashboard.cards.map(card => (
+          ) : (
+            <div className="dashboard-editor-grid">
+              {/* 标题组件（从 dashboard.settings.widgets 渲染） */}
+              {widgets.map(w => (
                 <div
-                  key={card.id}
+                  key={w.id}
                   style={{
-                    gridColumn: `span ${card.size_x || 6}`,
-                    gridRow: `span ${card.size_y || 4}`,
+                    marginBottom: 16,
                   }}
                 >
                   <Card
                     size="small"
-                    title={card.chart?.name || `图表 #${card.chart_id}`}
+                    style={{ height: '100%' }}
+                    bodyStyle={{ height: '100%' }}
                     extra={
-                      <Popconfirm
-                        title="移除这个图表？"
-                        okText="移除"
-                        okButtonProps={{ danger: true }}
-                        cancelText="取消"
-                        onConfirm={() => handleRemoveCard(card.id)}
-                      >
+                      <Space>
                         <Button
                           type="text"
-                          icon={<DeleteOutlined />}
                           size="small"
-                          danger
+                          icon={<EditOutlined />}
+                          onClick={() => openEditTitleWidget(w)}
                         />
-                      </Popconfirm>
+                        <Popconfirm
+                          title="移除这个标题组件？"
+                          okText="移除"
+                          okButtonProps={{ danger: true }}
+                          cancelText="取消"
+                          onConfirm={() => handleRemoveWidget(w.id)}
+                        >
+                          <Button type="text" size="small" icon={<DeleteOutlined />} danger />
+                        </Popconfirm>
+                      </Space>
                     }
-                    style={{ height: '100%' }}
                   >
-                    <div
-                      style={{
-                        height: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#bbb',
-                        fontSize: 12,
-                      }}
-                    >
-                      图表预览稍后可增强，这里先展示布局占位
+                    <div style={{ textAlign: w.align }}>
+                      <Typography.Title level={w.level} style={{ margin: 0 }}>
+                        {w.title}
+                      </Typography.Title>
+                      {w.subtitle ? (
+                        <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                          {w.subtitle}
+                        </Typography.Paragraph>
+                      ) : null}
                     </div>
                   </Card>
                 </div>
               ))}
-            </div>
-          ) : (
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#999',
-              }}
-            >
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
-              <div style={{ marginBottom: 8 }}>当前仪表盘还没有任何图表</div>
-              <div style={{ fontSize: 12, marginBottom: 16 }}>
-                在左侧“添加图表”区域选择图表加入画布。
-              </div>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  message.info('请在左侧选择要添加的图表');
+
+              <AutoWidthGridLayout
+                cols={12}
+                rowHeight={80}
+                margin={[16, 16]}
+                isDroppable
+                droppingItem={{ i: '__dropping-elem__', w: 6, h: 4 }}
+                isDraggable={false}
+                isResizable={false}
+                layout={(dashboard.cards || []).map(card => ({
+                  i: card.id.toString(),
+                  x: Number.isFinite(card.card_col) ? card.card_col : 0,
+                  y: Number.isFinite(card.card_row) ? card.card_row : 0,
+                  w: Number.isFinite(card.size_x) ? card.size_x : 6,
+                  h: Number.isFinite(card.size_y) ? card.size_y : 4,
+                }))}
+                onDrop={(layout: any, item: any, e: DragEvent) => {
+                  try {
+                    const raw =
+                      e.dataTransfer?.getData('chartId') ||
+                      e.dataTransfer?.getData('text/plain') ||
+                      '';
+                    const chartId = Number.parseInt(raw, 10);
+                    if (!Number.isFinite(chartId)) return;
+                    handleAddChartAt(chartId, { x: item.x, y: item.y, w: item.w, h: item.h });
+                  } catch {
+                    // ignore
+                  }
                 }}
               >
-                添加第一个图表
-              </Button>
+                {(dashboard.cards || []).map(card => (
+                  <div key={card.id.toString()}>
+                    <Card
+                      size="small"
+                      title={card.chart?.name || `图表 #${card.chart_id}`}
+                      extra={
+                        <Popconfirm
+                          title="移除这个图表？"
+                          okText="移除"
+                          okButtonProps={{ danger: true }}
+                          cancelText="取消"
+                          onConfirm={() => handleRemoveCard(card.id)}
+                        >
+                          <Button
+                            type="text"
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            danger
+                          />
+                        </Popconfirm>
+                      }
+                      style={{ height: '100%' }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#bbb',
+                          fontSize: 12,
+                        }}
+                      >
+                        图表预览稍后可增强，这里先展示布局占位
+                      </div>
+                    </Card>
+                  </div>
+                ))}
+              </AutoWidthGridLayout>
+
+              {(!dashboard.cards || dashboard.cards.length === 0) && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    color: '#999',
+                    fontSize: 12,
+                    textAlign: 'center',
+                  }}
+                >
+                  当前仪表盘还没有任何图表：请从左侧拖拽图表到上方画布区域。
+                </div>
+              )}
             </div>
           )}
         </Card>
       </Content>
+
+      <Modal
+        title={editingWidgetId ? '编辑标题组件' : '添加标题组件'}
+        open={widgetModalOpen}
+        onCancel={() => setWidgetModalOpen(false)}
+        onOk={handleSaveWidget}
+        confirmLoading={widgetSaving}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={widgetForm} layout="vertical">
+          <Form.Item
+            label="标题"
+            name="title"
+            rules={[{ required: true, message: '请输入标题' }]}
+          >
+            <Input placeholder="例如：销售概览" />
+          </Form.Item>
+          <Form.Item label="副标题（可选）" name="subtitle">
+            <Input placeholder="例如：本页数据更新于每日 08:00" />
+          </Form.Item>
+          <Form.Item label="对齐" name="align" initialValue="left">
+            <Select
+              options={[
+                { label: '左对齐', value: 'left' },
+                { label: '居中', value: 'center' },
+                { label: '右对齐', value: 'right' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="标题级别" name="level" initialValue={1}>
+            <Select
+              options={[
+                { label: '大（H1）', value: 1 },
+                { label: '中（H2）', value: 2 },
+                { label: '小（H3）', value: 3 },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Layout>
   );
 };

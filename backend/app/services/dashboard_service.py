@@ -27,8 +27,9 @@ class DashboardService:
             dashboard = Dashboard(
                 name=dashboard_data.name,
                 description=dashboard_data.description,
-                layout=json.dumps(dashboard_data.layout) if dashboard_data.layout else None,
-                settings=json.dumps(dashboard_data.settings) if dashboard_data.settings else None,
+                # 模型字段类型是 JSON，直接存 dict/list 即可（不要 json.dumps）
+                layout=dashboard_data.layout if dashboard_data.layout else None,
+                settings=dashboard_data.settings if dashboard_data.settings else None,
                 creator_id=user_id,
                 is_public=dashboard_data.is_public
             )
@@ -44,6 +45,53 @@ class DashboardService:
             await self.db.rollback()
             logger.error(f"创建仪表板失败: {str(e)}")
             raise Exception(f"创建仪表板失败: {str(e)}")
+
+    async def update_dashboard(
+        self,
+        dashboard_id: int,
+        dashboard_data: DashboardUpdate,
+        user_id: int
+    ) -> Optional[Dashboard]:
+        """更新仪表板基本信息/布局/设置"""
+        try:
+            stmt = select(Dashboard).where(
+                Dashboard.id == dashboard_id,
+                Dashboard.creator_id == user_id
+            )
+            result = await self.db.execute(stmt)
+            dashboard = result.scalar_one_or_none()
+
+            if not dashboard:
+                return None
+
+            update_fields: Dict[str, Any] = {}
+            if dashboard_data.name is not None:
+                update_fields["name"] = dashboard_data.name
+            if dashboard_data.description is not None:
+                update_fields["description"] = dashboard_data.description
+            if dashboard_data.layout is not None:
+                update_fields["layout"] = dashboard_data.layout
+            if dashboard_data.settings is not None:
+                update_fields["settings"] = dashboard_data.settings
+            if dashboard_data.is_public is not None:
+                update_fields["is_public"] = dashboard_data.is_public
+
+            update_fields["updated_at"] = datetime.utcnow()
+
+            if update_fields:
+                upd = update(Dashboard).where(
+                    Dashboard.id == dashboard_id,
+                    Dashboard.creator_id == user_id
+                ).values(update_fields)
+                await self.db.execute(upd)
+                await self.db.commit()
+
+            return await self.get_dashboard(dashboard_id, user_id)
+
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"更新仪表板失败: {str(e)}")
+            raise Exception(f"更新仪表板失败: {str(e)}")
     
     async def get_dashboard(self, dashboard_id: int, user_id: int) -> Optional[Dashboard]:
         """获取仪表板详情（包含卡片和图表信息）"""
@@ -141,8 +189,9 @@ class DashboardService:
                 card_col=card_data.card_col,
                 size_x=card_data.size_x,
                 size_y=card_data.size_y,
-                visualization_settings=json.dumps(card_data.visualization_settings) if card_data.visualization_settings else None,
-                parameter_mappings=json.dumps(card_data.parameter_mappings) if card_data.parameter_mappings else None
+                # 模型字段类型是 JSON，直接存 dict/list 即可（不要 json.dumps）
+                visualization_settings=card_data.visualization_settings if card_data.visualization_settings else None,
+                parameter_mappings=card_data.parameter_mappings if card_data.parameter_mappings else None
             )
             
             self.db.add(dashboard_card)
