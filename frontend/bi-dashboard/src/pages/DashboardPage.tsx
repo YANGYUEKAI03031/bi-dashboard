@@ -163,6 +163,8 @@ export const DashboardPage: React.FC = () => {
   const [charts, setCharts] = useState<Chart[]>([]);
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [selectedDashboard, setSelectedDashboard] = useState<Dashboard | null>(null);
+  // 用 ref 持有最新 selectedDashboard，避免 onLayoutChange 的闭包拿到旧值导致重复更新/重复提示
+  const selectedDashboardRef = useRef<Dashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
@@ -173,6 +175,20 @@ export const DashboardPage: React.FC = () => {
 
   // 请求去重Map，用于防止同一时间的重复请求
   const requestPendingMap = useRef<Record<number, Promise<any[]>>>({});
+
+  // 布局更新去抖：react-grid-layout 在拖拽/缩放过程中会频繁触发 onLayoutChange，
+  // 这里把多次变化合并成一次后端更新，避免出现“卡片更新成功”弹两次/多次
+  const layoutUpdateTimerRef = useRef<number | null>(null);
+  const pendingLayoutRef = useRef<GridLayoutItem[] | null>(null);
+
+  // 页面卸载时清理定时器，避免卸载后 setState
+  useEffect(() => {
+    return () => {
+      if (layoutUpdateTimerRef.current) {
+        window.clearTimeout(layoutUpdateTimerRef.current);
+      }
+    };
+  }, []);
   
   // 加载图表数据的函数 - 增加请求去重机制
   const loadChartData = async (chartId: number) => {
@@ -373,7 +389,7 @@ export const DashboardPage: React.FC = () => {
   // 更新卡片位置和大小
   const handleCardResizeOrMove = async (cardId: number, updates: any) => {
     try {
-      const updatedCard = await DashboardService.updateDashboardCard(cardId, updates);
+      await DashboardService.updateDashboardCard(cardId, updates);
       
       // 更新本地状态
       if (selectedDashboard) {
@@ -393,12 +409,15 @@ export const DashboardPage: React.FC = () => {
           d.id === selectedDashboard.id ? updatedDashboard : d
         ));
       }
-      
-      message.success('卡片更新成功');
     } catch (error: any) {
       message.error(error.message || '更新卡片失败');
     }
   };
+
+  // 保持 selectedDashboardRef 始终为最新，供布局更新逻辑使用
+  useEffect(() => {
+    selectedDashboardRef.current = selectedDashboard;
+  }, [selectedDashboard]);
 
 
   // 初始化数据加载 - 最终正确版本
@@ -642,45 +661,84 @@ export const DashboardPage: React.FC = () => {
             </div>
           ) : (
             <div className="chart-container">
-              <ChartFactory
-                config={{
-                  type: card.chart.chart_type,
-                  title: '', // 不显示重复标题
-                  xAxis: {
-                    name: card.chart.visualization_settings?.x_axis_title || 'X轴'
-                  },
-                  yAxis: {
-                    name: card.chart.visualization_settings?.y_axis_title || 'Y轴'
-                  },
-                  series: card.chart.visualization_settings?.y_fields?.map((field: string) => ({
-                    name: field,
-                    field: field
-                  })) || [],
-                  xField: card.chart.visualization_settings?.x_field,
-                  yFields: card.chart.visualization_settings?.y_fields,
-                  colorField: card.chart.visualization_settings?.color_field,
-                  // 排序配置（处理Pydantic别名）
-                  sort_by: card.chart.visualization_settings?.['graph.sort_by'] || card.chart.visualization_settings?.sort_by,
-                  sort_order: card.chart.visualization_settings?.['graph.sort_order'] || card.chart.visualization_settings?.sort_order,
-                  // 添加更多配置
-                  legend: {
-                    show: card.chart.visualization_settings?.show_legend !== false,
-                    bottom: 10
-                  },
-                  tooltip: {
-                    show: card.chart.visualization_settings?.show_tooltip !== false,
-                    trigger: 'axis'
-                  },
-                  grid: card.chart.visualization_settings?.grid_padding || {
-                    left: '3%',
-                    right: '4%',
-                    bottom: '15%',
-                    containLabel: true
+              {(() => {
+                // 兼容历史数据与新数据的可视化配置
+                // 同时兼容后端可能返回的 JSON 字符串形式
+                let viz: any = card.chart!.visualization_settings || {};
+                if (typeof viz === 'string') {
+                  try {
+                    viz = JSON.parse(viz);
+                  } catch (e) {
+                    console.warn('解析 visualization_settings 失败，使用空对象:', e, viz);
+                    viz = {};
                   }
-                }}
-                data={chartData}
-                style={{ height: '100%', width: '100%' }}
-              />
+                }
+
+                console.log('DashboardCard 可视化配置:', {
+                  raw: card.chart!.visualization_settings,
+                  parsed: viz
+                });
+
+                // 统一处理排序配置：优先使用新字段，其次兼容老的 graph.sort_by / graph.sort_order
+                const sortBy =
+                  viz.sort_by ??
+                  viz['graph.sort_by'] ??
+                  undefined;
+                const sortOrder =
+                  viz.sort_order ??
+                  viz['graph.sort_order'] ??
+                  undefined;
+
+                // 统一字段映射（如果历史数据里有 graph_dimensions / graph_metrics，则作为兜底）
+                const xField = viz.x_field ?? (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined);
+                const yFields =
+                  viz.y_fields ??
+                  (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
+
+                return (
+                  <ChartFactory
+                    config={{
+                      type: card.chart!.chart_type,
+                      title: '', // 不显示重复标题
+                      xAxis: {
+                        name: viz.x_axis_title || 'X轴'
+                      },
+                      yAxis: {
+                        name: viz.y_axis_title || 'Y轴'
+                      },
+                      series:
+                        (yFields || []).map((field: string) => ({
+                          name: field,
+                          field: field
+                        })) || [],
+                      xField,
+                      yFields,
+                      colorField: viz.color_field,
+                      // 排序配置（如果没有配置则交给 ChartFactory 自己跳过排序）
+                      sort_by: sortBy,
+                      sort_order: sortOrder,
+                      // 其他配置
+                      legend: {
+                        show: viz.show_legend !== false,
+                        bottom: 10
+                      },
+                      tooltip: {
+                        show: viz.show_tooltip !== false,
+                        trigger: 'axis'
+                      },
+                      grid:
+                        viz.grid_padding || {
+                          left: '3%',
+                          right: '4%',
+                          bottom: '15%',
+                          containLabel: true
+                        }
+                    }}
+                    data={chartData}
+                    style={{ height: '100%', width: '100%' }}
+                  />
+                );
+              })()}
               <div style={{ 
                 position: 'absolute', 
                 bottom: '4px', 
@@ -778,25 +836,69 @@ export const DashboardPage: React.FC = () => {
                     margin={[16, 16]}
                     draggableHandle=".drag-handle"
                     onLayoutChange={(layout: GridLayoutItem[]) => {
-                      if (!selectedDashboard) return;
-                      const cardMap = new Map(
-                        selectedDashboard.cards.map(card => [card.id.toString(), card])
-                      );
+                      // 去抖合并：只在用户停止一小段时间后再提交更新
+                      pendingLayoutRef.current = layout;
+                      if (layoutUpdateTimerRef.current) {
+                        window.clearTimeout(layoutUpdateTimerRef.current);
+                      }
 
-                      layout.forEach(item => {
-                        const card = cardMap.get(item.i);
-                        if (!card) return;
+                      layoutUpdateTimerRef.current = window.setTimeout(async () => {
+                        const latestDashboard = selectedDashboardRef.current;
+                        const latestLayout = pendingLayoutRef.current;
+                        if (!latestDashboard || !latestLayout) return;
 
-                        const updates: any = {};
-                        if (card.card_row !== item.y) updates.card_row = item.y;
-                        if (card.card_col !== item.x) updates.card_col = item.x;
-                        if (card.size_x !== item.w) updates.size_x = item.w;
-                        if (card.size_y !== item.h) updates.size_y = item.h;
+                        const cardMap = new Map(
+                          latestDashboard.cards.map(card => [card.id.toString(), card])
+                        );
 
-                        if (Object.keys(updates).length > 0) {
-                          handleCardResizeOrMove(card.id, updates);
+                        const changes: Array<{ cardId: number; updates: any }> = [];
+                        latestLayout.forEach(item => {
+                          const card = cardMap.get(item.i);
+                          if (!card) return;
+
+                          const updates: any = {};
+                          if (card.card_row !== item.y) updates.card_row = item.y;
+                          if (card.card_col !== item.x) updates.card_col = item.x;
+                          if (card.size_x !== item.w) updates.size_x = item.w;
+                          if (card.size_y !== item.h) updates.size_y = item.h;
+
+                          if (Object.keys(updates).length > 0) {
+                            changes.push({ cardId: card.id, updates });
+                          }
+                        });
+
+                        if (changes.length === 0) return;
+
+                        try {
+                          // 先提交到后端（并行）
+                          const results = await Promise.allSettled(
+                            changes.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
+                          );
+
+                          const hasRejected = results.some(r => r.status === 'rejected');
+                          if (hasRejected) {
+                            message.error('部分卡片更新失败，请稍后重试');
+                          }
+
+                          // 本地一次性更新，避免多次 setState 导致额外的 onLayoutChange 循环
+                          const updatedCards = latestDashboard.cards.map(card => {
+                            const change = changes.find(c => c.cardId === card.id);
+                            return change ? { ...card, ...change.updates } : card;
+                          });
+
+                          const updatedDashboard = {
+                            ...latestDashboard,
+                            cards: updatedCards
+                          };
+
+                          setSelectedDashboard(updatedDashboard);
+                          setDashboards(prev =>
+                            prev.map(d => (d.id === updatedDashboard.id ? updatedDashboard : d))
+                          );
+                        } catch (e: any) {
+                          message.error(e?.message || '更新卡片失败');
                         }
-                      });
+                      }, 250);
                     }}
                   >
                     {selectedDashboard.cards.map(card => (

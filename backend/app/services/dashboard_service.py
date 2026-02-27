@@ -164,7 +164,10 @@ class DashboardService:
         """更新仪表板卡片位置和设置"""
         try:
             # 验证卡片属于用户的仪表板
-            card_stmt = select(DashboardCard).join(Dashboard).where(
+            card_stmt = select(DashboardCard).options(
+                # 预加载 chart，避免在路由层访问 card.chart 时触发异步懒加载（MissingGreenlet）
+                selectinload(DashboardCard.chart)
+            ).join(Dashboard).where(
                 DashboardCard.id == card_id,
                 Dashboard.creator_id == user_id
             )
@@ -202,7 +205,10 @@ class DashboardService:
                 
                 await self.db.execute(stmt)
                 await self.db.commit()
-                await self.db.refresh(card)
+
+                # 重新查询并预加载 chart，保证返回对象不会在序列化阶段触发懒加载
+                refreshed_result = await self.db.execute(card_stmt)
+                card = refreshed_result.scalar_one_or_none()
                 
                 logger.info(f"仪表板卡片更新成功: ID {card_id}")
             
