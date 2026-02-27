@@ -289,8 +289,10 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   // 监听排序配置变化，强制重新渲染图表
   useEffect(() => {
     // 当排序配置发生变化时，强制更新previewData以触发重新渲染
-    setPreviewData(prev => [...prev]);
-  }, [chartData.visualization_settings.sort_by, chartData.visualization_settings.sort_order]);
+    if (previewData.length > 0) {
+      setPreviewData(prev => [...prev]);
+    }
+  }, [chartData.visualization_settings.sort_by, chartData.visualization_settings.sort_order, previewData.length]);
   useEffect(() => {
     if (queryResult.length > 0) {
       console.log('=== Query Result Data ===');
@@ -313,30 +315,62 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       setTableColumns(columns);
       
       // 更新可用字段列表
-      setAvailableFields(Object.keys(queryResult[0]));
+      const fieldNames = Object.keys(queryResult[0]);
+      setAvailableFields(fieldNames);
       
-      // 如果还没有设置字段映射，自动设置默认值
-      if (!chartData.visualization_settings.x_field && availableFields.length > 0) {
-        setChartData(prev => ({
-          ...prev,
-          visualization_settings: {
-            ...prev.visualization_settings,
-            x_field: availableFields[0],
-            y_fields: availableFields.slice(1, Math.min(3, availableFields.length))
+      // 智能自动设置字段映射
+      setChartData(prev => {
+        const currentSettings = prev.visualization_settings;
+        const hasXField = currentSettings.x_field;
+        const hasYFields = currentSettings.y_fields && currentSettings.y_fields.length > 0;
+        
+        // 如果还没有设置字段或者字段已清空，则自动设置默认值
+        if ((!hasXField && !hasYFields) || (hasXField && !availableFields.includes(hasXField))) {
+          const newSettings = { ...currentSettings };
+          
+          // 智能选择X轴字段：优先选择文本类型的字段
+          if (!hasXField && fieldNames.length > 0) {
+            // 查找适合做X轴的字段（文本或日期类型）
+            const suitableXFields = fieldNames.filter(field => {
+              const sampleValue = queryResult[0][field];
+              return typeof sampleValue === 'string' || 
+                     sampleValue instanceof Date ||
+                     (typeof sampleValue === 'object' && sampleValue !== null);
+            });
+            
+            const xField = suitableXFields.length > 0 ? suitableXFields[0] : fieldNames[0];
+            newSettings.x_field = xField;
+            newSettings.x_axis_title = xField || 'X轴';
           }
-        }));
-      }
-      
-      // 确保y_fields不为空
-      if (availableFields.length > 1 && (!chartData.visualization_settings.y_fields || chartData.visualization_settings.y_fields.length === 0)) {
-        setChartData(prev => ({
-          ...prev,
-          visualization_settings: {
-            ...prev.visualization_settings,
-            y_fields: availableFields.slice(1, Math.min(3, availableFields.length))
+          
+          // 智能选择Y轴字段：选择数值类型的字段
+          if (!hasYFields && fieldNames.length > 1) {
+            // 查找适合做Y轴的字段（数值类型）
+            const suitableYFields = fieldNames.filter(field => {
+              const sampleValue = queryResult[0][field];
+              return typeof sampleValue === 'number' || 
+                     (typeof sampleValue === 'string' && !isNaN(Number(sampleValue)));
+            }).filter(field => field !== newSettings.x_field); // 排除已选的X轴字段
+            
+            const defaultYFields = suitableYFields.slice(0, Math.min(3, suitableYFields.length));
+            if (defaultYFields.length === 0) {
+              // 如果没有找到合适的数值字段，则选择剩余字段
+              const remainingFields = fieldNames.filter(f => f !== newSettings.x_field);
+              defaultYFields.push(...remainingFields.slice(0, Math.min(3, remainingFields.length)));
+            }
+            
+            newSettings.y_fields = defaultYFields;
+            newSettings.y_axis_title = defaultYFields.length > 1 ? '汇总' : (defaultYFields[0] || 'Y轴');
           }
-        }));
-      }
+          
+          return {
+            ...prev,
+            visualization_settings: newSettings
+          };
+        }
+        
+        return prev;
+      });
     }
   }, [queryResult]);
 

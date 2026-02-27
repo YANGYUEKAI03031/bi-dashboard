@@ -33,6 +33,8 @@ interface ChartItem {
     y_axis_title?: string;
     show_legend?: boolean;
     show_tooltip?: boolean;
+    sort_by?: 'x' | 'y';
+    sort_order?: 'asc' | 'desc';
     // 后端格式的字段（用于兼容）
     "graph.dimensions"?: string[];
     "graph.metrics"?: string[];
@@ -98,6 +100,14 @@ export const ChartsManagementPage: React.FC = () => {
     }
   };
 
+  // 监听排序配置变化，强制重新渲染图表
+  useEffect(() => {
+    if (editingChart && previewData.length > 0) {
+      // 强制触发重新渲染
+      setPreviewData(prev => [...prev]);
+    }
+  }, [editingChart?.visualization_settings?.sort_by, editingChart?.visualization_settings?.sort_order, editingChart, previewData.length]);
+
   // 加载字段数据
   const loadFields = async (databaseId: number, tableName?: string) => {
     try {
@@ -154,6 +164,42 @@ export const ChartsManagementPage: React.FC = () => {
         setXFields([...categoryFields, ...dateFields]);
         setYFields(numericFields);
         setColorFields([...categoryFields, ...numericFields]);
+        
+        // 智能设置默认字段（如果当前没有设置）
+        setEditingChart(prev => {
+          if (prev) {
+            const currentSettings = prev.visualization_settings || {};
+            const hasXField = currentSettings.x_field;
+            const hasYFields = currentSettings.y_fields && currentSettings.y_fields.length > 0;
+            
+            // 如果没有设置字段，则自动设置默认值
+            if (!hasXField || !hasYFields) {
+              const newSettings = { ...currentSettings };
+              
+              // 设置X轴字段
+              if (!hasXField && categoryFields.length > 0) {
+                newSettings.x_field = categoryFields[0].name;
+                newSettings.x_axis_title = categoryFields[0].name || 'X轴';
+              } else if (!hasXField && dateFields.length > 0) {
+                newSettings.x_field = dateFields[0].name;
+                newSettings.x_axis_title = dateFields[0].name || 'X轴';
+              }
+              
+              // 设置Y轴字段
+              if (!hasYFields && numericFields.length > 0) {
+                const defaultYFields = numericFields.slice(0, Math.min(3, numericFields.length)).map(f => f.name);
+                newSettings.y_fields = defaultYFields;
+                newSettings.y_axis_title = defaultYFields.length > 1 ? '汇总' : (defaultYFields[0] || 'Y轴');
+              }
+              
+              return {
+                ...prev,
+                visualization_settings: newSettings
+              };
+            }
+          }
+          return prev;
+        });
       } else {
         console.warn('未获取到列信息');
         setXFields([]);
@@ -260,6 +306,21 @@ export const ChartsManagementPage: React.FC = () => {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
         y_axis_title: yAxisTitle
+      };
+    }
+    
+    // 设置默认排序配置（如果不存在的话）
+    if (!chartWithFrontendSettings.visualization_settings.sort_by) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        sort_by: 'x'
+      };
+    }
+    
+    if (!chartWithFrontendSettings.visualization_settings.sort_order) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        sort_order: 'asc'
       };
     }
     
@@ -667,6 +728,46 @@ export const ChartsManagementPage: React.FC = () => {
                 显示提示
               </Checkbox>
             </div>
+            
+            {/* 排序设置区域 */}
+            <div style={{ marginTop: 16 }}>
+              <h4 style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>排序设置</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label>排序方式:</label>
+                  <Select 
+                    value={(editingChart.visualization_settings as any)?.sort_by || 'x'}
+                    onChange={(value) => {
+                      const newSettings = { ...(editingChart.visualization_settings as any), sort_by: value };
+                      const newChart = { ...editingChart, visualization_settings: newSettings };
+                      setEditingChart(newChart);
+                    }}
+                    style={{ marginTop: 8, width: '100%' }}
+                    placeholder="选择排序方式"
+                  >
+                    <Option value="x">按X轴排序</Option>
+                    <Option value="y">按Y轴排序</Option>
+                  </Select>
+                </div>
+                
+                <div>
+                  <label>排序顺序:</label>
+                  <Select 
+                    value={(editingChart.visualization_settings as any)?.sort_order || 'asc'}
+                    onChange={(value) => {
+                      const newSettings = { ...(editingChart.visualization_settings as any), sort_order: value };
+                      const newChart = { ...editingChart, visualization_settings: newSettings };
+                      setEditingChart(newChart);
+                    }}
+                    style={{ marginTop: 8, width: '100%' }}
+                    placeholder="选择排序顺序"
+                  >
+                    <Option value="asc">升序</Option>
+                    <Option value="desc">降序</Option>
+                  </Select>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 图表预览区域 */}
@@ -675,24 +776,28 @@ export const ChartsManagementPage: React.FC = () => {
             <div style={{ height: '100%', minHeight: '300px', maxHeight: '600px' }}>
               {editingChart && (
                 <div>
-                  {xFields.length > 0 && yFields.length > 0 ? (
+                  {previewData.length > 0 ? (
                     <ChartFactory
-                      config={{
-                        type: editingChart.chart_type,
-                        title: editingChart.name,
-                        xField: editingChart.visualization_settings?.x_field || '',
-                        yFields: editingChart.visualization_settings?.y_fields || [],
-                        colorField: editingChart.visualization_settings?.color_field || '',
-                        xAxis: {
-                          name: editingChart.visualization_settings?.x_axis_title || 'X轴'
-                        },
-                        yAxis: {
-                          name: editingChart.visualization_settings?.y_axis_title || 'Y轴'
-                        },
-                        series: [] // 添加空的series数组以满足类型要求
-                      }}
+                      config={
+                        {
+                          type: editingChart.chart_type,
+                          title: editingChart.name,
+                          xField: editingChart.visualization_settings?.x_field || '',
+                          yFields: editingChart.visualization_settings?.y_fields || [],
+                          colorField: editingChart.visualization_settings?.color_field || '',
+                          sort_by: (editingChart.visualization_settings as any)?.sort_by,
+                          sort_order: (editingChart.visualization_settings as any)?.sort_order,
+                          xAxis: {
+                            name: editingChart.visualization_settings?.x_axis_title || 'X轴'
+                          },
+                          yAxis: {
+                            name: editingChart.visualization_settings?.y_axis_title || 'Y轴'
+                          },
+                          series: [] // 添加空的series数组以满足类型要求
+                        }
+                      }
                       data={previewData}
-                      style={{ height: '100%', width: '100%' }}
+                      style={{ height: '400px', width: '100%' }}
                     />
                   ) : (
                     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
