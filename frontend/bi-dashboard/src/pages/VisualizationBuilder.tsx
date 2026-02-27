@@ -149,6 +149,92 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   const [availableFields, setAvailableFields] = useState<string[]>([]); // 确保始终是数组
   const [authChecked, setAuthChecked] = useState(false);
 
+  // 新增：图表类型动态配置函数
+  const getChartFieldConfig = (chartType: string) => {
+    switch (chartType.toLowerCase()) {
+      case 'pie':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 1,
+          yFieldsMax: 1,
+          showColorField: false,
+          showMultipleY: false,
+          title: '饼图',
+          description: '需要1个分类字段和1个数值字段'
+        };
+      case 'scatter':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 2,
+          yFieldsMax: 2,
+          showColorField: true,
+          showMultipleY: false,
+          title: '散点图',
+          description: '需要2个数值字段作为X和Y坐标'
+        };
+      case 'radar':
+        return {
+          xFieldRequired: false,
+          yFieldsRequired: 2,
+          yFieldsMax: 10,
+          showColorField: false,
+          showMultipleY: true,
+          title: '雷达图',
+          description: '需要多个数值字段作为维度'
+        };
+      case 'boxplot':
+        return {
+          xFieldRequired: false,
+          yFieldsRequired: 1,
+          yFieldsMax: 10,
+          showColorField: false,
+          showMultipleY: true,
+          title: '箱线图',
+          description: '需要数值字段用于箱体计算'
+        };
+      case 'funnel':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 1,
+          yFieldsMax: 1,
+          showColorField: false,
+          showMultipleY: false,
+          title: '漏斗图',
+          description: '需要1个阶段字段和1个数值字段'
+        };
+      case 'waterfall':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 1,
+          yFieldsMax: 1,
+          showColorField: false,
+          showMultipleY: false,
+          title: '瀑布图',
+          description: '需要1个阶段字段和1个增量数值字段'
+        };
+      case 'stacked_bar':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 1,
+          yFieldsMax: 10,
+          showColorField: true,
+          showMultipleY: true,
+          title: '堆积柱形图',
+          description: '需要1个分类字段和多个数值字段进行堆积'
+        };
+      default:
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 1,
+          yFieldsMax: 10,
+          showColorField: true,
+          showMultipleY: true,
+          title: '柱状图/折线图',
+          description: '需要1个分类字段和1个或多个数值字段'
+        };
+    }
+  };
+
   // 监听认证状态变化
   useEffect(() => {
     const verifyAuth = async () => {
@@ -485,19 +571,29 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       return;
     }
 
-    // 验证必要字段
+    // 验证必要字段 - 根据图表类型进行特定验证
     if (!chartData.name.trim()) {
       message.error('请输入图表名称');
       return;
     }
     
-    if (!chartData.visualization_settings.x_field) {
-      message.error('请选择X轴字段');
+    const config = getChartFieldConfig(chartData.chart_type);
+    
+    // X轴字段验证
+    if (config.xFieldRequired && !chartData.visualization_settings.x_field) {
+      message.error(`请选择X轴字段`);
       return;
     }
     
-    if (!chartData.visualization_settings.y_fields || chartData.visualization_settings.y_fields.length === 0) {
-      message.error('请选择至少一个Y轴字段');
+    // Y轴字段验证
+    if (chartData.visualization_settings.y_fields?.length < config.yFieldsRequired) {
+      message.error(`请至少选择${config.yFieldsRequired}个Y轴字段`);
+      return;
+    }
+    
+    // Y轴字段最大数量验证
+    if (chartData.visualization_settings.y_fields?.length > config.yFieldsMax) {
+      message.error(`最多只能选择${config.yFieldsMax}个Y轴字段`);
       return;
     }
 
@@ -736,42 +832,72 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                         </div>
                       </Col>
                       
+                      {/* 动态字段配置 - 根据图表类型显示不同的表单元素 */}
                       <Col span={8}>
                         <div>
                           <label>X轴字段:</label>
-                          <Select
-                            value={chartData.visualization_settings.x_field}
-                            onChange={(value) => handleFieldMappingChange('x_field', value)}
-                            style={{ width: '100%' }}
-                            placeholder="选择X轴字段"
-                            disabled={availableFields.length === 0}
-                          >
-                            {availableFields.map(field => (
-                              <Option key={field} value={field}>
-                                {field}
-                              </Option>
-                            ))}
-                          </Select>
+                          {getChartFieldConfig(chartData.chart_type).xFieldRequired && (
+                            <Select
+                              value={chartData.visualization_settings.x_field}
+                              onChange={(value) => handleFieldMappingChange('x_field', value)}
+                              style={{ width: '100%' }}
+                              placeholder="选择X轴字段"
+                              disabled={availableFields.length === 0}
+                            >
+                              {availableFields.map(field => (
+                                <Option key={field} value={field}>
+                                  {field}
+                                </Option>
+                              ))}
+                            </Select>
+                          )}
+                          {!getChartFieldConfig(chartData.chart_type).xFieldRequired && (
+                            <div style={{ color: '#999', fontStyle: 'italic' }}>无需X轴字段</div>
+                          )}
                         </div>
                       </Col>
                       
                       <Col span={8}>
                         <div>
-                          <label>Y轴字段 (多选):</label>
-                          <Select
-                            mode="multiple"
-                            value={chartData.visualization_settings.y_fields}
-                            onChange={(values) => handleFieldMappingChange('y_fields', values)}
-                            style={{ width: '100%' }}
-                            placeholder="选择Y轴字段"
-                            disabled={availableFields.length === 0}
-                          >
-                            {availableFields.map(field => (
-                              <Option key={field} value={field}>
-                                {field}
-                              </Option>
-                            ))}
-                          </Select>
+                          <label>Y轴字段:</label>
+                          {getChartFieldConfig(chartData.chart_type).showMultipleY ? (
+                            <Select
+                              mode="multiple"
+                              value={chartData.visualization_settings.y_fields}
+                              onChange={(values) => {
+                                // 限制最大选择数量
+                                const limitedValues = values.slice(0, getChartFieldConfig(chartData.chart_type).yFieldsMax);
+                                handleFieldMappingChange('y_fields', limitedValues);
+                              }}
+                              style={{ width: '100%' }}
+                              placeholder={`选择${getChartFieldConfig(chartData.chart_type).yFieldsRequired}个以上字段`}
+                              disabled={availableFields.length === 0}
+                              maxTagCount={3}
+                            >
+                              {availableFields.map(field => (
+                                <Option key={field} value={field}>
+                                  {field}
+                                </Option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <Select
+                              value={chartData.visualization_settings.y_fields?.[0] || undefined}
+                              onChange={(value) => handleFieldMappingChange('y_fields', value ? [value] : [])}
+                              style={{ width: '100%' }}
+                              placeholder={`选择1个字段`}
+                              disabled={availableFields.length === 0}
+                            >
+                              {availableFields.map(field => (
+                                <Option key={field} value={field}>
+                                  {field}
+                                </Option>
+                              ))}
+                            </Select>
+                          )}
+                          <div style={{ marginTop: '4px', fontSize: '12px', color: '#999' }}>
+                            {getChartFieldConfig(chartData.chart_type).description}
+                          </div>
                         </div>
                       </Col>
                     </Row>
@@ -780,20 +906,25 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                       <Col span={8}>
                         <div>
                           <label>颜色分组字段:</label>
-                          <Select
-                            value={chartData.visualization_settings.color_field}
-                            onChange={(value) => handleFieldMappingChange('color_field', value)}
-                            style={{ width: '100%' }}
-                            placeholder="选择颜色分组字段"
-                            disabled={availableFields.length === 0}
-                            allowClear
-                          >
-                            {availableFields.map(field => (
-                              <Option key={field} value={field}>
-                                {field}
-                              </Option>
-                            ))}
-                          </Select>
+                          {getChartFieldConfig(chartData.chart_type).showColorField && (
+                            <Select
+                              value={chartData.visualization_settings.color_field}
+                              onChange={(value) => handleFieldMappingChange('color_field', value)}
+                              style={{ width: '100%' }}
+                              placeholder="选择颜色分组字段"
+                              disabled={availableFields.length === 0}
+                              allowClear
+                            >
+                              {availableFields.map(field => (
+                                <Option key={field} value={field}>
+                                  {field}
+                                </Option>
+                              ))}
+                            </Select>
+                          )}
+                          {!getChartFieldConfig(chartData.chart_type).showColorField && (
+                            <div style={{ color: '#999', fontStyle: 'italic' }}>该图表类型不支持颜色分组</div>
+                          )}
                         </div>
                       </Col>
                       
