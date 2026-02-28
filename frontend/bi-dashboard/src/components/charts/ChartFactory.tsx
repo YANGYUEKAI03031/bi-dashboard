@@ -338,12 +338,30 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     
     // 判断是否需要显示图例
     const shouldShowLegend = !compact && yFields.length > 1 && (config.legend?.show !== false);
+
+    // Convert ECharts size values to px (best-effort) so we can prevent axis/legend overlaps.
+    const toPx = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value !== 'string') return null;
+      const s = value.trim();
+      if (!s) return null;
+      // Percent values are relative to container height in ECharts layout.
+      if (s.endsWith('%') && containerHeight > 0) {
+        const p = parseFloat(s.slice(0, -1));
+        if (Number.isFinite(p)) return Math.round((containerHeight * p) / 100);
+        return null;
+      }
+      // Plain numeric strings
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+    const legendBottomPaddingPx = toPx(config.legend?.bottom) ?? 10;
     
     // 计算 grid.bottom：包含 X 轴标签和图例的总高度
     // 让图例成为图表的一部分，通过 grid 统一管理空间，避免重叠
     // grid.bottom 需要为：X轴空间 + 图例和X轴的间距 + 图例高度
     const totalBottomSpace = shouldShowLegend 
-      ? xAxisReservedBottom + gapBetweenXAxisAndLegend + legendHeightEstimate
+      ? xAxisReservedBottom + gapBetweenXAxisAndLegend + legendHeightEstimate + legendBottomPaddingPx
       : xAxisReservedBottom;
     
     const gridBottomEstimate = Math.max(60, totalBottomSpace);
@@ -353,13 +371,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const gridBottomFinal = Math.min(gridBottomEstimate, gridBottomMax);
     
     // 图例配置：作为图表的一部分，放在 X 轴标签下方
-    // 图例的 bottom 值设置为 X 轴占用的空间，让图例紧贴 X 轴下方
-    // 间距通过 grid.bottom 预留，而不是在图例的 bottom 中加上间距
+    // Place legend at the container bottom, and push the grid up enough so xAxis labels don't overlap it.
     const defaultLegendOption: any = {
       data: yFields.map(field => field),
-      // 图例紧贴 X 轴下方，bottom 值等于 X 轴占用的空间
-      // 这样图例不会有固定底部间距，而是根据 X 轴实际占用空间动态定位
-      bottom: shouldShowLegend ? xAxisReservedBottom : undefined,
+      bottom: shouldShowLegend ? legendBottomPaddingPx : undefined,
       show: shouldShowLegend,
       textStyle: {
         fontSize: compact ? 10 : 12,
@@ -389,6 +404,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...defaultGridOption,
       ...(config.grid ?? {})
     };
+    // Ensure any user-provided grid.bottom isn't smaller than what we need to avoid overlaps.
+    const userGridBottomPx = toPx(config.grid?.bottom);
+    if (userGridBottomPx != null) {
+      gridOption.bottom = Math.max(gridBottomFinal, userGridBottomPx);
+    } else {
+      gridOption.bottom = gridBottomFinal;
+    }
 
     const baseOption: any = {
       backgroundColor: 'transparent',
@@ -523,13 +545,24 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
     // 根据图表类型调整配置
     switch (config.type.toLowerCase()) {
-      case 'bar':
+      case 'bar': {
+        const isMultiBarSeries = yFields.length > 1;
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
           data: sortedData.map(item => item[field] || 0),
-          barWidth: '60%',
-          barMaxWidth: 40,
+          // 当有多个 Y 轴字段（多系列）时，不固定百分比宽度，只限制最大像素宽度并设置合理的间距，
+          // 避免一组类目下柱子总宽度超过可用带宽而出现“折叠/重叠”。
+          ...(isMultiBarSeries
+            ? {
+                barMaxWidth: 24,
+                barGap: '30%',
+                barCategoryGap: '45%'
+              }
+            : {
+                barWidth: '60%',
+                barMaxWidth: 40
+              }),
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: {
@@ -557,6 +590,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           } : {})
         }));
         break;
+      }
         
       case 'line':
         baseOption.series = yFields.map((field, index) => ({
@@ -809,10 +843,16 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           type: 'bar',
           stack: '总量',
           data: sortedData.map(item => item[field] || 0),
+          // For stacked bars, all series share the same category bar width.
+          // Avoid barGap/barCategoryGap here (they are for grouped bars) to prevent visual artifacts.
           barWidth: '60%',
           barMaxWidth: 40,
           itemStyle: {
+            opacity: 1,
             borderRadius: index === yFields.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0],
+            // Add a subtle separator so stacked segments don't visually blend and look overlapped.
+            borderColor: '#ffffff',
+            borderWidth: 1,
             color: {
               type: 'linear',
               x: 0,
@@ -821,7 +861,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + 'CC' }
+                // Keep stacked bars opaque so lower stacks don't "show through" and look overlapped.
+                { offset: 1, color: colorPalette[index % colorPalette.length] }
               ]
             }
           },
@@ -1040,12 +1081,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         
       default:
         // 默认使用柱状图
+        const isMultiDefaultBarSeries = yFields.length > 1;
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
           data: sortedData.map(item => item[field] || 0),
-          barWidth: '60%',
-          barMaxWidth: 40,
+          ...(isMultiDefaultBarSeries
+            ? {
+                barMaxWidth: 24,
+                barGap: '30%',
+                barCategoryGap: '45%'
+              }
+            : {
+                barWidth: '60%',
+                barMaxWidth: 40
+              }),
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: {
