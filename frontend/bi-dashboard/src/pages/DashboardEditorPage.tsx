@@ -27,6 +27,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
 import { useAuth } from '../contexts/AuthContext';
+import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './DashboardEditorPage.css';
@@ -531,6 +532,179 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   };
 
+  // 图表卡片组件 - 加载并显示图表数据
+  const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
+    const [chartData, setChartData] = useState<any[]>([]);
+    const [dataLoading, setDataLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      const loadData = async () => {
+        if (!card.chart?.id) {
+          setError('图表数据缺失');
+          return;
+        }
+
+        setDataLoading(true);
+        setError(null);
+        try {
+          const data = await ChartService.executeChartQuery(card.chart.id);
+
+          if (!Array.isArray(data)) {
+            throw new Error('返回的数据格式不正确');
+          }
+
+          if (data.length === 0) {
+            setError('没有查询到数据，请检查SQL查询');
+            setChartData([]);
+            return;
+          }
+
+          // 验证X轴字段是否存在
+          const xField = card.chart.visualization_settings?.x_field || '';
+          if (xField && data.length > 0 && !Object.keys(data[0] || {}).includes(xField)) {
+            console.warn(`X轴字段 '${xField}' 在数据中不存在，使用第一个字段`);
+          }
+
+          setChartData(data);
+        } catch (error: any) {
+          console.error(`加载图表数据失败:`, error);
+          setError(error.message || '数据加载失败');
+        } finally {
+          setDataLoading(false);
+        }
+      };
+
+      loadData();
+    }, [card.chart?.id]);
+
+    if (!card.chart) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ff4d4f',
+            fontSize: 12,
+          }}
+        >
+          图表数据缺失
+        </div>
+      );
+    }
+
+    // 处理可视化配置
+    let viz: any = card.chart.visualization_settings || {};
+    if (typeof viz === 'string') {
+      try {
+        viz = JSON.parse(viz);
+      } catch (e) {
+        console.warn('解析 visualization_settings 失败，使用空对象:', e);
+        viz = {};
+      }
+    }
+
+    // 统一处理排序配置
+    const sortBy = viz.sort_by ?? viz['graph.sort_by'] ?? undefined;
+    const sortOrder = viz.sort_order ?? viz['graph.sort_order'] ?? undefined;
+
+    // 统一字段映射
+    const xField = viz.x_field ?? (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined);
+    const yFields = viz.y_fields ?? (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
+
+    return (
+      <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+        {dataLoading ? (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Spin tip="加载数据中..." />
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+              正在执行查询...
+            </div>
+          </div>
+        ) : error ? (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              color: '#ff4d4f',
+            }}
+          >
+            <div style={{ marginBottom: 8 }}>⚠️</div>
+            <div style={{ fontSize: 12, textAlign: 'center' }}>{error}</div>
+          </div>
+        ) : chartData.length === 0 ? (
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              color: '#888',
+            }}
+          >
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ marginBottom: 8 }}>📊</div>
+              <div>暂无数据</div>
+            </div>
+          </div>
+        ) : (
+          <ChartFactory
+            config={{
+              type: card.chart.chart_type,
+              title: '',
+              xAxis: {
+                name: viz.x_axis_title || 'X轴',
+              },
+              yAxis: {
+                name: viz.y_axis_title || 'Y轴',
+              },
+              series:
+                (yFields || []).map((field: string) => ({
+                  name: field,
+                  field: field,
+                })) || [],
+              xField,
+              yFields,
+              colorField: viz.color_field,
+              sort_by: sortBy,
+              sort_order: sortOrder,
+              legend: {
+                show: viz.show_legend !== false,
+                bottom: 10,
+              },
+              tooltip: {
+                show: viz.show_tooltip !== false,
+                trigger: 'axis',
+              },
+              grid:
+                viz.grid_padding || {
+                  left: '3%',
+                  right: '4%',
+                  bottom: '15%',
+                  containLabel: true,
+                },
+            }}
+            data={chartData}
+            style={{ height: '100%', width: '100%' }}
+          />
+        )}
+      </div>
+    );
+  };
+
   const handleDeleteDashboard = async () => {
     if (!dashboard) return;
     try {
@@ -830,19 +1004,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         </Popconfirm>
                       }
                       style={{ height: '100%' }}
+                      bodyStyle={{ height: 'calc(100% - 57px)', padding: '12px' }}
                     >
-                      <div
-                        style={{
-                          height: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#bbb',
-                          fontSize: 12,
-                        }}
-                      >
-                        图表预览稍后可增强，这里先展示布局占位
-                      </div>
+                      <ChartCardComponent card={card} />
                     </Card>
                   </div>
                 ))}
