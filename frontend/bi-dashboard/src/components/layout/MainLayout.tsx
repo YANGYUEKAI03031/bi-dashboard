@@ -102,19 +102,19 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         
         <nav className="nav-menu">
           <Link 
-            to="/dashboard" 
-            className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}
-          >
-            <span className="icon">📊</span>
-            <span>仪表盘</span>
-          </Link>
-          
-          <Link 
             to="/reports" 
             className={`nav-item ${isActive('/reports') ? 'active' : ''}`}
           >
             <span className="icon">📈</span>
             <span>报表</span>
+          </Link>
+          
+          <Link 
+            to="/dashboard" 
+            className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}
+          >
+            <span className="icon">📊</span>
+            <span>仪表盘</span>
           </Link>
           
           {/* 添加可视化构建器导航项 */}
