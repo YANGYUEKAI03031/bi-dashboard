@@ -1109,8 +1109,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         <ReactECharts
           ref={chartRef}
           option={option}
-          notMerge={false}
-          lazyUpdate={true}
+          // Ensure stale series are not kept when series count shrinks (e.g. changing selected yFields).
+          // With `notMerge=false`, ECharts may retain old series beyond the new series array length.
+          notMerge={true}
+          lazyUpdate={false}
           style={{ height: '100%' }}
           onEvents={onEvents}
         />

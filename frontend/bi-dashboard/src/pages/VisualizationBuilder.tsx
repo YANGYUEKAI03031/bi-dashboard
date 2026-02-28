@@ -1079,7 +1079,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                         type="primary" 
                         onClick={() => {
                           // 强制触发状态更新以重新渲染图表
-                          setPreviewData(prev => prev); // 触发重新渲染
+                          setPreviewData(prev => [...prev]); // 触发重新渲染（新引用）
                         }}
                         icon={<PlayCircleOutlined />}
                       >
