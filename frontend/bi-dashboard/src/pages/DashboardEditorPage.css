@@ -1,3 +1,16 @@
+.dashboard-editor-canvas-loading {
+  animation: dashboard-editor-canvas-fade-in 0.3s ease-out;
+}
+
+@keyframes dashboard-editor-canvas-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .dashboard-editor-chart-search-panel {
   display: flex;
   flex-direction: column;

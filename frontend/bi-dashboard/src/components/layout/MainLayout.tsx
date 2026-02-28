@@ -1,5 +1,5 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';

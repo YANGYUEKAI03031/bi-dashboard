@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input, Select, Empty } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -191,9 +191,9 @@ export const DashboardPage: React.FC = () => {
       }
     };
   }, []);
-  
+
   // 加载图表数据的函数 - 增加请求去重机制
-  const loadChartData = async (chartId: number) => {
+  const loadChartData = useCallback(async (chartId: number) => {
     // 首先检查内存缓存
     if (chartDataCache[chartId]) {
       requestMonitor.logRequest(chartId, 'cache');
@@ -250,7 +250,7 @@ export const DashboardPage: React.FC = () => {
       
       return [];
     }
-  };
+  }, [chartDataCache]);
 
   // 加载图表列表
   const loadCharts = async () => {
@@ -333,7 +333,7 @@ export const DashboardPage: React.FC = () => {
         card_row: 0,
         card_col: 0,
         size_x: 6,
-        size_y: 4
+        size_y: 5
       });
       
       // 手动关联chart数据
@@ -373,7 +373,7 @@ export const DashboardPage: React.FC = () => {
     }
 
     const sizeX = pos.w ?? 6;
-    const sizeY = pos.h ?? 4;
+    const sizeY = pos.h ?? 5;
 
     try {
       const newCard = await DashboardService.addChartToDashboard(selectedDashboard.id, {
@@ -549,20 +549,41 @@ export const DashboardPage: React.FC = () => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // 使用 ref 跟踪是否已经加载过，避免重复加载
+    const hasLoadedRef = useRef<number | null>(null);
+    const isLoadingRef = useRef(false);
     
     // 在组件挂载时加载数据 - 优化依赖项
     useEffect(() => {
+      const chartId = card.chart?.id;
+      
+      // 如果图表ID没有变化且已经加载过，则跳过
+      if (chartId && hasLoadedRef.current === chartId) {
+        console.log(`图表${chartId}已加载过，跳过重复加载`);
+        return;
+      }
+      
+      // 如果正在加载中，跳过
+      if (isLoadingRef.current) {
+        console.log(`图表${chartId}正在加载中，跳过重复请求`);
+        return;
+      }
+      
       const loadData = async () => {
-        if (!card.chart?.id) {
+        if (!chartId) {
           setError('图表数据缺失');
           return;
         }
         
+        // 标记为正在加载
+        isLoadingRef.current = true;
+        hasLoadedRef.current = chartId;
         setDataLoading(true);
         setError(null);
+        
         try {
-          console.log(`加载卡片${card.id}的图表数据，图表ID: ${card.chart.id}`);
-          const data = await loadChartData(card.chart.id);
+          console.log(`加载卡片${card.id}的图表数据，图表ID: ${chartId}`);
+          const data = await loadChartData(chartId);
           
           // 验证数据格式和内容
           if (!Array.isArray(data)) {
@@ -594,13 +615,16 @@ export const DashboardPage: React.FC = () => {
           console.error(`加载卡片${card.id}数据失败:`, error);
           setError(error.message || '数据加载失败');
           message.error(`图表"${card.chart?.name || '未知'}"数据加载失败`);
+          // 加载失败时清除标记，允许重试
+          hasLoadedRef.current = null;
         } finally {
           setDataLoading(false);
+          isLoadingRef.current = false;
         }
       };
       
       loadData();
-    }, [card.chart?.id]); // 只依赖chart.id，避免因其他属性变化导致的重复请求
+    }, [card.chart?.id, card.id, loadChartData]); // 添加 loadChartData 到依赖数组
     
     if (!card.chart) {
       return (
@@ -784,13 +808,8 @@ export const DashboardPage: React.FC = () => {
                         show: viz.show_tooltip !== false,
                         trigger: 'axis'
                       },
-                      grid:
-                        viz.grid_padding || {
-                          left: '3%',
-                          right: '4%',
-                          bottom: '15%',
-                          containLabel: true
-                        }
+                      // 仅当用户显式配置 grid_padding 时才传入；否则交给 ChartFactory 做自适应，避免 legend/xAxis 重叠
+                      grid: viz.grid_padding
                     }}
                     data={chartData}
                     style={{ height: '100%', width: '100%' }}
@@ -963,7 +982,7 @@ export const DashboardPage: React.FC = () => {
                     margin={[16, 16]}
                     draggableHandle=".drag-handle"
                     isDroppable
-                    droppingItem={{ i: '__dropping-elem__', w: 6, h: 4 }}
+                    droppingItem={{ i: '__dropping-elem__', w: 6, h: 5 }}
                     onDrop={(layout: GridLayoutItem[], item: GridLayoutItem, e: DragEvent) => {
                       try {
                         const raw =
@@ -1050,9 +1069,12 @@ export const DashboardPage: React.FC = () => {
                           x: card.card_col ?? 0,
                           y: card.card_row ?? 0,
                           w: card.size_x ?? 6,
-                          h: card.size_y ?? 4,
+                          // Clamp existing cards too: old dashboards may have very small size_y values,
+                          // which leads to ECharts being clipped (not just legend overlap).
+                          h: Math.max(card.size_y ?? 4, 5),
                           minW: 3,
-                          minH: 3
+                          // 60px * 5 = 300px（再减去 card header/padding 后仍有足够绘图区）
+                          minH: 5
                         }}
                       >
                         <DashboardCardComponent card={card} />

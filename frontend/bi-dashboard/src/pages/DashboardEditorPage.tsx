@@ -214,14 +214,19 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     };
   }, []);
 
+
   useEffect(() => {
     if (!user) return;
+
+    let cancelled = false;
 
     const init = async () => {
       try {
         setLoading(true);
         // 加载可用图表列表
         const userCharts = await ChartService.getUserCharts();
+        if (cancelled) return;
+
         const convertedCharts = userCharts.map(convertChartResponseToChart);
         setCharts(convertedCharts);
 
@@ -234,6 +239,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             return;
           }
           const d = await DashboardService.getDashboard(dashboardId);
+          if (cancelled) return;
+
           // If backend doesn't embed card.chart, hydrate from latest charts.
           const hydratedDashboard = hydrateDashboardCards(d, convertedCharts);
           setDashboard(hydratedDashboard);
@@ -264,13 +271,17 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           });
         }
       } catch (error: any) {
-        message.error(error?.message || '加载仪表盘编辑数据失败');
+        if (!cancelled) message.error(error?.message || '加载仪表盘编辑数据失败');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     init();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, id, isEditMode, form, navigate]);
 
   const handleBack = () => {
@@ -567,16 +578,20 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-      const loadData = async () => {
-        if (!card.chart?.id) {
-          setError('图表数据缺失');
-          return;
-        }
+      if (!card.chart?.id) {
+        setError('图表数据缺失');
+        return;
+      }
 
+      let cancelled = false;
+
+      const loadData = async () => {
         setDataLoading(true);
         setError(null);
         try {
-          const data = await ChartService.executeChartQuery(card.chart.id);
+          const data = await ChartService.executeChartQuery(card.chart!.id);
+
+          if (cancelled) return;
 
           if (!Array.isArray(data)) {
             throw new Error('返回的数据格式不正确');
@@ -589,21 +604,26 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           }
 
           // 验证X轴字段是否存在
-          const xField = card.chart.visualization_settings?.x_field || '';
+          const xField = card.chart!.visualization_settings?.x_field || '';
           if (xField && data.length > 0 && !Object.keys(data[0] || {}).includes(xField)) {
             console.warn(`X轴字段 '${xField}' 在数据中不存在，使用第一个字段`);
           }
 
           setChartData(data);
-        } catch (error: any) {
-          console.error(`加载图表数据失败:`, error);
-          setError(error.message || '数据加载失败');
+        } catch (err: any) {
+          if (cancelled) return;
+          console.error(`加载图表数据失败:`, err);
+          setError(err.message || '数据加载失败');
         } finally {
-          setDataLoading(false);
+          if (!cancelled) setDataLoading(false);
         }
       };
 
       loadData();
+
+      return () => {
+        cancelled = true;
+      };
     }, [card.chart?.id]);
 
     if (!card.chart) {
@@ -907,14 +927,21 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         >
           {loading ? (
             <div
+              className="dashboard-editor-canvas-loading"
               style={{
                 height: '100%',
+                minHeight: 400,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 16,
               }}
             >
-              <Spin tip="加载中..." />
+              <Spin size="large" tip="加载仪表盘画布中..." />
+              <div style={{ fontSize: 13, color: '#999' }}>
+                正在加载图表列表与仪表盘配置…
+              </div>
             </div>
           ) : !dashboard ? (
             <div
