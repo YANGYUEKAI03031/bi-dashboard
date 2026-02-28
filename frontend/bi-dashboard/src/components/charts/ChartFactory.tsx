@@ -435,13 +435,25 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...(config.grid ?? {})
     };
 
+    // 让 ECharts 的标题与实际绘图区（grid）的几何中心对齐，避免出现
+    // “标题在整张画布正中，而坐标轴/数据区域因为 Y 轴文字偏移到一侧”的观感不一致。
+    const titleLeft =
+      containerWidth > 0 &&
+      typeof gridOption.left === 'number' &&
+      typeof gridOption.right === 'number'
+        ? `${(
+            ((gridOption.left + (containerWidth - gridOption.right)) / 2) /
+            containerWidth
+          ).toFixed(3)}%`
+        : 'center';
+
     const baseOption: any = {
       backgroundColor: 'transparent',
       color: colorPalette,
       title: showTitle
         ? {
             text: titleText,
-            left: 'center',
+            left: titleLeft,
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
