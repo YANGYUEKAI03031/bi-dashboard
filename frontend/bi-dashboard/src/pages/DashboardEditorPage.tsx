@@ -87,6 +87,11 @@ interface Dashboard {
   layout?: any;
 }
 
+// 统一的仪表盘卡片最小网格尺寸（宽=列数，高=行数）
+// 这里约等于「新图表3」在画布上的默认宽高：3 列 x 1.5 行。
+const MIN_CARD_COLS = 3;
+const MIN_CARD_ROWS = 1.5;
+
 const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
   return {
     id: chartResponse.id,
@@ -449,8 +454,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         chart_id: chartId,
         card_row: 0,
         card_col: 0,
-        size_x: 6,
-        size_y: 4,
+        size_x: MIN_CARD_COLS,
+        size_y: MIN_CARD_ROWS,
       });
 
       const chartData = charts.find(c => c.id === chartId);
@@ -489,8 +494,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         chart_id: chartId,
         card_row: Math.max(0, pos.y),
         card_col: Math.max(0, pos.x),
-        size_x: pos.w ?? 6,
-        size_y: pos.h ?? 4,
+        size_x: Math.max(pos.w ?? MIN_CARD_COLS, MIN_CARD_COLS),
+        size_y: Math.max(pos.h ?? MIN_CARD_ROWS, MIN_CARD_ROWS),
       });
 
       const chartData = charts.find(c => c.id === chartId);
@@ -1007,15 +1012,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 rowHeight={80}
                 margin={[16, 16]}
                 isDroppable
-                droppingItem={{ i: '__dropping-elem__', w: 6, h: 4 }}
+                droppingItem={{ i: '__dropping-elem__', w: MIN_CARD_COLS, h: MIN_CARD_ROWS }}
                 isDraggable={true}
                 isResizable={true}
                 layout={(dashboard.cards || []).map(card => ({
                   i: card.id.toString(),
                   x: Number.isFinite(card.card_col) ? card.card_col : 0,
                   y: Number.isFinite(card.card_row) ? card.card_row : 0,
-                  w: Number.isFinite(card.size_x) ? card.size_x : 6,
-                  h: Number.isFinite(card.size_y) ? card.size_y : 4,
+                  // 强制保证已有卡片在布局层面的宽高不会小于我们期望的最小值
+                  w: Math.max(Number.isFinite(card.size_x) ? card.size_x : MIN_CARD_COLS, MIN_CARD_COLS),
+                  h: Math.max(Number.isFinite(card.size_y) ? card.size_y : MIN_CARD_ROWS, MIN_CARD_ROWS),
+                  minW: MIN_CARD_COLS,
+                  minH: MIN_CARD_ROWS,
                 }))}
                 onLayoutChange={(layout: any[]) => {
                   // 防抖保存：只在用户停止操作一小段时间后再提交更新
