@@ -1,5 +1,5 @@
 // src/pages/DashboardEditorPage.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Layout,
   Form,
@@ -141,6 +141,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   });
 
+  // 用于防抖保存布局变化
+  const layoutUpdateTimerRef = useRef<number | null>(null);
+  const pendingLayoutRef = useRef<any[] | null>(null);
+  const dashboardRef = useRef<Dashboard | null>(null);
+
   const isEditMode = mode === 'edit';
 
   /**
@@ -200,6 +205,15 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   }, [collapsed, user?.id]);
 
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (layoutUpdateTimerRef.current) {
+        window.clearTimeout(layoutUpdateTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
 
@@ -221,7 +235,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           }
           const d = await DashboardService.getDashboard(dashboardId);
           // If backend doesn't embed card.chart, hydrate from latest charts.
-          setDashboard(hydrateDashboardCards(d, convertedCharts));
+          const hydratedDashboard = hydrateDashboardCards(d, convertedCharts);
+          setDashboard(hydratedDashboard);
+          dashboardRef.current = hydratedDashboard;
           // 从 settings 中恢复 widgets
           const rawWidgets = (d?.settings as any)?.widgets;
           if (Array.isArray(rawWidgets)) {
@@ -278,6 +294,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           description: values.description ? values.description.trim() : '',
         });
         setDashboard(created);
+        dashboardRef.current = created;
         message.success('仪表盘创建成功');
         // 跳转到编辑模式
         navigate(`/dashboard/edit/${created.id}`, { replace: true });
@@ -288,6 +305,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           description: values.description ? values.description.trim() : '',
         });
         setDashboard(updated);
+        dashboardRef.current = updated;
         message.success('仪表盘信息已保存');
       }
     } catch (error: any) {
@@ -311,6 +329,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       settings: nextSettings,
     });
     setDashboard(updated);
+    return updated;
   };
 
   const openAddTitleWidget = () => {
@@ -378,7 +397,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       }
 
       setWidgets(nextWidgets);
-      await persistWidgets(nextWidgets);
+      const updated = await persistWidgets(nextWidgets);
+      if (updated) {
+        dashboardRef.current = updated;
+      }
       message.success('标题组件已保存');
       setWidgetModalOpen(false);
     } catch (error: any) {
@@ -394,7 +416,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     try {
       const nextWidgets = widgets.filter(w => w.id !== widgetId);
       setWidgets(nextWidgets);
-      await persistWidgets(nextWidgets);
+      const updated = await persistWidgets(nextWidgets);
+      if (updated) {
+        dashboardRef.current = updated;
+      }
       message.success('标题组件已移除');
     } catch (error: any) {
       message.error(error?.message || '移除标题组件失败');
@@ -429,6 +454,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       };
 
       setDashboard(updatedDashboard);
+      dashboardRef.current = updatedDashboard;
       message.success('图表已添加到仪表盘');
     } catch (error: any) {
       message.error(error?.message || '添加图表失败');
@@ -468,6 +494,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       };
 
       setDashboard(updatedDashboard);
+      dashboardRef.current = updatedDashboard;
       message.success('图表已添加到仪表盘');
     } catch (error: any) {
       message.error(error?.message || '添加图表失败');
@@ -526,6 +553,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         cards: (dashboard.cards || []).filter(card => card.id !== cardId),
       };
       setDashboard(updatedDashboard);
+      dashboardRef.current = updatedDashboard;
       message.success('已从仪表盘移除图表');
     } catch (error: any) {
       message.error(error?.message || '移除图表失败');
@@ -959,8 +987,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 margin={[16, 16]}
                 isDroppable
                 droppingItem={{ i: '__dropping-elem__', w: 6, h: 4 }}
-                isDraggable={false}
-                isResizable={false}
+                isDraggable={true}
+                isResizable={true}
                 layout={(dashboard.cards || []).map(card => ({
                   i: card.id.toString(),
                   x: Number.isFinite(card.card_col) ? card.card_col : 0,
@@ -968,6 +996,70 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   w: Number.isFinite(card.size_x) ? card.size_x : 6,
                   h: Number.isFinite(card.size_y) ? card.size_y : 4,
                 }))}
+                onLayoutChange={(layout: any[]) => {
+                  // 防抖保存：只在用户停止操作一小段时间后再提交更新
+                  pendingLayoutRef.current = layout;
+                  if (layoutUpdateTimerRef.current) {
+                    window.clearTimeout(layoutUpdateTimerRef.current);
+                  }
+
+                  layoutUpdateTimerRef.current = window.setTimeout(async () => {
+                    const latestDashboard = dashboardRef.current;
+                    const latestLayout = pendingLayoutRef.current;
+                    if (!latestDashboard || !latestLayout) return;
+
+                    const cardMap = new Map(
+                      latestDashboard.cards.map(card => [card.id.toString(), card])
+                    );
+
+                    const changes: Array<{ cardId: number; updates: any }> = [];
+                    latestLayout.forEach(item => {
+                      const card = cardMap.get(item.i);
+                      if (!card) return;
+
+                      const updates: any = {};
+                      if (card.card_row !== item.y) updates.card_row = item.y;
+                      if (card.card_col !== item.x) updates.card_col = item.x;
+                      if (card.size_x !== item.w) updates.size_x = item.w;
+                      if (card.size_y !== item.h) updates.size_y = item.h;
+
+                      if (Object.keys(updates).length > 0) {
+                        changes.push({ cardId: card.id, updates });
+                      }
+                    });
+
+                    if (changes.length === 0) return;
+
+                    try {
+                      // 并行提交所有更新到后端
+                      const results = await Promise.allSettled(
+                        changes.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
+                      );
+
+                      const hasRejected = results.some(r => r.status === 'rejected');
+                      if (hasRejected) {
+                        message.error('部分卡片更新失败，请稍后重试');
+                      }
+
+                      // 本地更新状态，避免多次 setState 导致额外的 onLayoutChange 循环
+                      const updatedCards = latestDashboard.cards.map(card => {
+                        const change = changes.find(c => c.cardId === card.id);
+                        return change ? { ...card, ...change.updates } : card;
+                      });
+
+                      const updatedDashboard = {
+                        ...latestDashboard,
+                        cards: updatedCards
+                      };
+
+                      setDashboard(updatedDashboard);
+                      dashboardRef.current = updatedDashboard;
+                    } catch (e: any) {
+                      console.error('保存布局失败:', e);
+                      message.error(e?.message || '保存布局失败');
+                    }
+                  }, 250);
+                }}
                 onDrop={(layout: any, item: any, e: DragEvent) => {
                   try {
                     const raw =
