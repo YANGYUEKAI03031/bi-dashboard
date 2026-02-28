@@ -237,13 +237,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
               show: viz.show_tooltip !== false,
               trigger: 'axis',
             },
-            grid:
-              viz.grid_padding || {
-                left: '3%',
-                right: '4%',
-                bottom: '15%',
-                containLabel: true,
-              },
+            // 报表页同样不再透传 grid_padding，保持与 ChartFactory 的统一居中布局。
           }}
           data={chartData}
           style={{ height: '100%', width: '100%' }}
@@ -256,6 +250,14 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
 // 仪表盘视图组件
 const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
   const widgets = (dashboard?.settings as any)?.widgets || [];
+  const cards = dashboard.cards || [];
+
+  // 统计每一行有多少张卡片，用于判断“该行是否只有 1 张图”，从而做视觉居中
+  const rowCardCount = new Map<number, number>();
+  cards.forEach(card => {
+    const row = Number.isFinite(card.card_row) ? (card.card_row as number) : 0;
+    rowCardCount.set(row, (rowCardCount.get(row) || 0) + 1);
+  });
 
   return (
     <div className="reports-dashboard-view">
@@ -280,7 +282,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
         ))}
 
       {/* 图表网格布局 */}
-      {dashboard.cards && dashboard.cards.length > 0 ? (
+      {cards.length > 0 ? (
         <AutoWidthGridLayout
           cols={12}
           rowHeight={80}
@@ -289,22 +291,47 @@ const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
           isResizable={false}
           compactType={null}
           preventCollision={true}
-          layout={(dashboard.cards || []).map(card => ({
-            i: card.id.toString(),
-            x: Number.isFinite(card.card_col) ? card.card_col : 0,
-            y: Number.isFinite(card.card_row) ? card.card_row : 0,
-            w: Number.isFinite(card.size_x) ? card.size_x : 6,
-            h: Number.isFinite(card.size_y) ? card.size_y : 4,
-            static: true,
-          }))}
+          layout={cards.map(card => {
+            const totalCols = 12;
+            const w = Number.isFinite(card.size_x) ? card.size_x : 6;
+            const hasExplicitCol = Number.isFinite(card.card_col);
+            let x = hasExplicitCol ? (card.card_col as number) : 0;
+            const row = Number.isFinite(card.card_row) ? (card.card_row as number) : 0;
+            const countInRow = rowCardCount.get(row) || 0;
+
+            // 仅在“该行只有一张卡片”且「没有显式列位置」或「列为 0」时，做一次“视觉居中”。
+            // 这样不会改动数据库里的卡片坐标，只影响报表中心的展示效果。
+            if (countInRow === 1 && (!hasExplicitCol || x === 0)) {
+              x = Math.max(0, Math.floor((totalCols - w) / 2));
+            }
+
+            return {
+              i: card.id.toString(),
+              x,
+              y: row,
+              w,
+              h: Number.isFinite(card.size_y) ? card.size_y : 4,
+              static: true,
+            };
+          })}
         >
-          {(dashboard.cards || []).map(card => (
+          {cards.map(card => (
             <div key={card.id.toString()}>
               <Card
                 size="small"
-                title={card.chart?.name || `图表 #${card.chart_id}`}
-                style={{ height: '100%' }}
-                bodyStyle={{ height: 'calc(100% - 57px)', padding: '12px' }}
+                title={
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                    <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
+                  </div>
+                }
+                // 让报表页的卡片与编辑页保持一致：卡片填满网格单元，图表区域用 flex 垂直拉满
+                style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                bodyStyle={{
+                  flex: 1,
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'stretch',
+                }}
               >
                 <ChartCardComponent card={card} />
               </Card>

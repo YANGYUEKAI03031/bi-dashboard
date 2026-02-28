@@ -69,7 +69,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       // 添加更多配置项
       show_legend: true,
       show_tooltip: true,
-      grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+      // grid_padding 交给 ChartFactory 统一处理，不再在配置里写死 3% / 4% 等老的默认值
       // 排序配置
       sort_by: 'x', // 'x' 或 'y'
       sort_order: 'asc' // 'asc' 或 'desc'
@@ -103,7 +103,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
               y_fields: [],
               show_legend: true,
               show_tooltip: true,
-              grid_padding: { left: '3%', right: '4%', bottom: '15%', containLabel: true }
+              // 不再为老图表兜底注入 grid_padding，彻底交给 ChartFactory 处理
             },
             database_id: chart.database_id || 1,
             creator_id: chart.creator_id
@@ -1087,9 +1087,11 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                       </Button>
                     </div>
                     
-                    {/* 图表预览区域 - 使用正确的变量名 */}
+                    {/* 图表预览区域 - 标题显示当前图表名称并居中 */}
                     <div style={{ marginTop: '24px', border: '1px solid #d9d9d9', borderRadius: '8px', padding: '16px' }}>
-                      <h3 style={{ marginBottom: '16px', color: '#1890ff' }}>图表预览</h3>
+                      <h3 style={{ marginBottom: '16px', color: '#1890ff', textAlign: 'center' }}>
+                        {chartData.name || '图表预览'}
+                      </h3>
                       {previewData.length > 0 && 
                        chartData.visualization_settings.x_field && 
                        chartData.visualization_settings.y_fields?.length > 0 ? (
@@ -1097,7 +1099,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                           <ChartFactory
                             config={{
                               type: chartData.chart_type,
-                              title: chartData.name,
+                              // 预览区域顶部已经展示图表名称，这里不再在图表内部重复标题
+                              title: '',
                               xField: chartData.visualization_settings.x_field,
                               yFields: chartData.visualization_settings.y_fields || [],
                               sort_by: chartData.visualization_settings.sort_by,
@@ -1118,12 +1121,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                                 trigger: 'axis',
                                 axisPointer: { type: 'cross' }
                               },
-                              grid: {
-                                left: '3%',
-                                right: '4%',
-                                bottom: '15%',
-                                containLabel: true
-                              }
+                              // 预览区域同样不再手写 grid，保持与 ChartFactory 一致的居中和留白策略
                             }}
                             data={previewData}
                             style={{ height: '400px', width: '100%' }}

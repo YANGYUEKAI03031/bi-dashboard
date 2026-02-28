@@ -737,13 +737,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 show: viz.show_tooltip !== false,
                 trigger: 'axis',
               },
-              grid:
-                viz.grid_padding || {
-                  left: '3%',
-                  right: '4%',
-                  bottom: '15%',
-                  containLabel: true,
-                },
+              // 不再从可视化配置里透传 grid_padding，完全交给 ChartFactory 统一处理网格与居中布局。
             }}
             data={chartData}
             style={{ height: '100%', width: '100%' }}
@@ -1105,7 +1099,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   <div key={card.id.toString()}>
                     <Card
                       size="small"
-                      title={card.chart?.name || `图表 #${card.chart_id}`}
+                      title={
+                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                          <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
+                        </div>
+                      }
                       extra={
                         <Popconfirm
                           title="移除这个图表？"
@@ -1122,9 +1120,16 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           />
                         </Popconfirm>
                       }
-                      style={{ height: '100%' }}
-                      bodyStyle={{ height: 'calc(100% - 57px)', padding: '12px' }}
+                      // 让卡片本身充满网格单元，并使用 flex 布局让图表区域垂直拉满
+                      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                      bodyStyle={{
+                        flex: 1,
+                        padding: '12px',
+                        display: 'flex',
+                        alignItems: 'stretch',
+                      }}
                     >
+                      {/* ChartCardComponent 会占满 body，高度 100%，从而让图表垂直填充整个卡片 */}
                       <ChartCardComponent card={card} />
                     </Card>
                   </div>

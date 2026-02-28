@@ -666,11 +666,11 @@ export const DashboardPage: React.FC = () => {
         </div>
         <Card 
           title={
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{card.chart.name}</span>
-              <span style={{ fontSize: '12px', color: '#888' }}>
+            <div style={{ width: '100%', textAlign: 'center' }}>
+              <div>{card.chart.name}</div>
+              <div style={{ fontSize: '12px', color: '#888', marginTop: 4 }}>
                 {card.chart.chart_type}
-              </span>
+              </div>
             </div>
           }
           extra={
@@ -808,8 +808,7 @@ export const DashboardPage: React.FC = () => {
                         show: viz.show_tooltip !== false,
                         trigger: 'axis'
                       },
-                      // 仅当用户显式配置 grid_padding 时才传入；否则交给 ChartFactory 做自适应，避免 legend/xAxis 重叠
-                      grid: viz.grid_padding
+                      // 不再透传 grid_padding，仪表盘视图也统一交给 ChartFactory 控制网格与居中。
                     }}
                     data={chartData}
                     style={{ height: '100%', width: '100%' }}

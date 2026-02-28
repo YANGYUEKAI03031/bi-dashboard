@@ -73,12 +73,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       yAxis: { name: '数值' },
       legend: { show: true },
       tooltip: { trigger: 'axis' },
-      grid: { 
-        left: '3%', 
-        right: '4%', 
-        bottom: '15%', 
-        containLabel: true 
-      },
+      // 预览不再手写 grid，交给 ChartFactory 统一控制网格与居中布局
       series: [{
         data: previewData.map(item => item.value1),
         type: chart.chart_type,

@@ -117,6 +117,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const [isReady, setIsReady] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const rafRef = useRef<number | null>(null);
+
+  // 当容器尺寸发生变化（特别是从 0 变为实际宽高，或 Tab 切换后重新可见）时，
+  // 通过变更 key 强制重新挂载 ECharts 实例，避免 ECharts 在“隐藏/尺寸不正确”的状态下初始化
+  // 带来的坐标系偏移等问题。
+  const chartKey = `${containerSize.width}x${containerSize.height}`;
   
   // 监听容器大小变化
   useEffect(() => {
@@ -160,6 +165,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   
   const option = useMemo(() => {
     const containerHeight = containerSize.height;
+    const containerWidth = containerSize.width;
     const compact = containerHeight > 0 && containerHeight < 220;
     const veryCompact = containerHeight > 0 && containerHeight < 160;
     const titleText = (config.title ?? '').toString().trim();
@@ -321,94 +327,105 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // X 轴名称（如"支付日期"）的高度估算
     const xAxisNameFontSize = config.xAxis?.nameTextStyle?.fontSize ?? 12;
     const xAxisNameHeight = compact ? Math.max(10, Math.round(xAxisNameFontSize * 0.9)) : xAxisNameFontSize;
-    
-    // 预留给 xAxis（label + name + margin）的底部空间
-    // 包括：底部边距 + 标签高度 + 标签与轴的间距 + name与label的间距 + name本身的高度
+
+    // 仅用于控制 X 轴 label/name 的字号和间距，不再据此为底部预留大块固定空间
     const breathingRoom = compact ? Math.max(8, 10 * 0.8) : 10;
     const xAxisReservedBottom =
-      breathingRoom + 
-      xAxisLabelHeightEstimate + 
-      effectiveAxisLabelMargin + 
-      effectiveXAxisNameGap + 
-      xAxisNameHeight + 
-      4; // name 下方的额外边距
-    
-    // 图例高度估算（一行图例的高度 + padding）
-    const legendHeightEstimate = 34;
-    // 图例和X轴名称之间的间距（需要足够大以避免重叠）
-    const gapBetweenXAxisAndLegend = compact ? Math.max(12, 15 * 0.8) : 18;
-    
+      breathingRoom +
+      xAxisLabelHeightEstimate +
+      effectiveAxisLabelMargin +
+      effectiveXAxisNameGap +
+      xAxisNameHeight +
+      4; // name 下方的额外边距（仅作为估算参考）
+
+    // 估算 Y 轴刻度文字大致占用的宽度，用于在 grid.left / grid.right 上做平衡，
+    // 让「真正的绘图区」而不是整张画布的左上角更接近卡片视觉中心。
+    const estimateYAxisLabelWidth = () => {
+      if (!yFields.length || !sortedData.length) return 32;
+
+      const sampleCount = Math.min(sortedData.length, 50);
+      let maxChars = 0;
+
+      for (let i = 0; i < sampleCount; i++) {
+        const row = sortedData[i];
+        if (!row || typeof row !== 'object') continue;
+
+        for (const field of yFields) {
+          const v = (row as any)[field];
+          if (v == null) continue;
+          const s = typeof v === 'number' ? v.toString() : String(v);
+          maxChars = Math.max(maxChars, s.length);
+        }
+      }
+
+      if (maxChars === 0) maxChars = 3;
+      const charWidth = 6; // 经验值：一个字符约 6px
+      const padding = 10;
+      return maxChars * charWidth + padding;
+    };
+
+    const yAxisLabelWidthEstimate = estimateYAxisLabelWidth();
+
     // 判断是否需要显示图例
     const legendShowExplicit =
       !!config.legend && Object.prototype.hasOwnProperty.call(config.legend, 'show');
     const defaultLegendShow = legendShowExplicit
       ? config.legend?.show !== false
-      : (!compact && yFields.length > 1 && (config.legend?.show !== false));
+      : (yFields.length > 1 && (config.legend?.show !== false));
 
-    // Convert ECharts size values to px (best-effort) so we can prevent axis/legend overlaps.
-    const toPx = (value: unknown): number | null => {
-      if (typeof value === 'number' && Number.isFinite(value)) return value;
-      if (typeof value !== 'string') return null;
-      const s = value.trim();
-      if (!s) return null;
-      // Percent values are relative to container height in ECharts layout.
-      if (s.endsWith('%') && containerHeight > 0) {
-        const p = parseFloat(s.slice(0, -1));
-        if (Number.isFinite(p)) return Math.round((containerHeight * p) / 100);
-        return null;
-      }
-      // Plain numeric strings
-      const n = Number(s);
-      return Number.isFinite(n) ? n : null;
-    };
-    // 图例配置：作为图表的一部分，放在 X 轴标签下方
-    // Place legend at the container bottom, and push the grid up enough so xAxis labels don't overlap it.
+    // 图例配置：移动到顶部，避免占用底部空间，让图表在卡片内更居中
     const defaultLegendOption: any = {
       data: yFields.map(field => field),
-      // bottom/show will be finalized after merging user legend config
-      bottom: undefined,
       show: defaultLegendShow,
       textStyle: {
         fontSize: compact ? 10 : 12,
         color: '#4a5568'
       },
-      itemGap: compact ? 15 : 20,
+      itemGap: compact ? 12 : 18,
       itemWidth: 14,
       itemHeight: 14,
-      // 水平居中
       left: 'center',
+      top: compact ? 4 : 8,
       orient: 'horizontal'
     };
     const legendOption: any = {
       ...defaultLegendOption,
       ...(config.legend ?? {})
     };
-    const legendVisible = legendOption.show !== false;
-    const legendBottomPaddingPx = legendVisible ? (toPx(legendOption.bottom) ?? 10) : 0;
-    if (legendVisible && legendOption.bottom == null) {
-      legendOption.bottom = legendBottomPaddingPx;
-    }
-    if (!legendVisible) {
-      delete legendOption.bottom;
-    }
 
-    // 计算 grid.bottom：包含 X 轴标签和图例的总高度
-    // grid.bottom 需要为：X轴空间 + 图例和X轴的间距 + 图例高度
-    const totalBottomSpace = legendVisible
-      ? xAxisReservedBottom + gapBetweenXAxisAndLegend + legendHeightEstimate + legendBottomPaddingPx
-      : xAxisReservedBottom;
-    const gridBottomEstimate = Math.max(56, totalBottomSpace);
+    // 为底部只保留最小必要间距，不再额外预留大块空白，避免图表区域整体被“顶”到上方
+    const defaultGridBottom = compact ? 28 : 32;
 
-    // 避免容器高度变小后，固定像素的 bottom 预留把 plot 区域"挤没了"
-    const gridBottomMax =
-      containerHeight > 0 ? Math.max(44, Math.floor(containerHeight * 0.7)) : gridBottomEstimate;
-    const gridBottomFinal = Math.min(gridBottomEstimate, gridBottomMax);
+    /**
+     * 说明：
+     * - ECharts 的 grid.left 是「绘图区」到容器左侧的距离，Y 轴的刻度文字会再额外占用一段宽度在 grid 左侧。
+     * - 我们根据数据大致估算了 Y 轴刻度文字的宽度，然后让「左侧总宽度（grid.left + 刻度文字）」尽量
+     *   接近右侧的 grid.right，使得整张图在卡片里更接近视觉居中。
+     * - 当画布特别窄时，适当收紧左右留白，避免图表被挤得太小。
+     */
+    const isVeryNarrowCanvas = containerWidth > 0 && containerWidth < 480;
+    const baseSidePadding = isVeryNarrowCanvas ? (compact ? 10 : 12) : (compact ? 14 : 18);
+
+    /**
+     * 这里的关键点：
+     * - ECharts 的 grid.left / grid.right 是「整个坐标系」到容器边缘的距离，
+     *   Y 轴刻度文字大部分会落在 grid.left 这一块区域里。
+     * - 如果简单把左右 padding 设成完全对称（left = right），那么视觉上会出现：
+     *   左侧 = 轴标签 + 轴线 + 空白，右侧 = 纯空白，看起来就像“图偏左”。
+     * - 为了平衡这个效果，我们在 left 上额外叠加一部分 Y 轴文字宽度，而保持 right 较为紧凑，
+     *   这样「整个图形块（包括 Y 轴刻度）」相对卡片会更接近几何居中。
+     */
+    const extraLeftForYAxis = Math.min(
+      // 把预估宽度的一部分挪到 left 上，避免补偿过头
+      Math.round(yAxisLabelWidthEstimate * 0.7),
+      // 同时做一个上限，避免在极端大值时 left 过大导致绘图区被压缩
+      isVeryNarrowCanvas ? 32 : 40
+    );
 
     const defaultGridOption: any = {
-      left: 16,
-      right: 16,
-      // 动态为 X 轴多行 label + legend 预留空间，避免重叠
-      bottom: gridBottomFinal,
+      left: baseSidePadding + extraLeftForYAxis,
+      right: baseSidePadding,
+      bottom: defaultGridBottom,
       // If the card already renders a title, ECharts title is empty; avoid wasting top space.
       top: showTitle ? (compact ? 34 : 44) : (compact ? 10 : 12),
       containLabel: true
@@ -417,13 +434,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...defaultGridOption,
       ...(config.grid ?? {})
     };
-    // Ensure any user-provided grid.bottom isn't smaller than what we need to avoid overlaps.
-    const userGridBottomPx = toPx(config.grid?.bottom);
-    if (userGridBottomPx != null) {
-      gridOption.bottom = Math.max(gridBottomFinal, userGridBottomPx);
-    } else {
-      gridOption.bottom = gridBottomFinal;
-    }
 
     const baseOption: any = {
       backgroundColor: 'transparent',
@@ -1170,8 +1180,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ref={containerRef}
       style={{ width: '100%', height: '100%', minHeight: resolvedMinHeight, ...style }}
     >
-      {isReady ? (
+      {isReady && containerSize.width > 0 && containerSize.height > 0 ? (
         <ReactECharts
+          key={chartKey}
           ref={chartRef}
           option={option}
           // Ensure stale series are not kept when series count shrinks (e.g. changing selected yFields).
