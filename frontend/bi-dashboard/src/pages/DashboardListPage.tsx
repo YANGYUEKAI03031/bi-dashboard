@@ -147,7 +147,14 @@ export const DashboardListPage: React.FC = () => {
   return (
     <div className="dashboard-page">
       <div className="page-header">
-        <div className="header-content">
+        <div
+          className="header-content"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <h1>仪表盘</h1>
           <Space>
             <Button

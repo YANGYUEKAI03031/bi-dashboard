@@ -162,6 +162,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const containerHeight = containerSize.height;
     const compact = containerHeight > 0 && containerHeight < 220;
     const veryCompact = containerHeight > 0 && containerHeight < 160;
+    const titleText = (config.title ?? '').toString().trim();
+    const showTitle = titleText.length > 0;
 
     // 处理xAxis数据 - 使用配置的xField
     const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
@@ -337,7 +339,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const gapBetweenXAxisAndLegend = compact ? Math.max(12, 15 * 0.8) : 18;
     
     // 判断是否需要显示图例
-    const shouldShowLegend = !compact && yFields.length > 1 && (config.legend?.show !== false);
+    const legendShowExplicit =
+      !!config.legend && Object.prototype.hasOwnProperty.call(config.legend, 'show');
+    const defaultLegendShow = legendShowExplicit
+      ? config.legend?.show !== false
+      : (!compact && yFields.length > 1 && (config.legend?.show !== false));
 
     // Convert ECharts size values to px (best-effort) so we can prevent axis/legend overlaps.
     const toPx = (value: unknown): number | null => {
@@ -355,27 +361,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       const n = Number(s);
       return Number.isFinite(n) ? n : null;
     };
-    const legendBottomPaddingPx = toPx(config.legend?.bottom) ?? 10;
-    
-    // 计算 grid.bottom：包含 X 轴标签和图例的总高度
-    // 让图例成为图表的一部分，通过 grid 统一管理空间，避免重叠
-    // grid.bottom 需要为：X轴空间 + 图例和X轴的间距 + 图例高度
-    const totalBottomSpace = shouldShowLegend 
-      ? xAxisReservedBottom + gapBetweenXAxisAndLegend + legendHeightEstimate + legendBottomPaddingPx
-      : xAxisReservedBottom;
-    
-    const gridBottomEstimate = Math.max(60, totalBottomSpace);
-
-    // 避免容器高度变小后，固定像素的 bottom 预留把 plot 区域"挤没了"
-    const gridBottomMax = containerHeight > 0 ? Math.max(48, Math.floor(containerHeight * 0.7)) : gridBottomEstimate;
-    const gridBottomFinal = Math.min(gridBottomEstimate, gridBottomMax);
-    
     // 图例配置：作为图表的一部分，放在 X 轴标签下方
     // Place legend at the container bottom, and push the grid up enough so xAxis labels don't overlap it.
     const defaultLegendOption: any = {
       data: yFields.map(field => field),
-      bottom: shouldShowLegend ? legendBottomPaddingPx : undefined,
-      show: shouldShowLegend,
+      // bottom/show will be finalized after merging user legend config
+      bottom: undefined,
+      show: defaultLegendShow,
       textStyle: {
         fontSize: compact ? 10 : 12,
         color: '#4a5568'
@@ -391,13 +383,34 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...defaultLegendOption,
       ...(config.legend ?? {})
     };
+    const legendVisible = legendOption.show !== false;
+    const legendBottomPaddingPx = legendVisible ? (toPx(legendOption.bottom) ?? 10) : 0;
+    if (legendVisible && legendOption.bottom == null) {
+      legendOption.bottom = legendBottomPaddingPx;
+    }
+    if (!legendVisible) {
+      delete legendOption.bottom;
+    }
+
+    // 计算 grid.bottom：包含 X 轴标签和图例的总高度
+    // grid.bottom 需要为：X轴空间 + 图例和X轴的间距 + 图例高度
+    const totalBottomSpace = legendVisible
+      ? xAxisReservedBottom + gapBetweenXAxisAndLegend + legendHeightEstimate + legendBottomPaddingPx
+      : xAxisReservedBottom;
+    const gridBottomEstimate = Math.max(56, totalBottomSpace);
+
+    // 避免容器高度变小后，固定像素的 bottom 预留把 plot 区域"挤没了"
+    const gridBottomMax =
+      containerHeight > 0 ? Math.max(44, Math.floor(containerHeight * 0.7)) : gridBottomEstimate;
+    const gridBottomFinal = Math.min(gridBottomEstimate, gridBottomMax);
 
     const defaultGridOption: any = {
-      left: '5%',
-      right: '5%',
+      left: 16,
+      right: 16,
       // 动态为 X 轴多行 label + legend 预留空间，避免重叠
       bottom: gridBottomFinal,
-      top: '10%',
+      // If the card already renders a title, ECharts title is empty; avoid wasting top space.
+      top: showTitle ? (compact ? 34 : 44) : (compact ? 10 : 12),
       containLabel: true
     };
     const gridOption: any = {
@@ -415,16 +428,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const baseOption: any = {
       backgroundColor: 'transparent',
       color: colorPalette,
-      title: {
-        text: config.title || '',
-        left: 'center',
-        textStyle: {
-          fontSize: 18,
-          fontWeight: 'bold',
-          color: '#1a202c'
-        },
-        padding: [10, 0]
-      },
+      title: showTitle
+        ? {
+            text: titleText,
+            left: 'center',
+            textStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+              color: '#1a202c'
+            },
+            padding: [10, 0]
+          }
+        : { show: false },
       tooltip: config.tooltip || {
         trigger: 'axis',
         backgroundColor: 'rgba(50, 50, 50, 0.95)',
@@ -1153,7 +1168,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', minHeight: resolvedMinHeight, ...style }}
+      style={{ width: '100%', height: '100%', minHeight: resolvedMinHeight, ...style }}
     >
       {isReady ? (
         <ReactECharts
@@ -1163,7 +1178,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           // With `notMerge=false`, ECharts may retain old series beyond the new series array length.
           notMerge={true}
           lazyUpdate={false}
-          style={{ height: '100%' }}
+          style={{ height: '100%', width: '100%' }}
           onEvents={onEvents}
         />
       ) : null}
