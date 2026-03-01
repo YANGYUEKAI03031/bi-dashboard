@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tabs, Card, Spin, Empty, message, Typography, Button, Space } from 'antd';
+import { Tabs, Card, Spin, Empty, message, Typography, Button, Space, Modal, Form, Input } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
@@ -8,7 +8,8 @@ import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate } from 'react-router-dom';
-import { EditOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { ReportsSidebar } from '../components/reports/ReportsSidebar';
 
 const { Title, Paragraph } = Typography;
 
@@ -36,8 +37,9 @@ interface Dashboard {
   id: number;
   name: string;
   description: string;
-  cards: DashboardCard[];
+  cards?: DashboardCard[]; // 可选，因为新创建的仪表盘可能没有 cards
   settings?: any;
+  tags?: string[] | string; // 支持数组或字符串格式
 }
 
 type ChartResponse = Awaited<ReturnType<typeof ChartService.getUserCharts>>[0];
@@ -357,6 +359,10 @@ export const ReportsPage: React.FC = () => {
   const [dashboardDetails, setDashboardDetails] = useState<Map<number, Dashboard>>(new Map());
   const [loadingDashboard, setLoadingDashboard] = useState<Set<number>>(new Set());
   const [charts, setCharts] = useState<Chart[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createForm] = Form.useForm();
 
   useEffect(() => {
     if (!user) return;
@@ -423,6 +429,15 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
+  const handleTabClick = (key: string, e: React.MouseEvent<Element, MouseEvent> | React.KeyboardEvent<Element>) => {
+    // 如果是添加按钮，阻止默认行为并打开创建对话框
+    if (key === 'add') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCreateFromTab();
+    }
+  };
+
   const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
 
   const handleEditCurrentDashboard = () => {
@@ -430,64 +445,228 @@ export const ReportsPage: React.FC = () => {
     navigate(`/dashboard/edit/${activeDashboardId}`);
   };
 
+  // 从 settings 或 tags 字段提取标签
+  const getDashboardTags = (dashboard: Dashboard): string[] => {
+    // 优先从 settings.tags 获取
+    if (dashboard.settings?.tags) {
+      if (Array.isArray(dashboard.settings.tags)) {
+        return dashboard.settings.tags;
+      } else if (typeof dashboard.settings.tags === 'string') {
+        return dashboard.settings.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+    }
+    // 兼容直接使用 tags 字段的情况
+    if (dashboard.tags) {
+      if (Array.isArray(dashboard.tags)) {
+        return dashboard.tags;
+      } else if (typeof dashboard.tags === 'string') {
+        return dashboard.tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  };
+
+  // 根据选中的标签筛选仪表盘
+  const filteredDashboards = React.useMemo(() => {
+    if (!selectedTag) return dashboards;
+    return dashboards.filter(dashboard => {
+      const dashboardTags = getDashboardTags(dashboard);
+      return dashboardTags.includes(selectedTag);
+    });
+  }, [dashboards, selectedTag]);
+
+  // 当标签改变时，如果当前选中的仪表盘不在筛选结果中，则选中第一个
+  useEffect(() => {
+    if (filteredDashboards.length > 0) {
+      const currentExists = filteredDashboards.some(d => d.id === activeDashboardId);
+      if (!currentExists) {
+        const firstDashboardId = filteredDashboards[0].id;
+        setActiveDashboardId(firstDashboardId);
+        if (!dashboardDetails.has(firstDashboardId)) {
+          loadDashboardDetails(firstDashboardId, charts);
+        }
+      }
+    } else if (filteredDashboards.length === 0 && activeDashboardId !== null) {
+      setActiveDashboardId(null);
+    }
+  }, [filteredDashboards, activeDashboardId, dashboardDetails, charts]);
+
+  const handleDashboardCreate = async (newDashboard: Dashboard) => {
+    // 刷新仪表盘列表
+    try {
+      const userDashboards = await DashboardService.getUserDashboards();
+      setDashboards(userDashboards);
+      
+      // 选中新创建的仪表盘
+      setActiveDashboardId(newDashboard.id);
+      await loadDashboardDetails(newDashboard.id, charts);
+    } catch (error: any) {
+      message.error(error?.message || '刷新仪表盘列表失败');
+    }
+  };
+
+  const handleCreateFromTab = () => {
+    setCreateModalVisible(true);
+  };
+
+  const handleCreateDashboard = async (values: any) => {
+    try {
+      if (!values.name || !values.name.trim()) {
+        message.error('请输入仪表盘名称');
+        return;
+      }
+
+      const dashboardData: any = {
+        name: values.name.trim(),
+        description: values.description ? values.description.trim() : '',
+      };
+
+      // 如果有选中的标签，添加到 settings.tags 字段
+      if (selectedTag) {
+        dashboardData.settings = {
+          tags: [selectedTag]
+        };
+      }
+
+      const newDashboard = await DashboardService.createDashboard(dashboardData);
+      message.success('仪表盘创建成功');
+      setCreateModalVisible(false);
+      createForm.resetFields();
+      await handleDashboardCreate(newDashboard);
+    } catch (error: any) {
+      console.error('创建仪表盘失败:', error);
+      message.error(error.message || '创建仪表盘失败，请检查网络连接和权限');
+    }
+  };
+
   return (
-    <div className="reports-page">
-      <div className="page-header">
-        <div className="page-header-left">
-          <Title level={2} style={{ margin: 0 }}>
-            报表中心
-          </Title>
-          <Paragraph style={{ margin: '8px 0 0 0', color: '#666' }}>
-            查看和管理您的仪表盘报表
-          </Paragraph>
+    <div className="reports-page-wrapper">
+      <ReportsSidebar
+        dashboards={dashboards}
+        selectedTag={selectedTag}
+        onTagSelect={setSelectedTag}
+        onDashboardCreate={handleDashboardCreate}
+        onDashboardSelect={(dashboardId) => {
+          setActiveDashboardId(dashboardId);
+          if (!dashboardDetails.has(dashboardId)) {
+            loadDashboardDetails(dashboardId, charts);
+          }
+        }}
+        activeDashboardId={activeDashboardId}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(v => !v)}
+      />
+      <div className="reports-page">
+        <div className="page-header">
+          <div className="page-header-left">
+            <Title level={2} style={{ margin: 0 }}>
+              报表中心
+            </Title>
+            <Paragraph style={{ margin: '8px 0 0 0', color: '#666' }}>
+              查看和管理您的仪表盘报表
+            </Paragraph>
+          </div>
+          <div className="page-header-right">
+            <Space>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                disabled={!activeDashboardId}
+                onClick={handleEditCurrentDashboard}
+              >
+                编辑当前仪表盘
+              </Button>
+            </Space>
+          </div>
         </div>
-        <div className="page-header-right">
-          <Space>
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              disabled={!activeDashboardId}
-              onClick={handleEditCurrentDashboard}
-            >
-              编辑当前仪表盘
-            </Button>
-          </Space>
-        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <Spin size="large" tip="加载中..." />
+          </div>
+        ) : filteredDashboards.length === 0 ? (
+          <Card>
+            <Empty
+              description={selectedTag ? `目录 "${selectedTag}" 下暂无仪表盘` : "暂无仪表盘，请先在仪表盘页面创建"}
+              style={{ padding: '40px 0' }}
+            />
+          </Card>
+        ) : (
+          <Card>
+            <Tabs
+              activeKey={activeDashboardId?.toString() || undefined}
+              onChange={handleTabChange}
+              onTabClick={handleTabClick}
+              type="card"
+              items={[
+                ...filteredDashboards.map(dashboard => ({
+                  key: dashboard.id.toString(),
+                  label: dashboard.name,
+                  children: currentDashboard ? (
+                    <DashboardView dashboard={currentDashboard} />
+                  ) : loadingDashboard.has(dashboard.id) ? (
+                    <div style={{ textAlign: 'center', padding: '40px' }}>
+                      <Spin tip="加载仪表盘内容..." />
+                    </div>
+                  ) : (
+                    <Empty description="加载失败，请刷新重试" />
+                  ),
+                })),
+                {
+                  key: 'add',
+                  label: <PlusOutlined />,
+                  children: null,
+                },
+              ]}
+            />
+          </Card>
+        )}
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <Spin size="large" tip="加载中..." />
-        </div>
-      ) : dashboards.length === 0 ? (
-        <Card>
-          <Empty
-            description="暂无仪表盘，请先在仪表盘页面创建"
-            style={{ padding: '40px 0' }}
-          />
-        </Card>
-      ) : (
-        <Card>
-          <Tabs
-            activeKey={activeDashboardId?.toString() || undefined}
-            onChange={handleTabChange}
-            type="card"
-            items={dashboards.map(dashboard => ({
-              key: dashboard.id.toString(),
-              label: dashboard.name,
-              children: currentDashboard ? (
-                <DashboardView dashboard={currentDashboard} />
-              ) : loadingDashboard.has(dashboard.id) ? (
-                <div style={{ textAlign: 'center', padding: '40px' }}>
-                  <Spin tip="加载仪表盘内容..." />
-                </div>
-              ) : (
-                <Empty description="加载失败，请刷新重试" />
-              ),
-            }))}
-          />
-        </Card>
-      )}
+      {/* 创建仪表盘模态框 */}
+      <Modal
+        title={`创建新仪表盘${selectedTag ? ` - ${selectedTag}` : ''}`}
+        open={createModalVisible}
+        onCancel={() => {
+          setCreateModalVisible(false);
+          createForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={createForm} onFinish={handleCreateDashboard} layout="vertical">
+          <Form.Item
+            name="name"
+            label="仪表盘名称"
+            rules={[{ required: true, message: '请输入仪表盘名称' }]}
+          >
+            <Input placeholder="输入仪表盘名称" />
+          </Form.Item>
+
+          <Form.Item name="description" label="描述">
+            <Input.TextArea placeholder="输入仪表盘描述" rows={3} />
+          </Form.Item>
+
+          {selectedTag && (
+            <Form.Item label="目录">
+              <Input value={selectedTag} disabled />
+            </Form.Item>
+          )}
+
+          <Form.Item>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button onClick={() => {
+                setCreateModalVisible(false);
+                createForm.resetFields();
+              }}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit">
+                创建
+              </Button>
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

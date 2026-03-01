@@ -1,9 +1,22 @@
 /* src/pages/ReportsPage.css */
+.reports-page-wrapper {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: -24px; /* 抵消 content-wrapper 的 padding */
+  padding: 0;
+}
+
 .reports-page {
+  flex: 1;
   padding: 20px;
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  min-width: 0;
+  margin: 0;
 }
 
 .page-header {
@@ -85,6 +98,19 @@
   background: #fff;
   border-color: #d9d9d9;
   border-bottom-color: #fff;
+}
+
+/* 确保添加按钮标签样式和普通标签一致 */
+.reports-page .ant-tabs-card .ant-tabs-tab[data-node-key="add"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: auto;
+  padding: 8px 16px;
+}
+
+.reports-page .ant-tabs-card .ant-tabs-tab[data-node-key="add"]:hover {
+  color: #1890ff;
 }
 
 /* 响应式优化 */

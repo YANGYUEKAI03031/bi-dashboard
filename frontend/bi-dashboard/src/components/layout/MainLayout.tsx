@@ -98,6 +98,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} aria-hidden={sidebarCollapsed}>
         <div className="logo">
           <h2>BI Dashboard</h2>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed(v => !v)}
+            aria-label={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
+            title={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
+          >
+            {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
         </div>
         
         <nav className="nav-menu">
@@ -106,7 +115,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             className={`nav-item ${isActive('/reports') ? 'active' : ''}`}
           >
             <span className="icon">📈</span>
-            <span>报表</span>
+            <span className="nav-text">报表</span>
           </Link>
           
           <Link 
@@ -114,7 +123,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}
           >
             <span className="icon">📊</span>
-            <span>仪表盘</span>
+            <span className="nav-text">仪表盘</span>
           </Link>
           
           {/* 添加可视化构建器导航项 */}
@@ -123,7 +132,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             className={`nav-item ${isActive('/visualization-builder') ? 'active' : ''}`}
           >
             <span className="icon">🎨</span>
-            <span>可视化构建</span>
+            <span className="nav-text">可视化构建</span>
           </Link>
           
           {/* 添加图表管理导航项 */}
@@ -132,7 +141,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             className={`nav-item ${isActive('/charts-management') ? 'active' : ''}`}
           >
             <span className="icon">📊</span>
-            <span>图表管理</span>
+            <span className="nav-text">图表管理</span>
           </Link>
         </nav>
         
@@ -149,7 +158,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           
           <button onClick={handleLogout} className="logout-btn">
             <span className="icon">🚪</span>
-            <span>退出登录</span>
+            <span className="logout-text">退出登录</span>
           </button>
         </div>
       </aside>
@@ -158,15 +167,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       <main className="main-content">
         <header className="top-bar">
           <div className="top-bar-left">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              onClick={() => setSidebarCollapsed(v => !v)}
-              aria-label={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
-              title={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
-            >
-              {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </button>
             <div className="page-title">{pageTitle}</div>
           </div>
           <div className="user-actions">
