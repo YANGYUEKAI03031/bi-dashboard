@@ -301,3 +301,25 @@ async def remove_chart_from_dashboard(
     except Exception as e:
         logger.error(f"移除卡片API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{dashboard_id}")
+async def delete_dashboard(
+    dashboard_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """删除仪表板（同时删除所有关联的卡片）"""
+    try:
+        service = DashboardService(db)
+        success = await service.delete_dashboard(dashboard_id, user_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="仪表板不存在或无权限访问")
+            
+        return {"message": "仪表板删除成功"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除仪表板API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

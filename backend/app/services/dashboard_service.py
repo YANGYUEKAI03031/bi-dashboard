@@ -282,7 +282,8 @@ class DashboardService:
             if not card:
                 return False
             
-            await self.db.delete(card)
+            delete_stmt = delete(DashboardCard).where(DashboardCard.id == card_id)
+            await self.db.execute(delete_stmt)
             await self.db.commit()
             
             logger.info(f"图表从仪表板移除成功: 卡片ID {card_id}")
@@ -292,3 +293,37 @@ class DashboardService:
             await self.db.rollback()
             logger.error(f"移除图表失败: {str(e)}")
             raise Exception(f"移除图表失败: {str(e)}")
+    
+    async def delete_dashboard(self, dashboard_id: int, user_id: int) -> bool:
+        """删除仪表板（软删除：标记为已归档）"""
+        try:
+            # 验证仪表板属于用户
+            dashboard_stmt = select(Dashboard).where(
+                Dashboard.id == dashboard_id,
+                Dashboard.creator_id == user_id
+            )
+            dashboard_result = await self.db.execute(dashboard_stmt)
+            dashboard = dashboard_result.scalar_one_or_none()
+            
+            if not dashboard:
+                return False
+            
+            # 软删除：标记为已归档
+            stmt = update(Dashboard).where(
+                Dashboard.id == dashboard_id,
+                Dashboard.creator_id == user_id
+            ).values(
+                archived=True,
+                updated_at=datetime.utcnow()
+            )
+            
+            await self.db.execute(stmt)
+            await self.db.commit()
+            
+            logger.info(f"仪表板软删除成功: {dashboard.name} (ID: {dashboard_id})")
+            return True
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"删除仪表板失败: {str(e)}")
+            raise Exception(f"删除仪表板失败: {str(e)}")

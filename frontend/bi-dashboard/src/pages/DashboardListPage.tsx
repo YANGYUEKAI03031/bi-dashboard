@@ -90,10 +90,12 @@ export const DashboardListPage: React.FC = () => {
 
   const handleDelete = async (record: Dashboard) => {
     try {
-      // 这里预留真实删除接口
-      message.success('仪表盘删除成功（请在后端实现实际删除接口）');
+      await DashboardService.deleteDashboard(record.id);
+      message.success('仪表盘删除成功');
+      // 从列表中移除已删除的仪表盘
       setDashboards(prev => prev.filter(d => d.id !== record.id));
     } catch (error: any) {
+      console.error('删除仪表盘失败:', error);
       message.error(error?.message || '删除仪表盘失败');
     }
   };

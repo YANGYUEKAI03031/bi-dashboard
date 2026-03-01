@@ -87,6 +87,21 @@ interface Dashboard {
   layout?: any;
 }
 
+interface GridLayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  static?: boolean;
+  isDraggable?: boolean;
+  isResizable?: boolean;
+}
+
 // 统一的仪表盘卡片最小网格尺寸（宽=列数，高=行数）
 // 这里约等于「新图表3」在画布上的默认宽高：3 列 x 1.5 行。
 const MIN_CARD_COLS = 3;
@@ -102,6 +117,98 @@ const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
     data_source_id: chartResponse.database_id,
     created_by: chartResponse.creator_id,
   };
+};
+
+// 辅助函数：从错误对象中提取错误消息
+const getErrorMessage = (error: any, defaultMessage: string): string => {
+  // 如果是 Error 实例
+  if (error instanceof Error) {
+    // 如果 message 是 [object Object]，说明原始错误对象被错误地转换了
+    // 尝试从 error 对象本身提取信息
+    if (error.message === '[object Object]' || error.message === '') {
+      // 尝试从 error 对象的其他属性提取
+      const errorObj = error as any;
+      if (errorObj.detail && typeof errorObj.detail === 'string') {
+        return errorObj.detail;
+      }
+      if (errorObj.error && typeof errorObj.error === 'string') {
+        return errorObj.error;
+      }
+      if (errorObj.msg && typeof errorObj.msg === 'string') {
+        return errorObj.msg;
+      }
+      // 尝试序列化整个 error 对象（排除 message 属性）
+      try {
+        const { message, ...rest } = errorObj;
+        const jsonStr = JSON.stringify(rest);
+        if (jsonStr && jsonStr !== '{}' && jsonStr !== 'null') {
+          return jsonStr.length > 200 ? jsonStr.substring(0, 200) + '...' : jsonStr;
+        }
+      } catch (e) {
+        // 序列化失败，继续
+      }
+      return defaultMessage || '发生未知错误';
+    }
+    return error.message || defaultMessage;
+  }
+  
+  // 如果是字符串，检查是否是 [object Object]
+  if (typeof error === 'string') {
+    if (error === '[object Object]') {
+      return defaultMessage || '发生未知错误';
+    }
+    return error;
+  }
+  
+  // 如果是对象，尝试提取错误消息
+  if (error && typeof error === 'object') {
+    // 优先使用常见的错误消息字段
+    if (error.message && typeof error.message === 'string') {
+      // 如果 message 是 [object Object]，跳过它
+      if (error.message !== '[object Object]') {
+        return error.message;
+      }
+    }
+    if (error.detail && typeof error.detail === 'string') {
+      return error.detail;
+    }
+    if (error.error && typeof error.error === 'string') {
+      return error.error;
+    }
+    if (error.msg && typeof error.msg === 'string') {
+      return error.msg;
+    }
+    
+    // 如果 error.message 是对象，尝试递归提取
+    if (error.message && typeof error.message === 'object') {
+      const nestedMsg = getErrorMessage(error.message, '');
+      if (nestedMsg && nestedMsg !== '' && nestedMsg !== '[object Object]') {
+        return nestedMsg;
+      }
+    }
+    
+    // 尝试 JSON 序列化（避免 [object Object]）
+    try {
+      const jsonStr = JSON.stringify(error, null, 2);
+      if (jsonStr && jsonStr !== '{}' && jsonStr !== 'null') {
+        // 如果 JSON 太长，截取前200个字符
+        return jsonStr.length > 200 ? jsonStr.substring(0, 200) + '...' : jsonStr;
+      }
+    } catch (e) {
+      // JSON 序列化失败，继续尝试其他方法
+    }
+    
+    // 尝试调用 toString 方法
+    if (typeof error.toString === 'function') {
+      const str = error.toString();
+      if (str && str !== '[object Object]') {
+        return str;
+      }
+    }
+  }
+  
+  // 如果都不行，返回默认消息
+  return defaultMessage;
 };
 
 interface DashboardEditorPageProps {
@@ -276,7 +383,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           });
         }
       } catch (error: any) {
-        if (!cancelled) message.error(error?.message || '加载仪表盘编辑数据失败');
+        if (!cancelled) message.error(getErrorMessage(error, '加载仪表盘编辑数据失败'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -329,7 +436,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         // 表单校验错误，不提示
         return;
       }
-      message.error(error?.message || '保存仪表盘信息失败');
+      message.error(getErrorMessage(error, '保存仪表盘信息失败'));
     } finally {
       setSaving(false);
     }
@@ -421,7 +528,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       setWidgetModalOpen(false);
     } catch (error: any) {
       if (error?.errorFields) return;
-      message.error(error?.message || '保存标题组件失败');
+      message.error(getErrorMessage(error, '保存标题组件失败'));
     } finally {
       setWidgetSaving(false);
     }
@@ -438,7 +545,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       }
       message.success('标题组件已移除');
     } catch (error: any) {
-      message.error(error?.message || '移除标题组件失败');
+      message.error(getErrorMessage(error, '移除标题组件失败'));
     }
   };
 
@@ -454,8 +561,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         chart_id: chartId,
         card_row: 0,
         card_col: 0,
-        size_x: MIN_CARD_COLS,
-        size_y: MIN_CARD_ROWS,
+        size_x: Math.round(MIN_CARD_COLS),
+        size_y: Math.round(MIN_CARD_ROWS),
       });
 
       const chartData = charts.find(c => c.id === chartId);
@@ -473,7 +580,35 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       dashboardRef.current = updatedDashboard;
       message.success('图表已添加到仪表盘');
     } catch (error: any) {
-      message.error(error?.message || '添加图表失败');
+      // 记录详细错误信息以便调试
+      console.error('[DashboardEditor] handleAddChart error:', error);
+      console.error('[DashboardEditor] Error type:', typeof error);
+      console.error('[DashboardEditor] Error instanceof Error:', error instanceof Error);
+      if (error && typeof error === 'object') {
+        console.error('[DashboardEditor] Error keys:', Object.keys(error));
+        console.error('[DashboardEditor] Error.message:', error.message);
+        console.error('[DashboardEditor] Error.message type:', typeof error.message);
+        console.error('[DashboardEditor] Error.detail:', error.detail);
+        console.error('[DashboardEditor] Error.error:', error.error);
+        console.error('[DashboardEditor] Error.msg:', error.msg);
+        // 尝试获取所有属性（包括不可枚举的）
+        try {
+          const allProps = Object.getOwnPropertyNames(error);
+          console.error('[DashboardEditor] All error properties:', allProps);
+          allProps.forEach(prop => {
+            try {
+              console.error(`[DashboardEditor] Error.${prop}:`, (error as any)[prop]);
+            } catch (e) {
+              console.error(`[DashboardEditor] Cannot access Error.${prop}:`, e);
+            }
+          });
+        } catch (e) {
+          console.error('[DashboardEditor] Cannot get error properties:', e);
+        }
+      }
+      const errorMsg = getErrorMessage(error, '添加图表失败');
+      console.error('[DashboardEditor] Extracted error message:', errorMsg);
+      message.error(errorMsg);
     } finally {
       setAddingChart(false);
     }
@@ -492,10 +627,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       setAddingChart(true);
       const newCard = await DashboardService.addChartToDashboard(dashboard.id, {
         chart_id: chartId,
-        card_row: Math.max(0, pos.y),
-        card_col: Math.max(0, pos.x),
-        size_x: Math.max(pos.w ?? MIN_CARD_COLS, MIN_CARD_COLS),
-        size_y: Math.max(pos.h ?? MIN_CARD_ROWS, MIN_CARD_ROWS),
+        card_row: Math.max(0, Math.round(pos.y)),
+        card_col: Math.max(0, Math.round(pos.x)),
+        size_x: Math.round(Math.max(pos.w ?? MIN_CARD_COLS, MIN_CARD_COLS)),
+        size_y: Math.round(Math.max(pos.h ?? MIN_CARD_ROWS, MIN_CARD_ROWS)),
       });
 
       const chartData = charts.find(c => c.id === chartId);
@@ -513,7 +648,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       dashboardRef.current = updatedDashboard;
       message.success('图表已添加到仪表盘');
     } catch (error: any) {
-      message.error(error?.message || '添加图表失败');
+      message.error(getErrorMessage(error, '添加图表失败'));
     } finally {
       setAddingChart(false);
     }
@@ -532,11 +667,20 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     <div
       key={chart.id}
       className="dashboard-editor-chart-search-item"
-      draggable
+      draggable={true}
       onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('chartId', chart.id.toString());
-        e.dataTransfer.setData('text/plain', chart.id.toString());
+        try {
+          console.log('[DashboardEditor] DragStart for chart:', chart.id);
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.dropEffect = 'copy';
+          // 设置多种格式的数据，确保兼容性
+          e.dataTransfer.setData('chartId', chart.id.toString());
+          e.dataTransfer.setData('text/plain', chart.id.toString());
+          e.dataTransfer.setData('application/json', JSON.stringify({ chartId: chart.id }));
+          console.log('[DashboardEditor] DragStart data set:', chart.id.toString());
+        } catch (error) {
+          console.error('[DashboardEditor] DragStart error:', error);
+        }
       }}
       onClick={() => {
         handleAddChart(chart.id);
@@ -572,7 +716,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       dashboardRef.current = updatedDashboard;
       message.success('已从仪表盘移除图表');
     } catch (error: any) {
-      message.error(error?.message || '移除图表失败');
+      message.error(getErrorMessage(error, '移除图表失败'));
     }
   };
 
@@ -759,7 +903,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       message.success('仪表盘删除成功（请在后端实现实际删除接口）');
       navigate('/dashboard');
     } catch (error: any) {
-      message.error(error?.message || '删除仪表盘失败');
+      message.error(getErrorMessage(error, '删除仪表盘失败'));
     }
   };
 
@@ -852,7 +996,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     setDashboard(prev => (prev ? hydrateDashboardCards(prev, converted) : prev));
                     message.success('图表列表已刷新');
                   } catch (e: any) {
-                    message.error(e?.message || '刷新图表列表失败');
+                    message.error(getErrorMessage(e, '刷新图表列表失败'));
                   }
                 }}
               >
@@ -1047,10 +1191,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       if (!card) return;
 
                       const updates: any = {};
-                      if (card.card_row !== item.y) updates.card_row = item.y;
-                      if (card.card_col !== item.x) updates.card_col = item.x;
-                      if (card.size_x !== item.w) updates.size_x = item.w;
-                      if (card.size_y !== item.h) updates.size_y = item.h;
+                      if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
+                      if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
+                      if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
+                      if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
 
                       if (Object.keys(updates).length > 0) {
                         changes.push({ cardId: card.id, updates });
@@ -1089,17 +1233,37 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     }
                   }, 250);
                 }}
-                onDrop={(layout: any, item: any, e: DragEvent) => {
+                onDrop={(layout: GridLayoutItem[], item: GridLayoutItem, e: DragEvent) => {
                   try {
-                    const raw =
-                      e.dataTransfer?.getData('chartId') ||
-                      e.dataTransfer?.getData('text/plain') ||
-                      '';
+                    console.log('[DashboardEditor] onDrop triggered', { layout, item, e });
+                    if (!e || !e.dataTransfer) {
+                      console.warn('[DashboardEditor] No dataTransfer in drop event');
+                      return;
+                    }
+                    // 尝试多种方式获取数据
+                    let raw = '';
+                    try {
+                      raw = e.dataTransfer.getData('chartId') || e.dataTransfer.getData('text/plain') || '';
+                    } catch (err) {
+                      console.warn('[DashboardEditor] Failed to get data from dataTransfer:', err);
+                    }
+                    console.log('[DashboardEditor] Drop data:', raw);
+                    if (!raw) {
+                      console.warn('[DashboardEditor] No chartId found in drop data');
+                      message.warning('无法获取图表ID，请重试');
+                      return;
+                    }
                     const chartId = Number.parseInt(raw, 10);
-                    if (!Number.isFinite(chartId)) return;
+                    if (!Number.isFinite(chartId) || chartId <= 0) {
+                      console.warn('[DashboardEditor] Invalid chartId:', chartId);
+                      message.warning('无效的图表ID');
+                      return;
+                    }
+                    console.log('[DashboardEditor] Adding chart at position:', { chartId, x: item.x, y: item.y, w: item.w, h: item.h });
                     handleAddChartAt(chartId, { x: item.x, y: item.y, w: item.w, h: item.h });
-                  } catch {
-                    // ignore
+                  } catch (error) {
+                    console.error('[DashboardEditor] Drop error:', error);
+                    message.error(getErrorMessage(error, '拖拽添加图表失败'));
                   }
                 }}
               >
