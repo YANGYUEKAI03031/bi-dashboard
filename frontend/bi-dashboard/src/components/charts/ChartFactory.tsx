@@ -341,10 +341,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // 估算 Y 轴刻度文字大致占用的宽度，用于在 grid.left / grid.right 上做平衡，
     // 让「真正的绘图区」而不是整张画布的左上角更接近卡片视觉中心。
     const estimateYAxisLabelWidth = () => {
-      if (!yFields.length || !sortedData.length) return 32;
+      if (!yFields.length || !sortedData.length) return 40; // 增加默认值
 
       const sampleCount = Math.min(sortedData.length, 50);
       let maxChars = 0;
+      let maxValue = 0;
 
       for (let i = 0; i < sampleCount; i++) {
         const row = sortedData[i];
@@ -355,12 +356,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           if (v == null) continue;
           const s = typeof v === 'number' ? v.toString() : String(v);
           maxChars = Math.max(maxChars, s.length);
+          // 对于数字，也考虑数值大小（大数字可能需要更多空间）
+          if (typeof v === 'number') {
+            maxValue = Math.max(maxValue, Math.abs(v));
+          }
         }
       }
 
       if (maxChars === 0) maxChars = 3;
-      const charWidth = 6; // 经验值：一个字符约 6px
-      const padding = 10;
+      const charWidth = 7; // 稍微增加字符宽度估算（考虑字体和间距）
+      // 对于大数字，可能需要更多空间（考虑千分位、科学计数法等）
+      const valueBasedPadding = maxValue > 1000 ? 8 : 0;
+      const padding = 12 + valueBasedPadding; // 增加基础 padding
       return maxChars * charWidth + padding;
     };
 
@@ -410,42 +417,98 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
      * 这里的关键点：
      * - ECharts 的 grid.left / grid.right 是「整个坐标系」到容器边缘的距离，
      *   Y 轴刻度文字大部分会落在 grid.left 这一块区域里。
-     * - 如果简单把左右 padding 设成完全对称（left = right），那么视觉上会出现：
-     *   左侧 = 轴标签 + 轴线 + 空白，右侧 = 纯空白，看起来就像“图偏左”。
-     * - 为了平衡这个效果，我们在 left 上额外叠加一部分 Y 轴文字宽度，而保持 right 较为紧凑，
-     *   这样「整个图形块（包括 Y 轴刻度）」相对卡片会更接近几何居中。
+     * - 为了让 grid 区域（绘图区）在容器中居中，我们需要考虑 Y 轴标签的宽度。
+     * - 策略：让 grid 区域本身居中，Y 轴标签占用 grid.left 的空间。
+     *   这样 X 轴标签（nameLocation: 'middle'）就能和 grid 区域对齐。
      */
-    const extraLeftForYAxis = Math.min(
-      // 把预估宽度的一部分挪到 left 上，避免补偿过头
-      Math.round(yAxisLabelWidthEstimate * 0.7),
-      // 同时做一个上限，避免在极端大值时 left 过大导致绘图区被压缩
-      isVeryNarrowCanvas ? 32 : 40
+    // 计算 Y 轴标签占用的实际宽度（包括一些边距）
+    // 注意：ECharts 的 Y 轴标签会占用 grid.left 区域内的空间
+    // 我们需要更准确地估算这个宽度，以确保 grid 区域居中
+    // 增加额外的安全边距，确保 Y 轴标签不会被裁剪
+    const yAxisLabelSpace = Math.max(
+      Math.round(yAxisLabelWidthEstimate * 1.2), // 增加 20% 的安全边距
+      isVeryNarrowCanvas ? 35 : 50 // 增加最小空间要求
     );
+    
+    // 关键修复：将 containLabel 默认设置为 false
+    // 因为 containLabel: true 会让 ECharts 自动调整 grid.left，导致我们的居中设置失效
+    // 通过手动预留足够的空间（yAxisLabelSpace），我们可以更好地控制布局
+    const useContainLabel = config.grid?.containLabel !== undefined ? config.grid.containLabel : false;
+    
+    // 为了让整个图表（包括 Y 轴标签）在容器中视觉居中：
+    // - 左侧总宽度（包括 Y 轴标签）= baseSidePadding + yAxisLabelSpace
+    // - 右侧宽度 = gridRight
+    // - 要让整体视觉居中，需要：左侧总宽度 = 右侧宽度
+    // - 所以 gridRight = baseSidePadding + yAxisLabelSpace
+    // - 这样 grid 区域会稍微偏右，但加上左侧的 Y 轴标签后，整体视觉上居中
+    // 注意：grid 区域的中心 = (gridLeft + containerWidth - gridRight) / 2
+    // 如果 gridLeft = gridRight，那么 grid 区域中心 = containerWidth / 2（容器中心）
+    // 但视觉上，整个图表（包括 Y 轴标签）的中心会偏右，因为 Y 轴标签在左侧
+    // 所以我们需要让 grid 区域稍微偏左，这样加上 Y 轴标签后，整体视觉上居中
+    // 策略：让 gridRight 稍大一些，使 grid 区域稍微偏左
+    // 但考虑到 Y 轴标签的实际占用可能小于 yAxisLabelSpace（因为我们增加了 20% 的安全边距），
+    // 我们让 gridRight 稍微小一些，使 grid 区域稍微偏左，这样整体视觉上更居中
+    const gridLeft = baseSidePadding + yAxisLabelSpace;
+    // 为了让整体视觉居中，右侧应该等于左侧总宽度
+    // 但考虑到 Y 轴标签的实际占用可能小于 yAxisLabelSpace，我们稍微调整
+    // 尝试让 gridRight = baseSidePadding + yAxisLabelSpace，看看效果
+    const gridRight = baseSidePadding + yAxisLabelSpace; // 让左右对称，使整体视觉居中
 
     const defaultGridOption: any = {
-      left: baseSidePadding + extraLeftForYAxis,
-      right: baseSidePadding,
+      left: gridLeft,
+      right: gridRight,
       bottom: defaultGridBottom,
       // If the card already renders a title, ECharts title is empty; avoid wasting top space.
       top: showTitle ? (compact ? 34 : 44) : (compact ? 10 : 12),
-      containLabel: true
+      // 默认设置为 false，避免 ECharts 自动调整 grid 区域导致居中失效
+      containLabel: useContainLabel
     };
+    // 确保用户传入的 config.grid 不会覆盖我们的 left/right 设置（除非用户明确指定）
     const gridOption: any = {
       ...defaultGridOption,
-      ...(config.grid ?? {})
+      ...(config.grid ?? {}),
+      // 如果用户没有明确指定 left/right，使用我们的居中设置
+      ...(config.grid?.left === undefined ? { left: gridLeft } : {}),
+      ...(config.grid?.right === undefined ? { right: gridRight } : {})
     };
 
-    // 让 ECharts 的标题与实际绘图区（grid）的几何中心对齐，避免出现
-    // “标题在整张画布正中，而坐标轴/数据区域因为 Y 轴文字偏移到一侧”的观感不一致。
-    const titleLeft =
+    // 计算 grid 的实际中心位置（考虑 Y 轴标签占用的空间）
+    // 这个中心位置用于让标题和 X 轴名称都基于相同的参考点对齐
+    // 注意：grid 区域的左边界是 gridOption.left，右边界是 containerWidth - gridOption.right
+    // 所以 grid 区域的中心 = gridOption.left + (containerWidth - gridOption.left - gridOption.right) / 2
+    // 简化后 = (gridOption.left + containerWidth - gridOption.right) / 2
+    const gridCenterPosition =
       containerWidth > 0 &&
       typeof gridOption.left === 'number' &&
       typeof gridOption.right === 'number'
-        ? `${(
-            ((gridOption.left + (containerWidth - gridOption.right)) / 2) /
-            containerWidth
-          ).toFixed(3)}%`
+        ? (gridOption.left + (containerWidth - gridOption.right)) / 2
+        : containerWidth / 2;
+    
+    // 让 ECharts 的标题与 grid 的几何中心对齐
+    // 这样标题和 X 轴名称（nameLocation: 'middle'）就会基于相同的参考点对齐
+    const titleLeft =
+      containerWidth > 0
+        ? `${((gridCenterPosition / containerWidth) * 100).toFixed(3)}%`
         : 'center';
+    
+    // 调试信息：输出关键参数以便排查问题
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ChartFactory] Grid layout:', {
+        containerWidth,
+        gridLeft: gridOption.left,
+        gridRight: gridOption.right,
+        yAxisLabelWidthEstimate,
+        yAxisLabelSpace,
+        gridCenterPosition,
+        titleLeft,
+        containLabel: gridOption.containLabel,
+        baseSidePadding,
+        // 计算实际的 grid 区域宽度和中心
+        gridAreaWidth: containerWidth - (gridOption.left as number) - (gridOption.right as number),
+        gridAreaCenter: gridCenterPosition,
+        containerCenter: containerWidth / 2
+      });
+    }
 
     const baseOption: any = {
       backgroundColor: 'transparent',
@@ -490,13 +553,15 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         type: 'category',
         data: xAxisData,
         name: config.xAxis?.name || (compact ? '' : 'X轴'),
-        // 默认放中间，避免右侧被 grid 裁剪导致显示不全（如“支…”）
+        // 默认放中间，与标题居中对齐
+        // nameLocation: 'middle' 是相对于 grid 区域的中间，与标题的 gridCenterPosition 对齐
         nameLocation: config.xAxis?.nameLocation ?? 'middle',
         nameGap: config.xAxis?.nameGap ?? effectiveXAxisNameGap,
         nameTextStyle: {
           fontSize: 12,
           color: '#4a5568',
           padding: [8, 0, 0, 0],
+          align: 'center', // 确保文本居中对齐，而不是左对齐
           ...(config.xAxis?.nameTextStyle || {})
         },
         axisLine: {

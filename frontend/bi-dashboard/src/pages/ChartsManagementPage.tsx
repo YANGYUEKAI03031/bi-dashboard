@@ -1,6 +1,6 @@
 // e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm } from 'antd';
 import { DataSourceService } from '../services/dataSourceService';
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,8 +51,6 @@ export const ChartsManagementPage: React.FC = () => {
   const [charts, setCharts] = useState<ChartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [chartToDelete, setChartToDelete] = useState<number | null>(null);
   const [editingChart, setEditingChart] = useState<ChartItem | null>(null);
   
   // 字段数据状态
@@ -238,9 +236,6 @@ export const ChartsManagementPage: React.FC = () => {
     } catch (error) {
       console.error('删除图表失败:', error);
       message.error('删除图表失败，请重试');
-    } finally {
-      setDeleteModalVisible(false);
-      setChartToDelete(null);
     }
   };
 
@@ -429,31 +424,30 @@ export const ChartsManagementPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 150,
+      fixed: 'right' as const,
       render: (_: any, record: ChartItem) => (
-        <div className="chart-actions">
-          <Button 
-            type="link" 
-            icon={<EditOutlined />} 
-            className="edit-btn chart-action-btn"
+        <Space size="small" wrap>
+          <Button
+            type="link"
+            icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
             size="small"
           >
             编辑
           </Button>
-          <Button 
-            type="link" 
-            icon={<DeleteOutlined />} 
-            className="delete-btn chart-action-btn"
-            onClick={() => {
-              setChartToDelete(record.id);
-              setDeleteModalVisible(true);
-            }}
-            size="small"
+          <Popconfirm
+            title="确定删除这个图表吗？"
+            okText="删除"
+            okButtonProps={{ danger: true }}
+            cancelText="取消"
+            onConfirm={() => handleDelete(record.id)}
           >
-            删除
-          </Button>
-        </div>
+            <Button type="link" icon={<DeleteOutlined />} danger size="small">
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -518,30 +512,12 @@ export const ChartsManagementPage: React.FC = () => {
                 pageSize: 10,
                 showTotal: (total) => `共 ${total} 个图表`,
               }}
-              scroll={{ y: 500 }}
+              scroll={{ y: 500, x: 'max-content' }}
               bordered={false}
             />
           )}
         </div>
       </div>
-
-      {/* 删除确认对话框 */}
-      {deleteModalVisible && (
-        <Modal
-          title="确认删除"
-          open={true}
-          onOk={() => chartToDelete && handleDelete(chartToDelete)}
-          onCancel={() => {
-            setDeleteModalVisible(false);
-            setChartToDelete(null);
-          }}
-          okText="确认删除"
-          cancelText="取消"
-        >
-          <p>确定要删除此图表吗？删除后无法恢复。</p>
-          <p><strong>注意：</strong>此操作将永久删除图表及其配置。</p>
-        </Modal>
-      )}
 
       {/* 编辑模态框 */}
       {editingChart && (

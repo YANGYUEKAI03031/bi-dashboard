@@ -103,6 +103,7 @@ export const DashboardListPage: React.FC = () => {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
+      ellipsis: true,
     },
     {
       title: '描述',
@@ -115,16 +116,20 @@ export const DashboardListPage: React.FC = () => {
       dataIndex: 'cards',
       key: 'cards',
       render: (cards: any[] | undefined) => cards?.length ?? 0,
+      width: 100,
     },
     {
       title: '操作',
       key: 'action',
+      width: 150,
+      fixed: 'right' as const,
       render: (_: any, record: Dashboard) => (
-        <Space>
+        <Space size="small" wrap>
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            size="small"
           >
             编辑
           </Button>
@@ -135,7 +140,7 @@ export const DashboardListPage: React.FC = () => {
             cancelText="取消"
             onConfirm={() => handleDelete(record)}
           >
-            <Button type="link" icon={<DeleteOutlined />} danger>
+            <Button type="link" icon={<DeleteOutlined />} danger size="small">
               删除
             </Button>
           </Popconfirm>
@@ -176,6 +181,7 @@ export const DashboardListPage: React.FC = () => {
             dataSource={dashboards}
             columns={columns}
             pagination={false}
+            scroll={{ x: 'max-content' }}
           />
         </Card>
       </div>
