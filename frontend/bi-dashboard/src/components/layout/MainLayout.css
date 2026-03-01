@@ -24,9 +24,9 @@
 }
 
 .sidebar.collapsed {
-  width: 80px;
-  flex-basis: 80px;
-  min-width: 80px;
+  width: 70px;
+  flex-basis: 70px;
+  min-width: 70px;
 }
 
 .logo {
@@ -68,6 +68,8 @@
   flex: 1;
   padding: 20px 0;
   transition: opacity 0.3s ease, transform 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sidebar.collapsed .nav-menu {
@@ -431,4 +433,87 @@
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  /* Firefox 滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+/* 主内容区域滚动条样式 - 现代化设计 */
+.content-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.content-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+  background-clip: padding-box;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:active {
+  background: rgba(0, 0, 0, 0.45);
+  background-clip: padding-box;
+}
+
+
+/* 侧边栏滚动条样式 - 现代化设计 */
+.sidebar .nav-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar .nav-menu::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.sidebar .nav-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar .nav-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+  background-clip: padding-box;
+}
+
+.sidebar .nav-menu::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.45);
+  background-clip: padding-box;
+}
+
+/* 折叠状态下的滚动条样式 */
+.sidebar.collapsed .nav-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar.collapsed .nav-menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.sidebar.collapsed .nav-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Firefox 滚动条样式 */
+.sidebar .nav-menu {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.sidebar.collapsed .nav-menu {
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }

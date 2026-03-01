@@ -9,7 +9,6 @@ import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate } from 'react-router-dom';
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
-import { ReportsSidebar } from '../components/reports/ReportsSidebar';
 
 const { Title, Paragraph } = Typography;
 
@@ -359,8 +358,6 @@ export const ReportsPage: React.FC = () => {
   const [dashboardDetails, setDashboardDetails] = useState<Map<number, Dashboard>>(new Map());
   const [loadingDashboard, setLoadingDashboard] = useState<Set<number>>(new Set());
   const [charts, setCharts] = useState<Chart[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
 
@@ -445,51 +442,6 @@ export const ReportsPage: React.FC = () => {
     navigate(`/dashboard/edit/${activeDashboardId}`);
   };
 
-  // 从 settings 或 tags 字段提取标签
-  const getDashboardTags = (dashboard: Dashboard): string[] => {
-    // 优先从 settings.tags 获取
-    if (dashboard.settings?.tags) {
-      if (Array.isArray(dashboard.settings.tags)) {
-        return dashboard.settings.tags;
-      } else if (typeof dashboard.settings.tags === 'string') {
-        return dashboard.settings.tags.split(',').map(t => t.trim()).filter(Boolean);
-      }
-    }
-    // 兼容直接使用 tags 字段的情况
-    if (dashboard.tags) {
-      if (Array.isArray(dashboard.tags)) {
-        return dashboard.tags;
-      } else if (typeof dashboard.tags === 'string') {
-        return dashboard.tags.split(',').map(t => t.trim()).filter(Boolean);
-      }
-    }
-    return [];
-  };
-
-  // 根据选中的标签筛选仪表盘
-  const filteredDashboards = React.useMemo(() => {
-    if (!selectedTag) return dashboards;
-    return dashboards.filter(dashboard => {
-      const dashboardTags = getDashboardTags(dashboard);
-      return dashboardTags.includes(selectedTag);
-    });
-  }, [dashboards, selectedTag]);
-
-  // 当标签改变时，如果当前选中的仪表盘不在筛选结果中，则选中第一个
-  useEffect(() => {
-    if (filteredDashboards.length > 0) {
-      const currentExists = filteredDashboards.some(d => d.id === activeDashboardId);
-      if (!currentExists) {
-        const firstDashboardId = filteredDashboards[0].id;
-        setActiveDashboardId(firstDashboardId);
-        if (!dashboardDetails.has(firstDashboardId)) {
-          loadDashboardDetails(firstDashboardId, charts);
-        }
-      }
-    } else if (filteredDashboards.length === 0 && activeDashboardId !== null) {
-      setActiveDashboardId(null);
-    }
-  }, [filteredDashboards, activeDashboardId, dashboardDetails, charts]);
 
   const handleDashboardCreate = async (newDashboard: Dashboard) => {
     // 刷新仪表盘列表
@@ -521,12 +473,6 @@ export const ReportsPage: React.FC = () => {
         description: values.description ? values.description.trim() : '',
       };
 
-      // 如果有选中的标签，添加到 settings.tags 字段
-      if (selectedTag) {
-        dashboardData.settings = {
-          tags: [selectedTag]
-        };
-      }
 
       const newDashboard = await DashboardService.createDashboard(dashboardData);
       message.success('仪表盘创建成功');
@@ -541,21 +487,6 @@ export const ReportsPage: React.FC = () => {
 
   return (
     <div className="reports-page-wrapper">
-      <ReportsSidebar
-        dashboards={dashboards}
-        selectedTag={selectedTag}
-        onTagSelect={setSelectedTag}
-        onDashboardCreate={handleDashboardCreate}
-        onDashboardSelect={(dashboardId) => {
-          setActiveDashboardId(dashboardId);
-          if (!dashboardDetails.has(dashboardId)) {
-            loadDashboardDetails(dashboardId, charts);
-          }
-        }}
-        activeDashboardId={activeDashboardId}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(v => !v)}
-      />
       <div className="reports-page">
         <div className="page-header">
           <div className="page-header-left">
@@ -584,10 +515,10 @@ export const ReportsPage: React.FC = () => {
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <Spin size="large" tip="加载中..." />
           </div>
-        ) : filteredDashboards.length === 0 ? (
+        ) : dashboards.length === 0 ? (
           <Card>
             <Empty
-              description={selectedTag ? `目录 "${selectedTag}" 下暂无仪表盘` : "暂无仪表盘，请先在仪表盘页面创建"}
+              description="暂无仪表盘，请先在仪表盘页面创建"
               style={{ padding: '40px 0' }}
             />
           </Card>
@@ -599,7 +530,7 @@ export const ReportsPage: React.FC = () => {
               onTabClick={handleTabClick}
               type="card"
               items={[
-                ...filteredDashboards.map(dashboard => ({
+                ...dashboards.map(dashboard => ({
                   key: dashboard.id.toString(),
                   label: dashboard.name,
                   children: currentDashboard ? (
@@ -625,7 +556,7 @@ export const ReportsPage: React.FC = () => {
 
       {/* 创建仪表盘模态框 */}
       <Modal
-        title={`创建新仪表盘${selectedTag ? ` - ${selectedTag}` : ''}`}
+        title="创建新仪表盘"
         open={createModalVisible}
         onCancel={() => {
           setCreateModalVisible(false);
@@ -645,12 +576,6 @@ export const ReportsPage: React.FC = () => {
           <Form.Item name="description" label="描述">
             <Input.TextArea placeholder="输入仪表盘描述" rows={3} />
           </Form.Item>
-
-          {selectedTag && (
-            <Form.Item label="目录">
-              <Input value={selectedTag} disabled />
-            </Form.Item>
-          )}
 
           <Form.Item>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

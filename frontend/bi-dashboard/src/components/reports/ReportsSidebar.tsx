@@ -220,12 +220,6 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
             <Input.TextArea placeholder="输入仪表盘描述" rows={3} />
           </Form.Item>
 
-          {selectedTagForCreate && (
-            <Form.Item label="目录">
-              <Input value={selectedTagForCreate} disabled />
-            </Form.Item>
-          )}
-
           <Form.Item>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Button onClick={() => {
