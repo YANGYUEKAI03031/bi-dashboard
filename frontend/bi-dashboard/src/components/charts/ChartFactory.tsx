@@ -381,6 +381,12 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       : (yFields.length > 1 && (config.legend?.show !== false));
 
     // 图例配置：移动到顶部，避免占用底部空间，让图表在卡片内更居中
+    // 计算图例的 top 位置：如果有标题，图例应该在标题下方
+    const titleHeightForLegend = showTitle ? (compact ? 32 : 40) : 0;
+    const legendTopOffset = titleHeightForLegend > 0 
+      ? titleHeightForLegend + (compact ? 8 : 12) // 标题下方留出间距
+      : (compact ? 12 : 16); // 没有标题时，从顶部开始
+    
     const defaultLegendOption: any = {
       data: yFields.map(field => field),
       show: defaultLegendShow,
@@ -392,7 +398,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       itemWidth: 14,
       itemHeight: 14,
       left: 'center',
-      top: compact ? 4 : 8,
+      top: legendTopOffset,
       orient: 'horizontal'
     };
     const legendOption: any = {
@@ -454,12 +460,23 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // 尝试让 gridRight = baseSidePadding + yAxisLabelSpace，看看效果
     const gridRight = baseSidePadding + yAxisLabelSpace; // 让左右对称，使整体视觉居中
 
+    // 估算标题和图例在顶部占用的空间，避免"标题/图例压进绘图区"
+    // 增加预留空间，确保标题和图例有足够空间显示，不会与绘图区重叠
+    const estimatedTitleHeight = showTitle ? (compact ? 32 : 40) : 0; // 增加标题高度估算（包含 padding）
+    const legendIsVisible = !!legendOption.show;
+    const estimatedLegendHeight = legendIsVisible ? (compact ? 28 : 32) : 0; // 增加图例高度估算
+    const baseTopPadding = compact ? 12 : 16; // 增加基础顶部间距
+    const gridTop =
+      baseTopPadding +
+      estimatedTitleHeight +
+      (estimatedLegendHeight > 0 ? estimatedLegendHeight + 8 : 0); // 增加图例与标题之间的间距
+
     const defaultGridOption: any = {
       left: gridLeft,
       right: gridRight,
       bottom: defaultGridBottom,
-      // If the card already renders a title, ECharts title is empty; avoid wasting top space.
-      top: showTitle ? (compact ? 34 : 44) : (compact ? 10 : 12),
+      // 为标题和顶部图例预留足够空间，避免文字进入绘图区
+      top: gridTop,
       // 默认设置为 false，避免 ECharts 自动调整 grid 区域导致居中失效
       containLabel: useContainLabel
     };
@@ -516,7 +533,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       title: showTitle
         ? {
             text: titleText,
-            left: titleLeft,
+            left: 'center', // 标题居中显示
+            top: compact ? 12 : 16, // 显式设置标题顶部位置
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
