@@ -118,6 +118,17 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          
+          <Route 
+            path="/reports/:pageId" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <ReportsPage />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
          
           {/* 添加可视化构建器路由 */}
           <Route 

@@ -14,5 +14,6 @@ class User(Base):
     # 关系定义
     created_visualizations = relationship("VisualizationCard", back_populates="creator")
     created_dashboards = relationship("Dashboard", back_populates="creator")
+    created_report_pages = relationship("ReportPage", back_populates="creator")
     def __repr__(self):
         return f"<User(userID={self.userID}, accountname={self.accountname})>"

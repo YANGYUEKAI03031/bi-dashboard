@@ -6,49 +6,265 @@
   overflow: hidden;
   margin: -24px; /* 抵消 content-wrapper 的 padding */
   padding: 0;
+  background-color: #f5f5f5;
 }
 
 .reports-page {
   flex: 1;
-  padding: 20px;
+  padding: 24px;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   min-width: 0;
   margin: 0;
+  gap: 16px;
 }
 
-.page-header {
-  margin-bottom: 20px;
+/* 移除导航卡片和内容卡片之间的空隙 */
+.reports-dashboard-nav-card {
+  margin-bottom: -16px;
+}
+
+.reports-content-area {
+  margin-top: 0;
+}
+
+.reports-content-card {
+  margin-top: 0;
+}
+
+/* 第一个白色卡片：页面头部 */
+.reports-header-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: none;
+  margin-bottom: 0;
+}
+
+.reports-header-card .ant-card-body {
+  padding: 24px;
+}
+
+.reports-header-content {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
 }
 
-.page-header-left {
+.reports-header-left {
+  flex: 1;
   min-width: 0;
 }
 
-.page-header-right {
+.reports-header-right {
   flex: 0 0 auto;
 }
 
-.page-header h1,
-.page-header h2 {
-  margin: 0 0 8px 0;
-  color: #333;
+/* 第二个白色卡片：仪表盘导航区域 */
+.reports-dashboard-nav-card {
+  background: #fff;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: none;
+  margin-bottom: -16px;
+  position: relative;
+  z-index: 1;
 }
 
-.page-header p {
+.reports-dashboard-nav-card .ant-card-body {
+  padding: 0;
+}
+
+.reports-dashboard-nav {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0 24px;
+}
+
+/* 仪表盘标签包装器 */
+.dashboard-nav-tag-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
   margin: 0;
+}
+
+/* 仪表盘标签样式 - 类似 Ant Design Tabs */
+.dashboard-nav-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0;
+  font-family: inherit;
+  line-height: 22px;
+  white-space: nowrap;
+  height: 46px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.dashboard-nav-tag:hover {
+  color: #1890ff;
+}
+
+.dashboard-nav-tag.active {
+  color: #1890ff;
+  font-weight: 500;
+  border-bottom-color: #1890ff;
+}
+
+/* 三个点操作按钮 */
+.dashboard-nav-tag-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: 4px;
+  margin-right: 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  opacity: 0.6;
+}
+
+.dashboard-nav-tag-more-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.65);
+  opacity: 1;
+}
+
+.dashboard-nav-tag-wrapper:hover .dashboard-nav-tag-more-btn {
+  opacity: 1;
+}
+
+/* 数字徽章 - 橙色 */
+.dashboard-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: #fff;
+  color: #ff7a00;
+  border: 1px solid #ff7a00;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0;
+}
+
+/* 添加仪表盘标签 - 灰色文字 */
+.dashboard-nav-add-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0;
+  font-family: inherit;
+  line-height: 22px;
+  min-width: auto;
+}
+
+.dashboard-nav-add-tag:hover {
+  color: #1890ff;
+  background: rgba(24, 144, 255, 0.06);
+}
+
+/* 添加图标按钮 - 灰色 */
+.dashboard-nav-add-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0;
+  font-family: inherit;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-nav-add-icon-btn:hover {
+  color: #1890ff;
+}
+
+.dashboard-nav-empty-text {
+  display: inline-block;
+  color: rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  line-height: 46px;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 0 16px;
+}
+
+/* 内容区域 */
+.reports-content-area {
+  flex: 1;
+  min-height: 0;
+}
+
+.reports-content-card {
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: none;
+  margin-top: 0;
+  margin-bottom: 0;
+  position: relative;
+  z-index: 0;
+}
+
+/* 当导航卡片存在时，内容卡片应该紧贴导航卡片 */
+.reports-dashboard-nav-card + .reports-content-area .reports-content-card,
+.reports-dashboard-nav-card + .reports-content-card {
+  margin-top: 0;
+}
+
+.reports-content-card .ant-card-body {
+  padding: 24px;
 }
 
 .reports-dashboard-view {
   min-height: 400px;
-  padding: 16px 0;
+  padding: 0;
 }
 
 /* 确保Grid Layout容器正确显示 */
@@ -68,58 +284,59 @@
 
 /* 卡片样式优化 */
 .reports-dashboard-view .ant-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border-radius: 8px;
+  border: none;
+  background: #fff;
 }
 
 .reports-dashboard-view .ant-card-head {
   border-bottom: 1px solid #f0f0f0;
+  padding: 16px 20px;
+}
+
+.reports-dashboard-view .ant-card-head-title {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .reports-dashboard-view .ant-card-body {
   overflow: hidden;
-}
-
-/* Tabs样式优化 */
-.reports-page .ant-tabs-card > .ant-tabs-content {
-  margin-top: 16px;
-}
-
-.reports-page .ant-tabs-card > .ant-tabs-content > .ant-tabs-tabpane {
-  background: transparent;
-}
-
-.reports-page .ant-tabs-card .ant-tabs-tab {
-  border-radius: 6px 6px 0 0;
-  margin-right: 4px;
-}
-
-.reports-page .ant-tabs-card .ant-tabs-tab-active {
-  background: #fff;
-  border-color: #d9d9d9;
-  border-bottom-color: #fff;
-}
-
-/* 确保添加按钮标签样式和普通标签一致 */
-.reports-page .ant-tabs-card .ant-tabs-tab[data-node-key="add"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: auto;
-  padding: 8px 16px;
-}
-
-.reports-page .ant-tabs-card .ant-tabs-tab[data-node-key="add"]:hover {
-  color: #1890ff;
+  padding: 20px;
 }
 
 /* 响应式优化 */
 @media (max-width: 768px) {
   .reports-page {
-    padding: 12px;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .reports-header-card .ant-card-body,
+  .reports-dashboard-nav-card .ant-card-body,
+  .reports-content-card .ant-card-body {
+    padding: 16px;
+  }
+
+  .reports-header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reports-dashboard-nav {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashboard-nav-tag,
+  .dashboard-nav-add-tag,
+  .dashboard-nav-add-icon-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .reports-dashboard-view {
-    padding: 8px 0;
+    padding: 0;
   }
 }

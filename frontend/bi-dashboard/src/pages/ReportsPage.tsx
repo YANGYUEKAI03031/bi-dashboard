@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tabs, Card, Spin, Empty, message, Typography, Button, Space, Modal, Form, Input } from 'antd';
+import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
@@ -7,10 +7,12 @@ import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
-import { useNavigate } from 'react-router-dom';
-import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { useNavigate, useParams } from 'react-router-dom';
+import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
 const { Title, Paragraph } = Typography;
+const { Option } = Select;
 
 interface Chart {
   id: number;
@@ -352,6 +354,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { pageId } = useParams<{ pageId?: string }>();
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeDashboardId, setActiveDashboardId] = useState<number | null>(null);
@@ -360,6 +363,13 @@ export const ReportsPage: React.FC = () => {
   const [charts, setCharts] = useState<Chart[]>([]);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
+  const [reportPage, setReportPage] = useState<ReportPage | null>(null);
+  const [reportPageDashboards, setReportPageDashboards] = useState<ReportPageDashboard[]>([]);
+  const [loadingReportPage, setLoadingReportPage] = useState(false);
+  const [addDashboardModalVisible, setAddDashboardModalVisible] = useState(false);
+  const [addDashboardForm] = Form.useForm();
+  const [availableDashboardsForAdd, setAvailableDashboardsForAdd] = useState<Dashboard[]>([]);
+  const [addingDashboard, setAddingDashboard] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -367,20 +377,45 @@ export const ReportsPage: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        // 加载仪表盘列表
-        const userDashboards = await DashboardService.getUserDashboards();
-        setDashboards(userDashboards);
-
-        // 加载可用图表列表
-        const userCharts = await ChartService.getUserCharts();
-        const convertedCharts = userCharts.map(convertChartResponseToChart);
-        setCharts(convertedCharts);
-
-        // 如果有仪表盘，默认选中第一个
-        if (userDashboards.length > 0) {
-          const firstDashboardId = userDashboards[0].id;
-          setActiveDashboardId(firstDashboardId);
-          await loadDashboardDetails(firstDashboardId, convertedCharts);
+        // 如果 URL 中有 pageId，加载对应的报表页
+        if (pageId) {
+          setLoadingReportPage(true);
+          try {
+            const page = await ReportPageService.getReportPage(Number(pageId));
+            setReportPage(page);
+            
+            // 保存报表页仪表盘关联信息（包含 rpdId）
+            const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
+            setReportPageDashboards(sortedRpd);
+            
+            // 加载报表页关联的仪表盘
+            const pageDashboards = sortedRpd
+              .map(rpd => rpd.dashboard)
+              .filter((d): d is Dashboard => d !== null && d !== undefined);
+            
+            setDashboards(pageDashboards);
+            
+            // 加载可用图表列表
+            const userCharts = await ChartService.getUserCharts();
+            const convertedCharts = userCharts.map(convertChartResponseToChart);
+            setCharts(convertedCharts);
+            
+            // 如果有仪表盘，默认选中第一个
+            if (pageDashboards.length > 0) {
+              const firstDashboardId = pageDashboards[0].id;
+              setActiveDashboardId(firstDashboardId);
+              await loadDashboardDetails(firstDashboardId, convertedCharts);
+            }
+          } catch (error: any) {
+            message.error(error?.message || '加载报表页失败');
+            // 如果加载失败，回退到默认行为
+            await loadDefaultDashboards();
+          } finally {
+            setLoadingReportPage(false);
+          }
+        } else {
+          // 没有 pageId，加载所有仪表盘（原有逻辑）
+          await loadDefaultDashboards();
         }
       } catch (error: any) {
         message.error(error?.message || '加载数据失败');
@@ -389,8 +424,26 @@ export const ReportsPage: React.FC = () => {
       }
     };
 
+    const loadDefaultDashboards = async () => {
+      // 加载仪表盘列表
+      const userDashboards = await DashboardService.getUserDashboards();
+      setDashboards(userDashboards);
+
+      // 加载可用图表列表
+      const userCharts = await ChartService.getUserCharts();
+      const convertedCharts = userCharts.map(convertChartResponseToChart);
+      setCharts(convertedCharts);
+
+      // 如果有仪表盘，默认选中第一个
+      if (userDashboards.length > 0) {
+        const firstDashboardId = userDashboards[0].id;
+        setActiveDashboardId(firstDashboardId);
+        await loadDashboardDetails(firstDashboardId, convertedCharts);
+      }
+    };
+
     loadData();
-  }, [user]);
+  }, [user, pageId]);
 
   const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[]) => {
     // 如果已经加载过，直接返回
@@ -427,12 +480,7 @@ export const ReportsPage: React.FC = () => {
   };
 
   const handleTabClick = (key: string, e: React.MouseEvent<Element, MouseEvent> | React.KeyboardEvent<Element>) => {
-    // 如果是添加按钮，阻止默认行为并打开创建对话框
-    if (key === 'add') {
-      e.preventDefault();
-      e.stopPropagation();
-      handleCreateFromTab();
-    }
+    // 不再需要，因为已经改用按钮
   };
 
   const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
@@ -441,7 +489,6 @@ export const ReportsPage: React.FC = () => {
     if (!activeDashboardId) return;
     navigate(`/dashboard/edit/${activeDashboardId}`);
   };
-
 
   const handleDashboardCreate = async (newDashboard: Dashboard) => {
     // 刷新仪表盘列表
@@ -457,8 +504,36 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
+  const openAddDashboardModalForReportPage = async () => {
+    if (!pageId) return;
+
+    try {
+      // 加载所有用户仪表盘，并过滤掉已经在当前报表页中的
+      const userDashboards = await DashboardService.getUserDashboards();
+      const existingIds = new Set(dashboards.map(d => d.id));
+      const candidates = userDashboards.filter(d => !existingIds.has(d.id));
+
+      if (candidates.length === 0) {
+        message.info('暂无可添加的仪表盘，请先在仪表盘页面创建。');
+        return;
+      }
+
+      setAvailableDashboardsForAdd(candidates);
+      setAddDashboardModalVisible(true);
+    } catch (error: any) {
+      console.error('加载可添加的仪表盘失败:', error);
+      message.error(error?.message || '加载可添加的仪表盘失败');
+    }
+  };
+
   const handleCreateFromTab = () => {
-    setCreateModalVisible(true);
+    // 在具体报表页中，+ 号用于“添加仪表盘到当前报表页”
+    if (pageId) {
+      openAddDashboardModalForReportPage();
+    } else {
+      // 在 /reports 总览页中，仍然保留“创建新仪表盘”的能力
+      setCreateModalVisible(true);
+    }
   };
 
   const handleCreateDashboard = async (values: any) => {
@@ -485,20 +560,137 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
+  const handleAddDashboardToReportPage = async (values: any) => {
+    if (!pageId) {
+      message.error('当前不在具体报表页中，无法添加仪表盘。');
+      return;
+    }
+
+    const dashboardId = values.dashboardId;
+    if (!dashboardId) {
+      message.error('请选择要添加的仪表盘');
+      return;
+    }
+
+    try {
+      setAddingDashboard(true);
+
+      // 计算排序序号：当前已关联仪表盘数量 + 1
+      const orderIndex = dashboards.length + 1;
+
+      await ReportPageService.addDashboardToReportPage(Number(pageId), {
+        dashboard_id: dashboardId,
+        order_index: orderIndex,
+      });
+
+      // 在前端状态中追加该仪表盘
+      const addedDashboard =
+        availableDashboardsForAdd.find(d => d.id === dashboardId) ||
+        dashboards.find(d => d.id === dashboardId);
+
+      if (addedDashboard) {
+        setDashboards(prev => [...prev, addedDashboard]);
+      }
+
+      // 选中新添加的仪表盘，并确保其详情被加载
+      setActiveDashboardId(dashboardId);
+      if (!dashboardDetails.has(dashboardId)) {
+        await loadDashboardDetails(dashboardId, charts);
+      }
+
+      // 重新加载报表页以获取最新数据
+      const page = await ReportPageService.getReportPage(Number(pageId));
+      setReportPage(page);
+      
+      const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
+      setReportPageDashboards(sortedRpd);
+      
+      const pageDashboards = sortedRpd
+        .map(rpd => rpd.dashboard)
+        .filter((d): d is Dashboard => d !== null && d !== undefined);
+      
+      setDashboards(pageDashboards);
+
+      // 选中新添加的仪表盘，并确保其详情被加载
+      setActiveDashboardId(dashboardId);
+      if (!dashboardDetails.has(dashboardId)) {
+        await loadDashboardDetails(dashboardId, charts);
+      }
+
+      message.success('已将仪表盘添加到当前报表页');
+      setAddDashboardModalVisible(false);
+      addDashboardForm.resetFields();
+    } catch (error: any) {
+      console.error('添加仪表盘到报表页失败:', error);
+      message.error(error?.message || '添加仪表盘失败，请稍后重试');
+    } finally {
+      setAddingDashboard(false);
+    }
+  };
+
+  const handleRemoveDashboardFromReportPage = async (rpdId: number, dashboardName: string) => {
+    if (!pageId) {
+      message.error('当前不在具体报表页中，无法移除仪表盘。');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认移除',
+      content: `确定要从当前报表页移除仪表盘"${dashboardName}"吗？`,
+      okText: '确认',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await ReportPageService.removeDashboardFromReportPage(rpdId);
+          
+          // 重新加载报表页
+          const page = await ReportPageService.getReportPage(Number(pageId));
+          setReportPage(page);
+          
+          const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
+          setReportPageDashboards(sortedRpd);
+          
+          const pageDashboards = sortedRpd
+            .map(rpd => rpd.dashboard)
+            .filter((d): d is Dashboard => d !== null && d !== undefined);
+          
+          setDashboards(pageDashboards);
+          
+          // 如果移除的是当前选中的仪表盘，切换到第一个（如果还有的话）
+          if (pageDashboards.length > 0) {
+            const firstDashboardId = pageDashboards[0].id;
+            setActiveDashboardId(firstDashboardId);
+            if (!dashboardDetails.has(firstDashboardId)) {
+              await loadDashboardDetails(firstDashboardId, charts);
+            }
+          } else {
+            setActiveDashboardId(null);
+          }
+          
+          message.success('已从报表页移除仪表盘');
+        } catch (error: any) {
+          console.error('移除仪表盘失败:', error);
+          message.error(error?.message || '移除仪表盘失败，请稍后重试');
+        }
+      },
+    });
+  };
+
   return (
     <div className="reports-page-wrapper">
       <div className="reports-page">
-        <div className="page-header">
-          <div className="page-header-left">
-            <Title level={2} style={{ margin: 0 }}>
-              报表中心
-            </Title>
-            <Paragraph style={{ margin: '8px 0 0 0', color: '#666' }}>
-              查看和管理您的仪表盘报表
-            </Paragraph>
-          </div>
-          <div className="page-header-right">
-            <Space>
+        {/* 第一个白色卡片：页面头部 */}
+        <Card className="reports-header-card">
+          <div className="reports-header-content">
+            <div className="reports-header-left">
+              <Title level={2} style={{ margin: 0, fontWeight: 600 }}>
+                {reportPage ? reportPage.name : '报表中心'}
+              </Title>
+              <Paragraph style={{ margin: '8px 0 0 0', color: '#666', fontSize: '14px' }}>
+                {reportPage ? reportPage.description || '查看报表页中的仪表盘' : '查看和管理您的仪表盘报表'}
+              </Paragraph>
+            </div>
+            <div className="reports-header-right">
               <Button
                 type="primary"
                 icon={<EditOutlined />}
@@ -507,50 +699,116 @@ export const ReportsPage: React.FC = () => {
               >
                 编辑当前仪表盘
               </Button>
-            </Space>
+            </div>
           </div>
-        </div>
+        </Card>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <Spin size="large" tip="加载中..." />
-          </div>
+        {/* 第二个白色卡片：仪表盘导航区域 */}
+        {!loading && !loadingReportPage && (
+          <Card className="reports-dashboard-nav-card">
+            <div className="reports-dashboard-nav">
+              {dashboards.length > 0 ? (
+                <>
+                  {dashboards.map((dashboard, index) => {
+                    // 找到对应的 ReportPageDashboard 以获取 rpdId
+                    const rpd = reportPageDashboards.find(rpd => rpd.dashboard_id === dashboard.id);
+                    
+                    const menuItems: MenuProps['items'] = pageId ? [
+                      {
+                        key: 'remove',
+                        label: '从报表页移除',
+                        icon: <DeleteOutlined />,
+                        danger: true,
+                        onClick: () => {
+                          if (rpd) {
+                            handleRemoveDashboardFromReportPage(rpd.id, dashboard.name);
+                          }
+                        },
+                      },
+                    ] : [];
+                    
+                    return (
+                      <div key={dashboard.id} className="dashboard-nav-tag-wrapper">
+                        <button
+                          className={`dashboard-nav-tag ${activeDashboardId === dashboard.id ? 'active' : ''}`}
+                          onClick={() => handleTabChange(dashboard.id.toString())}
+                        >
+                          {dashboard.name}
+                        </button>
+                        {pageId && rpd && (
+                          <Dropdown
+                            menu={{ items: menuItems }}
+                            trigger={['click']}
+                            placement="bottomRight"
+                          >
+                            <button
+                              className="dashboard-nav-tag-more-btn"
+                              onClick={(e) => e.stopPropagation()}
+                              title="更多操作"
+                            >
+                              <MoreOutlined />
+                            </button>
+                          </Dropdown>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button
+                    className="dashboard-nav-add-icon-btn"
+                    onClick={handleCreateFromTab}
+                    title="添加仪表盘"
+                  >
+                    <PlusOutlined />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="dashboard-nav-empty-text">暂无仪表盘</span>
+                  <button
+                    className="dashboard-nav-add-icon-btn"
+                    onClick={handleCreateFromTab}
+                    title="添加仪表盘"
+                  >
+                    <PlusOutlined />
+                  </button>
+                </>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* 内容区域：仪表盘视图 */}
+        {loading || loadingReportPage ? (
+          <Card className="reports-content-card">
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Spin size="large" tip="加载中..." />
+            </div>
+          </Card>
         ) : dashboards.length === 0 ? (
-          <Card>
+          <Card className="reports-content-card">
             <Empty
-              description="暂无仪表盘，请先在仪表盘页面创建"
+              description={reportPage ? "该报表页暂无仪表盘" : "暂无仪表盘，请先在仪表盘页面创建"}
               style={{ padding: '40px 0' }}
             />
           </Card>
         ) : (
-          <Card>
-            <Tabs
-              activeKey={activeDashboardId?.toString() || undefined}
-              onChange={handleTabChange}
-              onTabClick={handleTabClick}
-              type="card"
-              items={[
-                ...dashboards.map(dashboard => ({
-                  key: dashboard.id.toString(),
-                  label: dashboard.name,
-                  children: currentDashboard ? (
-                    <DashboardView dashboard={currentDashboard} />
-                  ) : loadingDashboard.has(dashboard.id) ? (
-                    <div style={{ textAlign: 'center', padding: '40px' }}>
-                      <Spin tip="加载仪表盘内容..." />
-                    </div>
-                  ) : (
-                    <Empty description="加载失败，请刷新重试" />
-                  ),
-                })),
-                {
-                  key: 'add',
-                  label: <PlusOutlined />,
-                  children: null,
-                },
-              ]}
-            />
-          </Card>
+          <div className="reports-content-area">
+            {currentDashboard ? (
+              <Card className="reports-content-card">
+                <DashboardView dashboard={currentDashboard} />
+              </Card>
+            ) : activeDashboardId && loadingDashboard.has(activeDashboardId) ? (
+              <Card className="reports-content-card">
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <Spin tip="加载仪表盘内容..." />
+                </div>
+              </Card>
+            ) : (
+              <Card className="reports-content-card">
+                <Empty description="加载失败，请刷新重试" />
+              </Card>
+            )}
+          </div>
         )}
       </div>
 
@@ -587,6 +845,54 @@ export const ReportsPage: React.FC = () => {
               </Button>
               <Button type="primary" htmlType="submit">
                 创建
+              </Button>
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 向报表页中添加已有仪表盘的模态框（仅在具体报表页中使用） */}
+      <Modal
+        title="添加仪表盘到当前报表页"
+        open={addDashboardModalVisible}
+        onCancel={() => {
+          setAddDashboardModalVisible(false);
+          addDashboardForm.resetFields();
+        }}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={addDashboardForm} onFinish={handleAddDashboardToReportPage} layout="vertical">
+          <Form.Item
+            name="dashboardId"
+            label="选择要添加的仪表盘"
+            rules={[{ required: true, message: '请选择要添加的仪表盘' }]}
+          >
+            <Select
+              placeholder="请选择一个仪表盘"
+              showSearch
+              optionFilterProp="children"
+            >
+              {availableDashboardsForAdd.map(d => (
+                <Option key={d.id} value={d.id}>
+                  {d.name}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button
+                onClick={() => {
+                  setAddDashboardModalVisible(false);
+                  addDashboardForm.resetFields();
+                }}
+              >
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={addingDashboard}>
+                确认添加
               </Button>
             </div>
           </Form.Item>

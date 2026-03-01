@@ -10,6 +10,7 @@ import logging
 
 from app.models.dashboard import Dashboard, DashboardCard, DashboardTab
 from app.models.visualization import VisualizationCard
+from app.models.report_page import ReportPageDashboard
 from app.schemas.dashboard import (
     DashboardCreate, DashboardUpdate, 
     DashboardCardCreate, DashboardCardUpdate
@@ -295,7 +296,7 @@ class DashboardService:
             raise Exception(f"移除图表失败: {str(e)}")
     
     async def delete_dashboard(self, dashboard_id: int, user_id: int) -> bool:
-        """删除仪表板（软删除：标记为已归档）"""
+        """删除仪表板（软删除：标记为已归档，同时删除报表页关联记录）"""
         try:
             # 验证仪表板属于用户
             dashboard_stmt = select(Dashboard).where(
@@ -307,6 +308,13 @@ class DashboardService:
             
             if not dashboard:
                 return False
+            
+            # 删除报表页与仪表盘的关联记录
+            delete_rpd_stmt = delete(ReportPageDashboard).where(
+                ReportPageDashboard.dashboard_id == dashboard_id
+            )
+            await self.db.execute(delete_rpd_stmt)
+            logger.info(f"已删除仪表盘 {dashboard_id} 的所有报表页关联记录")
             
             # 软删除：标记为已归档
             stmt = update(Dashboard).where(

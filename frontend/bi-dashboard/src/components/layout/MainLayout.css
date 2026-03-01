@@ -517,3 +517,121 @@
 .sidebar.collapsed .nav-menu {
   scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }
+
+/* 子导航样式 */
+.nav-item-group {
+  margin-bottom: 4px;
+}
+
+.nav-arrow {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  margin-left: auto;
+}
+
+.nav-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  color: var(--theme-sidebar-text-secondary);
+  cursor: pointer;
+}
+
+.nav-add-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--theme-sidebar-text);
+}
+
+.nav-submenu {
+  margin-left: 20px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar.collapsed .nav-submenu {
+  display: none;
+}
+
+.nav-subitem {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  margin: 2px 0;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--theme-sidebar-text-secondary);
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.nav-subitem:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--theme-sidebar-text);
+}
+
+.nav-subitem.active {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: var(--theme-sidebar-text);
+  font-weight: 500;
+}
+
+.nav-subitem-icon {
+  margin-right: 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.nav-subitem-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-subitem-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.nav-subitem-wrapper:hover .nav-subitem-menu-btn {
+  opacity: 1;
+  visibility: visible;
+}
+
+.nav-subitem-menu-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--theme-sidebar-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  width: 20px;
+  height: 20px;
+  z-index: 10;
+}
+
+.nav-subitem-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: var(--theme-sidebar-text);
+}
+
+.nav-subitem-wrapper .nav-subitem {
+  flex: 1;
+  padding-right: 32px;
+}

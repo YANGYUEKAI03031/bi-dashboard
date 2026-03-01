@@ -1,8 +1,10 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, message, Popconfirm } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
+import { ReportPageService, ReportPage } from '../../services/reportPageService';
 import './MainLayout.css';
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bi-dashboard.sidebarCollapsed';
@@ -36,6 +38,10 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       return false;
     }
   });
+  const [reportPages, setReportPages] = useState<ReportPage[]>([]);
+  const [reportPagesExpanded, setReportPagesExpanded] = useState<boolean>(false);
+  const [isAddModalVisible, setIsAddModalVisible] = useState<boolean>(false);
+  const [form] = Form.useForm();
 
   // When user info arrives, restore user-scoped preference (or fallback to global preference).
   useEffect(() => {
@@ -61,6 +67,26 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   }, [sidebarCollapsed, user?.id]);
 
+  // 加载报表页列表
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const loadReportPages = async () => {
+      try {
+        const pages = await ReportPageService.getUserReportPages();
+        setReportPages(pages);
+        // 如果当前路径是 /reports 或 /reports/:pageId，展开报表页
+        if (location.pathname.startsWith('/reports')) {
+          setReportPagesExpanded(true);
+        }
+      } catch (error) {
+        console.error('加载报表页列表失败:', error);
+      }
+    };
+    
+    loadReportPages();
+  }, [user?.id, location.pathname]);
+
   const handleLogout = async () => {
     await logout();
     // 手动导航到登录页面
@@ -71,7 +97,74 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     return location.pathname === path;
   };
 
+  const isReportPageActive = (pageId: number) => {
+    return location.pathname === `/reports/${pageId}`;
+  };
+
+  const handleReportToggle = () => {
+    setReportPagesExpanded(!reportPagesExpanded);
+  };
+
+  const handleAddReportPage = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 阻止事件冒泡，避免触发展开/收起
+    setIsAddModalVisible(true);
+  };
+
+  const handleAddModalOk = async () => {
+    try {
+      const values = await form.validateFields();
+      const newPage = await ReportPageService.createReportPage({
+        name: values.name,
+        description: values.description,
+        icon: values.icon || '📄',
+      });
+      message.success('报表页创建成功');
+      setIsAddModalVisible(false);
+      form.resetFields();
+      // 刷新报表页列表
+      const pages = await ReportPageService.getUserReportPages();
+      setReportPages(pages);
+      // 自动导航到新创建的报表页
+      navigate(`/reports/${newPage.id}`);
+    } catch (error: any) {
+      if (error.errorFields) {
+        // 表单验证错误
+        return;
+      }
+      message.error(error.message || '创建报表页失败');
+    }
+  };
+
+  const handleAddModalCancel = () => {
+    setIsAddModalVisible(false);
+    form.resetFields();
+  };
+
+  const handleDeleteReportPage = async (pageId: number, pageName: string) => {
+    try {
+      await ReportPageService.deleteReportPage(pageId);
+      message.success(`报表页"${pageName}"已删除`);
+      
+      // 刷新报表页列表
+      const pages = await ReportPageService.getUserReportPages();
+      setReportPages(pages);
+      
+      // 如果删除的是当前页面，导航到 /reports
+      if (isReportPageActive(pageId)) {
+        navigate('/reports');
+      }
+    } catch (error: any) {
+      message.error(error.message || '删除报表页失败');
+    }
+  };
+
   const pageTitle = useMemo(() => {
+    if (location.pathname.startsWith('/reports/')) {
+      const pageId = location.pathname.split('/')[2];
+      const page = reportPages.find(p => p.id.toString() === pageId);
+      return page ? page.name : '报表中心';
+    }
+    
     switch (location.pathname) {
       case '/dashboard':
         return '仪表盘';
@@ -90,7 +183,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       default:
         return '';
     }
-  }, [location.pathname]);
+  }, [location.pathname, reportPages]);
 
   return (
     <div className="main-layout">
@@ -110,13 +203,63 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         </div>
         
         <nav className="nav-menu">
-          <Link 
-            to="/reports" 
-            className={`nav-item ${isActive('/reports') ? 'active' : ''}`}
-          >
-            <span className="icon">📈</span>
-            <span className="nav-text">报表</span>
-          </Link>
+          <div className="nav-item-group">
+            <div 
+              className={`nav-item ${(isActive('/reports') || location.pathname.match(/^\/reports\/\d+$/)) ? 'active' : ''}`}
+              onClick={handleReportToggle}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="icon">📈</span>
+              <span className="nav-text">报表</span>
+              <span 
+                className="nav-add-btn" 
+                onClick={handleAddReportPage}
+                title="添加报表页"
+              >
+                <PlusOutlined style={{ fontSize: '12px' }} />
+              </span>
+            </div>
+            {reportPagesExpanded && (
+              <div className="nav-submenu">
+                {reportPages.map(page => (
+                  <div
+                    key={page.id}
+                    className={`nav-subitem-wrapper ${isReportPageActive(page.id) ? 'active' : ''}`}
+                  >
+                    <Link
+                      to={`/reports/${page.id}`}
+                      className={`nav-subitem ${isReportPageActive(page.id) ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <span className="nav-subitem-icon">{page.icon || '📄'}</span>
+                      <span className="nav-subitem-text">{page.name}</span>
+                    </Link>
+                    <Popconfirm
+                      title={`确定要删除报表页"${page.name}"吗？`}
+                      description="此操作不可恢复"
+                      onConfirm={() => handleDeleteReportPage(page.id, page.name)}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <button
+                        className="nav-subitem-menu-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                        title="删除报表页"
+                      >
+                        <MoreOutlined />
+                      </button>
+                    </Popconfirm>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           
           <Link 
             to="/dashboard" 
@@ -180,6 +323,44 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           {children}
         </div>
       </main>
+
+      {/* 添加报表页对话框 */}
+      <Modal
+        title="创建报表页"
+        open={isAddModalVisible}
+        onOk={handleAddModalOk}
+        onCancel={handleAddModalCancel}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form
+          form={form}
+          layout="vertical"
+        >
+          <Form.Item
+            name="name"
+            label="报表页名称"
+            rules={[{ required: true, message: '请输入报表页名称' }]}
+          >
+            <Input placeholder="请输入报表页名称" />
+          </Form.Item>
+          <Form.Item
+            name="description"
+            label="描述"
+          >
+            <Input.TextArea 
+              placeholder="请输入描述（可选）" 
+              rows={3}
+            />
+          </Form.Item>
+          <Form.Item
+            name="icon"
+            label="图标"
+          >
+            <Input placeholder="请输入图标（可选，例如：📄）" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };
