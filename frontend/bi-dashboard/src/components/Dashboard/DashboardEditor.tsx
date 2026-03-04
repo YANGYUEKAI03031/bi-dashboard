@@ -134,12 +134,30 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
    * 单个卡片的图表渲染组件：负责加载真实数据并传给 ChartFactory
    */
   const DashboardChartCard: React.FC<{ card: DashboardCard }> = ({ card }) => {
+    const [chartMeta, setChartMeta] = useState<any>(card.chart_data);
     const [chartDataRows, setChartDataRows] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-      if (!card.chart_data?.id) {
+      // 每次进入编辑器时，重新拉取最新图表配置，避免使用旧的 visualization_settings
+      let cancelled = false;
+      const loadChartMeta = async () => {
+        try {
+          const latest = await ChartService.getChart(card.chart_id);
+          if (!cancelled) setChartMeta(latest);
+        } catch (e) {
+          // 保持旧值即可，避免影响渲染
+        }
+      };
+      loadChartMeta();
+      return () => {
+        cancelled = true;
+      };
+    }, [card.chart_id]);
+
+    useEffect(() => {
+      if (!card.chart_id) {
         setError('图表数据缺失');
         return;
       }
@@ -150,7 +168,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
         setDataLoading(true);
         setError(null);
         try {
-          const data = await ChartService.executeChartQuery(card.chart_data.id);
+          const data = await ChartService.executeChartQuery(card.chart_id);
 
           if (cancelled) return;
 
@@ -164,7 +182,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
             return;
           }
 
-          const xField = card.chart_data.visualization_settings?.x_field || '';
+          const xField = chartMeta?.visualization_settings?.x_field || '';
           if (xField && data.length > 0 && !Object.keys(data[0] || {}).includes(xField)) {
             console.warn(`X轴字段 '${xField}' 在数据中不存在`);
           }
@@ -186,9 +204,9 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
       return () => {
         cancelled = true;
       };
-    }, [card.chart_data?.id]);
+    }, [card.chart_id, chartMeta?.visualization_settings]);
 
-    if (!card.chart_data) {
+    if (!chartMeta) {
       return (
         <div
           style={{
@@ -205,7 +223,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
       );
     }
 
-    let viz: any = card.chart_data.visualization_settings || {};
+    let viz: any = chartMeta.visualization_settings || {};
     if (typeof viz === 'string') {
       try {
         viz = JSON.parse(viz);
@@ -278,10 +296,26 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
       );
     }
 
+    // 调试：确认 DashboardEditor 实际传给 ChartFactory 的配置与数据（用于对比 ReportsPage）
+    // 注意：这是临时诊断日志，确认问题后可以删掉。
+    console.log('[DashboardEditor] ChartFactory input', {
+      chart_id: card.chart_id,
+      chart_type: chartMeta?.chart_type,
+      xField,
+      yFields,
+      y_agg_method: viz?.y_agg_method ?? viz?.['graph.y_agg_method'],
+      x_group_by_enabled: viz?.x_group_by_enabled,
+      sortBy,
+      sortOrder,
+      rowsSample: chartDataRows.slice(0, 5),
+      rowsCount: chartDataRows.length,
+      viz
+    });
+
     return (
       <ChartFactory
         config={{
-          type: card.chart_data.chart_type,
+          type: chartMeta.chart_type,
           title: '',
           xAxis: {
             name: viz.x_axis_title || 'X轴'
@@ -295,7 +329,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
               field: field
             })) || [],
           xField,
-          yFields,
+          yFields: Array.isArray(yFields) ? yFields : [],
           colorField: viz.color_field,
           // 仪表盘编辑视图同样支持 Y 轴聚合方式
           y_agg_method: viz.y_agg_method ?? viz['graph.y_agg_method'] ?? undefined,
@@ -303,7 +337,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
           x_group_by_enabled:
             typeof (viz as any).x_group_by_enabled === 'boolean'
               ? (viz as any).x_group_by_enabled
-              : (card.chart_data.chart_type || '').toLowerCase() !== 'scatter',
+              : (chartMeta.chart_type || '').toLowerCase() !== 'scatter',
           sort_by: sortBy,
           sort_order: sortOrder,
           legend: {
@@ -368,6 +402,13 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
                     />
                   </Space>
                 }
+                style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                bodyStyle={{
+                  flex: 1,
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'stretch'
+                }}
               >
                 <DashboardChartCard card={card} />
               </Card>

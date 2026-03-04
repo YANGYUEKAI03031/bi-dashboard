@@ -725,6 +725,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const loggedRef = useRef<string | null>(null);
 
     useEffect(() => {
       if (!card.chart?.id) {
@@ -808,8 +809,42 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const sortOrder = viz.sort_order ?? viz['graph.sort_order'] ?? undefined;
 
     // 统一字段映射
-    const xField = viz.x_field ?? (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined);
-    const yFields = viz.y_fields ?? (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
+    const xField =
+      viz.x_field ??
+      (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined) ??
+      (Array.isArray(viz['graph.dimensions']) ? viz['graph.dimensions'][0] : undefined);
+    const yFields =
+      viz.y_fields ??
+      (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined) ??
+      (Array.isArray(viz['graph.metrics']) ? viz['graph.metrics'] : undefined);
+
+    // 诊断日志：对比 ReportsPage 与 DashboardEditorPage 的 ChartFactory 入参是否一致
+    if (!dataLoading && !error && chartData.length > 0 && card.chart?.id) {
+      const logKey = [
+        card.chart.id,
+        chartData.length,
+        String(xField ?? ''),
+        Array.isArray(yFields) ? yFields.join(',') : '',
+        String(viz?.y_agg_method ?? viz?.['graph.y_agg_method'] ?? ''),
+        String(typeof viz?.x_group_by_enabled === 'boolean' ? viz.x_group_by_enabled : 'unset'),
+      ].join('|');
+      if (loggedRef.current !== logKey) {
+        loggedRef.current = logKey;
+        console.log('[DashboardEditorPage] ChartFactory input', {
+          chart_id: card.chart.id,
+          chart_type: card.chart.chart_type,
+          xField,
+          yFields,
+          y_agg_method: viz?.y_agg_method ?? viz?.['graph.y_agg_method'],
+          x_group_by_enabled: viz?.x_group_by_enabled,
+          sortBy,
+          sortOrder,
+          rowsSample: chartData.slice(0, 5),
+          rowsCount: chartData.length,
+          viz,
+        });
+      }
+    }
 
     return (
       <div style={{ height: '100%', width: '100%', position: 'relative' }}>
@@ -876,6 +911,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               xField,
               yFields,
               colorField: viz.color_field,
+              // 仪表盘编辑页同样支持 Y 轴聚合方式（与报表页一致）
+              y_agg_method: viz.y_agg_method ?? viz['graph.y_agg_method'] ?? undefined,
+              // X 轴聚合开关：优先使用持久化配置，其次按图表类型默认（散点图默认不聚合）
+              x_group_by_enabled:
+                typeof (viz as any).x_group_by_enabled === 'boolean'
+                  ? (viz as any).x_group_by_enabled
+                  : (card.chart!.chart_type || '').toLowerCase() !== 'scatter',
               sort_by: sortBy,
               sort_order: sortOrder,
               legend: {
