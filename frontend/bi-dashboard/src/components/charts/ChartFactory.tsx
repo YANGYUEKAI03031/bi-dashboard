@@ -296,68 +296,61 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         ? config.x_group_by_enabled
         : !isDetailChartType;
 
-    // 如果配置了聚合方式且启用了按 X 聚合，则先按照 X 轴字段和 Y 轴字段做聚合，再参与后续排序和绘图
+    // 先确定“用于绘图的 Y 字段列表”（优先使用传入的 yFields，其次用 series.field，最后自动识别数值列）
+    let effectiveYFields = (config.yFields || config.series.map(s => s.field) || []).filter(Boolean);
+    if (effectiveYFields.length === 0 && sourceData.length > 0 && sourceData[0] && typeof sourceData[0] === 'object') {
+      const firstItem = sourceData[0];
+      const numericFields = Object.keys(firstItem).filter(key => {
+        const value = (firstItem as any)[key];
+        return (
+          typeof value === 'number' ||
+          (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value))
+        );
+      });
+      if (numericFields.length > 0) {
+        effectiveYFields = numericFields;
+      }
+    }
+
+    // 如果配置了聚合方式且启用了按 X 聚合，则先按 X 聚合，再参与后续排序和绘图
     const baseData =
-      config.y_agg_method &&
-      xField &&
-      (config.yFields && config.yFields.length > 0) &&
-      xGroupByEnabled
-        ? aggregateDataByX(sourceData, xField, config.yFields, config.y_agg_method)
+      config.y_agg_method && xField && effectiveYFields.length > 0 && xGroupByEnabled
+        ? aggregateDataByX(sourceData, xField, effectiveYFields, config.y_agg_method)
         : sourceData;
-    
+
     // 排序处理
     let sortedData = [...baseData];
-    console.log('=== 排序处理开始 ===');
-    console.log('原始数据:', data);
-    console.log('配置信息:', { sort_by: config.sort_by, sort_order: config.sort_order, xField: xField });
-    
     if (config.sort_by && config.sort_order) {
-      console.log('开始执行排序逻辑');
       if (config.sort_by === 'x') {
         // 按X轴字段排序
-        console.log('按X轴排序:', xField);
         sortedData.sort((a, b) => {
           const valA = a[xField];
           const valB = b[xField];
-          console.log('比较值:', { valA, valB });
-          
+
           if (typeof valA === 'number' && typeof valB === 'number') {
-            const result = config.sort_order === 'asc' ? valA - valB : valB - valA;
-            console.log('数字排序结果:', result);
-            return result;
+            return config.sort_order === 'asc' ? valA - valB : valB - valA;
           }
-          
-          const result = config.sort_order === 'asc' 
-            ? String(valA).localeCompare(String(valB)) 
+
+          return config.sort_order === 'asc'
+            ? String(valA).localeCompare(String(valB))
             : String(valB).localeCompare(String(valA));
-          console.log('字符串排序结果:', result);
-          return result;
         });
-      } else if (config.sort_by === 'y' && config.yFields && config.yFields.length > 0) {
+      } else if (config.sort_by === 'y' && effectiveYFields.length > 0) {
         // 按第一个Y轴字段排序
-        const yField = config.yFields[0];
-        console.log('按Y轴排序:', yField);
+        const yField = effectiveYFields[0];
         sortedData.sort((a, b) => {
           const valA = a[yField];
           const valB = b[yField];
-          console.log('比较值:', { valA, valB });
-          
+
           if (typeof valA === 'number' && typeof valB === 'number') {
-            const result = config.sort_order === 'asc' ? valA - valB : valB - valA;
-            console.log('数字排序结果:', result);
-            return result;
+            return config.sort_order === 'asc' ? valA - valB : valB - valA;
           }
-          
-          const result = config.sort_order === 'asc' 
-            ? String(valA).localeCompare(String(valB)) 
+
+          return config.sort_order === 'asc'
+            ? String(valA).localeCompare(String(valB))
             : String(valB).localeCompare(String(valA));
-          console.log('字符串排序结果:', result);
-          return result;
         });
       }
-      console.log('排序后数据:', sortedData);
-    } else {
-      console.log('跳过排序 - 缺少必要配置');
     }
     
     const xAxisData = sortedData.map(item => {
@@ -406,26 +399,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       return String(item);
     });
 
-    // 处理系列数据 - 使用配置的yFields
-    let yFields = config.yFields || config.series.map(s => s.field) || [];
-
-    // 如果yFields为空且有数据，尝试自动检测数值字段
-    if (yFields.length === 0 && data.length > 0 && data[0]) {
-      const firstItem = data[0];
-      if (typeof firstItem === 'object') {
-        // 检测数值字段
-        const numericFields = Object.keys(firstItem).filter(key => {
-          const value = firstItem[key];
-          return typeof value === 'number' || 
-                 (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value));
-        });
-        
-        if (numericFields.length > 0) {
-          console.log('自动检测到数值字段:', numericFields);
-          yFields = numericFields; // 使用所有检测到的数值字段
-        }
-      }
-    }
+    // 处理系列数据 - 使用“最终确定”的 yFields（与聚合一致）
+    const yFields = effectiveYFields;
     
     // 默认颜色调色板
     const colorPalette = [

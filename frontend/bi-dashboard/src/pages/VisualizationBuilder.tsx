@@ -98,17 +98,27 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
               type: 'native',
               native: { query: '' }
             },
-            visualization_settings: chart.visualization_settings || {
-              graph_dimensions: [],
-              graph_metrics: [],
-              x_axis_title: "X轴",
-              y_axis_title: "Y轴",
-              x_field: "",
-              y_fields: [],
-              show_legend: true,
-              show_tooltip: true,
-              // 不再为老图表兜底注入 grid_padding，彻底交给 ChartFactory 处理
-            },
+            visualization_settings: (() => {
+              const vs = chart.visualization_settings || {};
+              // 为老图表补充缺失的默认聚合配置
+              return {
+                graph_dimensions: vs.graph_dimensions || [],
+                graph_metrics: vs.graph_metrics || [],
+                x_axis_title: vs.x_axis_title || "X轴",
+                y_axis_title: vs.y_axis_title || "Y轴",
+                x_field: vs.x_field || "",
+                y_fields: vs.y_fields || [],
+                show_legend: vs.show_legend !== false,
+                show_tooltip: vs.show_tooltip !== false,
+                // 老图表默认开启 Y 轴聚合（sum）
+                y_agg_method: vs.y_agg_method || 'sum',
+                // 老图表默认开启 X 轴聚合，根据图表类型决定
+                x_group_by_enabled: vs.x_group_by_enabled ?? (chart.chart_type || '').toLowerCase() !== 'scatter',
+                // 排序配置
+                sort_by: vs.sort_by || 'x',
+                sort_order: vs.sort_order || 'asc'
+              };
+            })(),
             database_id: chart.database_id || 1,
             creator_id: chart.creator_id
           };
@@ -686,6 +696,19 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
 
     setLoading(true);
     try {
+      // 确保聚合配置存在（容错处理）
+      const currentSettings = chartData.visualization_settings || {};
+      const yAggMethod = currentSettings.y_agg_method || 'sum';
+      const xGroupByEnabled = typeof currentSettings.x_group_by_enabled === 'boolean'
+        ? currentSettings.x_group_by_enabled
+        : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false;
+
+      console.log('=== 保存图表调试信息 ===');
+      console.log('当前 y_agg_method:', yAggMethod);
+      console.log('当前 x_group_by_enabled:', xGroupByEnabled);
+      console.log('图表类型:', chartData.chart_type);
+      console.log('getChartFieldConfig:', getChartFieldConfig(chartData.chart_type));
+
       // 构建完整的SQL查询
       let finalQuery = '';
       if (chartData.dataset_query?.native?.query) {
@@ -722,8 +745,10 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           y_axis_title: chartData.visualization_settings.y_axis_title || 'Y轴',
           show_legend: chartData.visualization_settings.show_legend !== false,
           tooltip_enabled: chartData.visualization_settings.show_tooltip !== false,
-          // Y轴聚合方式
-          y_agg_method: chartData.visualization_settings.y_agg_method || 'sum',
+          // Y轴聚合方式（使用前面确保的默认值）
+          y_agg_method: yAggMethod,
+          // 是否按 X 轴聚合（group by），持久化保存（使用前面确保的默认值）
+          x_group_by_enabled: xGroupByEnabled,
           // 排序配置
           sort_by: chartData.visualization_settings.sort_by || 'x',
           sort_order: chartData.visualization_settings.sort_order || 'asc',
@@ -735,8 +760,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         creator_id: user.id,
         is_public: false
       };
-      
-      console.log('准备保存的图表数据:', chartToSave);
+
+      console.log('最终准备保存的 visualization_settings:', chartToSave.visualization_settings);
       const savedChart = await ChartService.createChart(chartToSave);
       console.log('保存成功的图表:', savedChart);
       

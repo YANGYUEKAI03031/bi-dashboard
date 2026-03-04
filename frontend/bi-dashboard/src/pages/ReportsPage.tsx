@@ -239,7 +239,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
             x_group_by_enabled:
               typeof (viz as any).x_group_by_enabled === 'boolean'
                 ? (viz as any).x_group_by_enabled
-                : (viz.chart_type || '').toLowerCase() !== 'scatter',
+                : (card.chart!.chart_type || '').toLowerCase() !== 'scatter',
             sort_by: sortBy,
             sort_order: sortOrder,
             legend: {

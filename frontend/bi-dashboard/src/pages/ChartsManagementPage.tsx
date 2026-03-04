@@ -279,7 +279,9 @@ export const ChartsManagementPage: React.FC = () => {
 
     const yAggMethod = (settings as any)["y_agg_method"] ||
                       (settings as any)["graph.y_agg_method"];
-    
+
+    const xGroupByEnabled = (settings as any)["x_group_by_enabled"];
+
     // 设置X轴字段
     if (graphDimensions && Array.isArray(graphDimensions) && graphDimensions.length > 0) {
       chartWithFrontendSettings.visualization_settings = {
@@ -287,7 +289,7 @@ export const ChartsManagementPage: React.FC = () => {
         x_field: graphDimensions[0]
       };
     }
-    
+
     // 设置Y轴字段
     if (graphMetrics && Array.isArray(graphMetrics)) {
       chartWithFrontendSettings.visualization_settings = {
@@ -295,7 +297,7 @@ export const ChartsManagementPage: React.FC = () => {
         y_fields: graphMetrics
       };
     }
-    
+
     // 设置标题
     if (xAxisTitle) {
       chartWithFrontendSettings.visualization_settings = {
@@ -303,7 +305,7 @@ export const ChartsManagementPage: React.FC = () => {
         x_axis_title: xAxisTitle
       };
     }
-    
+
     if (yAxisTitle) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
@@ -317,8 +319,28 @@ export const ChartsManagementPage: React.FC = () => {
         ...(chartWithFrontendSettings.visualization_settings || {}),
         y_agg_method: yAggMethod
       };
+    } else {
+      // 老图表默认 Y 轴聚合方式为 sum
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        y_agg_method: 'sum'
+      };
     }
-    
+
+    // 设置 X 轴聚合开关
+    if (typeof xGroupByEnabled === 'boolean') {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        x_group_by_enabled: xGroupByEnabled
+      };
+    } else {
+      // 老图表默认开启 X 轴聚合（散点图除外）
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        x_group_by_enabled: (chart.chart_type || '').toLowerCase() !== 'scatter'
+      };
+    }
+
     // 设置默认排序配置（如果不存在的话）
     if (!chartWithFrontendSettings.visualization_settings.sort_by) {
       chartWithFrontendSettings.visualization_settings = {
@@ -377,6 +399,11 @@ export const ChartsManagementPage: React.FC = () => {
             tooltip_enabled: editingChart.visualization_settings?.show_tooltip !== false,
             // Y轴聚合方式
             y_agg_method: editingChart.visualization_settings?.y_agg_method || 'sum',
+            // 是否按 X 轴聚合（group by），持久化保存
+            x_group_by_enabled:
+              typeof editingChart.visualization_settings?.x_group_by_enabled === 'boolean'
+                ? editingChart.visualization_settings.x_group_by_enabled
+                : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
             // 排序配置
             'graph.sort_by': editingChart.visualization_settings?.sort_by || 'x',
             'graph.sort_order': editingChart.visualization_settings?.sort_order || 'asc'

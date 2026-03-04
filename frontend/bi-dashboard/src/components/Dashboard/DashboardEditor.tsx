@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/components/dashboard/DashboardEditor.tsx
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Modal, message, Row, Col, Space } from 'antd';
+import { Card, Button, Modal, message, Row, Col, Space, Spin } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../charts/ChartFactory';
 import { DashboardService } from '../../services/dashboardService';
@@ -130,6 +130,197 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
     }
   };
 
+  /**
+   * 单个卡片的图表渲染组件：负责加载真实数据并传给 ChartFactory
+   */
+  const DashboardChartCard: React.FC<{ card: DashboardCard }> = ({ card }) => {
+    const [chartDataRows, setChartDataRows] = useState<any[]>([]);
+    const [dataLoading, setDataLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      if (!card.chart_data?.id) {
+        setError('图表数据缺失');
+        return;
+      }
+
+      let cancelled = false;
+
+      const loadData = async () => {
+        setDataLoading(true);
+        setError(null);
+        try {
+          const data = await ChartService.executeChartQuery(card.chart_data.id);
+
+          if (cancelled) return;
+
+          if (!Array.isArray(data)) {
+            throw new Error('返回的数据格式不正确');
+          }
+
+          if (data.length === 0) {
+            setError('没有查询到数据');
+            setChartDataRows([]);
+            return;
+          }
+
+          const xField = card.chart_data.visualization_settings?.x_field || '';
+          if (xField && data.length > 0 && !Object.keys(data[0] || {}).includes(xField)) {
+            console.warn(`X轴字段 '${xField}' 在数据中不存在`);
+          }
+
+          setChartDataRows(data);
+        } catch (err: any) {
+          if (cancelled) return;
+          console.error('加载图表数据失败:', err);
+          setError(err.message || '数据加载失败');
+        } finally {
+          if (!cancelled) {
+            setDataLoading(false);
+          }
+        }
+      };
+
+      loadData();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [card.chart_data?.id]);
+
+    if (!card.chart_data) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ff4d4f',
+            fontSize: 12
+          }}
+        >
+          图表数据缺失
+        </div>
+      );
+    }
+
+    let viz: any = card.chart_data.visualization_settings || {};
+    if (typeof viz === 'string') {
+      try {
+        viz = JSON.parse(viz);
+      } catch (e) {
+        viz = {};
+      }
+    }
+
+    const sortBy = viz.sort_by ?? viz['graph.sort_by'] ?? undefined;
+    const sortOrder = viz.sort_order ?? viz['graph.sort_order'] ?? undefined;
+    const xField =
+      viz.x_field ??
+      (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined) ??
+      (Array.isArray(viz['graph.dimensions']) ? viz['graph.dimensions'][0] : undefined);
+    const yFields =
+      viz.y_fields ??
+      (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined) ??
+      (Array.isArray(viz['graph.metrics']) ? viz['graph.metrics'] : undefined);
+
+    if (dataLoading) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <Spin tip="加载数据中..." />
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: '#ff4d4f'
+          }}
+        >
+          <div style={{ marginBottom: 8 }}>⚠️</div>
+          <div style={{ fontSize: 12, textAlign: 'center' }}>{error}</div>
+        </div>
+      );
+    }
+
+    if (chartDataRows.length === 0) {
+      return (
+        <div
+          style={{
+            height: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: '#888'
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ marginBottom: 8 }}>📊</div>
+            <div>暂无数据</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChartFactory
+        config={{
+          type: card.chart_data.chart_type,
+          title: '',
+          xAxis: {
+            name: viz.x_axis_title || 'X轴'
+          },
+          yAxis: {
+            name: viz.y_axis_title || 'Y轴'
+          },
+          series:
+            (yFields || []).map((field: string) => ({
+              name: field,
+              field: field
+            })) || [],
+          xField,
+          yFields,
+          colorField: viz.color_field,
+          // 仪表盘编辑视图同样支持 Y 轴聚合方式
+          y_agg_method: viz.y_agg_method ?? viz['graph.y_agg_method'] ?? undefined,
+          // X 轴聚合开关：优先使用持久化配置，其次按图表类型默认
+          x_group_by_enabled:
+            typeof (viz as any).x_group_by_enabled === 'boolean'
+              ? (viz as any).x_group_by_enabled
+              : (card.chart_data.chart_type || '').toLowerCase() !== 'scatter',
+          sort_by: sortBy,
+          sort_order: sortOrder,
+          legend: {
+            show: viz.show_legend !== false,
+            bottom: 10
+          },
+          tooltip: {
+            show: viz.show_tooltip !== false,
+            trigger: 'axis'
+          }
+        }}
+        data={chartDataRows}
+        style={{ height: '100%', width: '100%' }}
+      />
+    );
+  };
+
   return (
     <div style={{ padding: '24px' }}>
       <Card 
@@ -178,26 +369,7 @@ export const DashboardEditor: React.FC<DashboardEditorProps> = ({
                   </Space>
                 }
               >
-                {card.chart_data && (
-                  <ChartFactory
-                    config={{
-                      type: card.chart_data.chart_type,
-                      title: card.chart_data.name,
-                      ...card.chart_data.visualization_settings,
-                      // 排序配置（简化容错逻辑，直接处理字符串键）
-                      sort_by: card.chart_data.visualization_settings?.['graph.sort_by'] || 
-                               card.chart_data.visualization_settings?.['graph.sort_by'] || 
-                               card.chart_data.visualization_settings?.sort_by || 
-                               'x',
-                      sort_order: card.chart_data.visualization_settings?.['graph.sort_order'] || 
-                                  card.chart_data.visualization_settings?.['graph.sort_order'] || 
-                                  card.chart_data.visualization_settings?.sort_order || 
-                                  'asc'
-                    }}
-                    data={[]} // 实际数据需要从API获取
-                    style={{ height: '100%' }}
-                  />
-                )}
+                <DashboardChartCard card={card} />
               </Card>
             </div>
           ))}

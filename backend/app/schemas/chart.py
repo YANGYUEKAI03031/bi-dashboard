@@ -35,6 +35,12 @@ class VisualizationSettings(BaseModel):
     # 排序设置
     sort_by: Optional[str] = Field(None, alias="graph.sort_by")
     sort_order: Optional[str] = Field(None, alias="graph.sort_order")
+
+    # 聚合设置（前端新增）
+    # Y 轴聚合方式：count / sum / avg / mode / median
+    y_agg_method: Optional[str] = None
+    # 是否按 X 轴聚合（group by）
+    x_group_by_enabled: Optional[bool] = None
     
     class Config:
         populate_by_name = True
