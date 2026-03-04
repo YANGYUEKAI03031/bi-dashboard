@@ -664,6 +664,16 @@ export const ChartsManagementPage: React.FC = () => {
                   const newChart = { ...editingChart, visualization_settings: newSettings };
                   setEditingChart(newChart);
                 }}
+                disabled={
+                  (() => {
+                    const vs = editingChart.visualization_settings || {};
+                    const enabled =
+                      typeof vs.x_group_by_enabled === 'boolean'
+                        ? vs.x_group_by_enabled
+                        : (editingChart.chart_type || '').toLowerCase() !== 'scatter';
+                    return !enabled;
+                  })()
+                }
                 style={{ marginTop: 8, width: '100%' }}
                 placeholder="选择Y轴统计方式"
               >

@@ -604,6 +604,11 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       if (['legend_position', 'y_agg_method'].includes(fieldType)) {
         newSettings[fieldType] = value;
       }
+
+      // 处理按 X 轴聚合开关
+      if (fieldType === 'x_group_by_enabled') {
+        newSettings.x_group_by_enabled = value;
+      }
       
       // 其他字段正常处理
       if (!['x_field', 'y_fields', 'sort_by', 'sort_order', 'color_field', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position', 'x_group_by_enabled'].includes(fieldType)) {
@@ -999,6 +1004,16 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                           <Select
                             value={chartData.visualization_settings.y_agg_method || 'sum'}
                             onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
+                            disabled={
+                              (() => {
+                                const vs = chartData.visualization_settings || {};
+                                const enabled =
+                                  typeof vs.x_group_by_enabled === 'boolean'
+                                    ? vs.x_group_by_enabled
+                                    : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false;
+                                return !enabled;
+                              })()
+                            }
                             style={{ width: '100%' }}
                             placeholder="选择Y轴统计方式"
                           >
