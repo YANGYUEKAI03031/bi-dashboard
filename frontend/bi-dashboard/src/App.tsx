@@ -7,7 +7,8 @@ import { DashboardListPage } from './pages/DashboardListPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
 import { VisualizationBuilder } from './pages/VisualizationBuilder';
-import { ChartsManagementPage } from './pages/ChartsManagementPage'; // 添加图表管理页面导入
+import { ChartsManagementPage } from './pages/ChartsManagementPage'; // 图表管理页面
+import { DataSourceManagementPage } from './pages/DataSourceManagementPage'; // 数据源管理页面
 import { DashboardEditorPage } from './pages/DashboardEditorPage';
 import { AuthService } from './services/authService';
 
@@ -149,6 +150,18 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <ChartsManagementPage />
+                </MainLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* 数据源管理路由 */}
+          <Route 
+            path="/datasources" 
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <DataSourceManagementPage />
                 </MainLayout>
               </ProtectedRoute>
             } 

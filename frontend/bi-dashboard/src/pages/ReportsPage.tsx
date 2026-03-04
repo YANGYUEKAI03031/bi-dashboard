@@ -230,6 +230,16 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
             xField,
             yFields,
             colorField: viz.color_field,
+            // 报表视图中同样支持 Y 轴聚合方式
+            y_agg_method:
+              viz.y_agg_method ??
+              viz['graph.y_agg_method'] ??
+              undefined,
+            // X 轴聚合开关：明细型图表（散点图）默认不聚合，其它默认聚合
+            x_group_by_enabled:
+              typeof (viz as any).x_group_by_enabled === 'boolean'
+                ? (viz as any).x_group_by_enabled
+                : (viz.chart_type || '').toLowerCase() !== 'scatter',
             sort_by: sortBy,
             sort_order: sortOrder,
             legend: {

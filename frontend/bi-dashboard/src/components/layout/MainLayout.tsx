@@ -185,6 +185,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         return '可视化构建器';
       case '/charts-management':
         return '图表管理';
+      case '/datasources':
+        return '数据源管理';
       case '/analytics':
         return '数据分析';
       case '/data-chain':
@@ -373,6 +375,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           >
             <span className="icon">🎨</span>
             <span className="nav-text">可视化构建</span>
+          </Link>
+
+          {/* 数据源管理 - 固定在导航底部 */}
+          <Link
+            to="/datasources"
+            className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
+          >
+            <span className="icon">🗄</span>
+            <span className="nav-text">数据源管理</span>
           </Link>
         </nav>
         

@@ -1,6 +1,6 @@
 // e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm, Switch } from 'antd';
 import { DataSourceService } from '../services/dataSourceService';
 import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,10 @@ interface ChartItem {
     // 前端使用的字段
     x_field?: string;
     y_fields?: string[];
+    // Y轴聚合方式：count / sum / avg / mode / median
+    y_agg_method?: 'count' | 'sum' | 'avg' | 'mode' | 'median';
+    // 是否按 X 聚合（group by）
+    x_group_by_enabled?: boolean;
     color_field?: string;
     x_axis_title?: string;
     y_axis_title?: string;
@@ -125,8 +129,8 @@ export const ChartsManagementPage: React.FC = () => {
       
       console.log('使用的表名:', actualTableName);
       
-      // 获取表的列信息
-      const columns = await DataSourceService.getTableColumns('mysql', actualTableName);
+      // 获取表的列信息：根据图表绑定的 databaseId 访问对应数据源
+      const columns = await DataSourceService.getTableColumns(databaseId.toString(), actualTableName);
       console.log('获取到的列信息:', columns);
       
       if (columns && columns.length > 0) {
@@ -272,6 +276,9 @@ export const ChartsManagementPage: React.FC = () => {
                       (settings as any)["graph_y_axis_title"] || 
                       (settings as any).yAxisTitle ||
                       (settings as any)["y_axis_title"];
+
+    const yAggMethod = (settings as any)["y_agg_method"] ||
+                      (settings as any)["graph.y_agg_method"];
     
     // 设置X轴字段
     if (graphDimensions && Array.isArray(graphDimensions) && graphDimensions.length > 0) {
@@ -301,6 +308,14 @@ export const ChartsManagementPage: React.FC = () => {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
         y_axis_title: yAxisTitle
+      };
+    }
+
+    // 设置Y轴聚合方式
+    if (yAggMethod) {
+      chartWithFrontendSettings.visualization_settings = {
+        ...(chartWithFrontendSettings.visualization_settings || {}),
+        y_agg_method: yAggMethod
       };
     }
     
@@ -360,6 +375,8 @@ export const ChartsManagementPage: React.FC = () => {
             y_axis_title: editingChart.visualization_settings?.y_axis_title || 'Y轴',
             show_legend: editingChart.visualization_settings?.show_legend !== false,
             tooltip_enabled: editingChart.visualization_settings?.show_tooltip !== false,
+            // Y轴聚合方式
+            y_agg_method: editingChart.visualization_settings?.y_agg_method || 'sum',
             // 排序配置
             'graph.sort_by': editingChart.visualization_settings?.sort_by || 'x',
             'graph.sort_order': editingChart.visualization_settings?.sort_order || 'asc'
@@ -637,6 +654,43 @@ export const ChartsManagementPage: React.FC = () => {
                 </Select>
               </div>
             </div>
+
+            <div style={{ marginTop: 16 }}>
+              <label>Y轴统计方式:</label>
+              <Select 
+                value={editingChart.visualization_settings?.y_agg_method || 'sum'}
+                onChange={(value) => {
+                  const newSettings = { ...editingChart.visualization_settings, y_agg_method: value };
+                  const newChart = { ...editingChart, visualization_settings: newSettings };
+                  setEditingChart(newChart);
+                }}
+                style={{ marginTop: 8, width: '100%' }}
+                placeholder="选择Y轴统计方式"
+              >
+                <Option value="count">计数</Option>
+                <Option value="sum">求和</Option>
+                <Option value="avg">平均数</Option>
+                <Option value="mode">众数</Option>
+                <Option value="median">中位数</Option>
+              </Select>
+            </div>
+            
+            <div style={{ marginTop: 16 }}>
+              <label>按X轴聚合（group by）:</label>
+              <Switch
+                checked={
+                  typeof editingChart.visualization_settings?.x_group_by_enabled === 'boolean'
+                    ? editingChart.visualization_settings.x_group_by_enabled
+                    : (editingChart.chart_type || '').toLowerCase() !== 'scatter'
+                }
+                onChange={(checked) => {
+                  const newSettings = { ...editingChart.visualization_settings, x_group_by_enabled: checked };
+                  const newChart = { ...editingChart, visualization_settings: newSettings };
+                  setEditingChart(newChart);
+                }}
+                style={{ marginLeft: 8 }}
+              />
+            </div>
             
             <div style={{ marginTop: 16 }}>
               <label>颜色字段:</label>
@@ -772,6 +826,12 @@ export const ChartsManagementPage: React.FC = () => {
                           xField: editingChart.visualization_settings?.x_field || '',
                           yFields: editingChart.visualization_settings?.y_fields || [],
                           colorField: editingChart.visualization_settings?.color_field || '',
+                          // 预览时按所选统计方式聚合 Y 轴
+                          y_agg_method: (editingChart.visualization_settings as any)?.y_agg_method,
+                          x_group_by_enabled:
+                            typeof (editingChart.visualization_settings as any)?.x_group_by_enabled === 'boolean'
+                              ? (editingChart.visualization_settings as any).x_group_by_enabled
+                              : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
                           sort_by: (editingChart.visualization_settings as any)?.sort_by,
                           sort_order: (editingChart.visualization_settings as any)?.sort_order,
                           xAxis: {

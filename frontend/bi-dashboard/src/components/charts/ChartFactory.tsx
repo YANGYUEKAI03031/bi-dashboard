@@ -94,6 +94,17 @@ interface ChartConfig {
   colorField?: string; // 颜色分组字段
   sort_by?: 'x' | 'y'; // 排序方式: 'x' 或 'y'
   sort_order?: 'asc' | 'desc'; // 排序顺序: 'asc' 或 'desc'
+  // Y轴聚合方式：count / sum / avg / mode / median
+  y_agg_method?: 'count' | 'sum' | 'avg' | 'mode' | 'median';
+  /**
+   * 是否按 X 轴字段做聚合（group by）。
+   * - true: 在设置了 y_agg_method 且存在 xField/yFields 时，先按 X 聚合再绘图
+   * - false: 不做按 X 聚合，直接用明细数据（即使配置了 y_agg_method）
+   * - 未配置(undefined): 根据图表类型决定默认值：
+   *    - 明细型图表（例如散点图）默认 false
+   *    - 其他统计型图表默认 true
+   */
+  x_group_by_enabled?: boolean;
   minHeight?: number; // 图表容器最小高度（px）
 }
 
@@ -104,6 +115,104 @@ interface ChartFactoryProps {
   onEvents?: Record<string, Function>;
   minHeight?: number; // 优先级高于 config.minHeight
 }
+
+// 根据 X 轴字段和聚合方式对原始数据做分组聚合，返回用于绘图的聚合结果
+const aggregateDataByX = (
+  data: any[],
+  xField: string,
+  yFields: string[],
+  method: 'count' | 'sum' | 'avg' | 'mode' | 'median'
+) => {
+  if (!Array.isArray(data) || data.length === 0 || !xField || !yFields?.length) {
+    return data || [];
+  }
+
+  const groups = new Map<string, { xValue: any; rows: any[] }>();
+
+  data.forEach(row => {
+    if (!row || typeof row !== 'object') return;
+    const rawX = (row as any)[xField];
+    const key = String(rawX);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.rows.push(row);
+    } else {
+      groups.set(key, { xValue: rawX, rows: [row] });
+    }
+  });
+
+  const aggregateField = (rows: any[], field: string) => {
+    const values = rows
+      .map(r => (r as any)[field])
+      .filter(v => v !== null && v !== undefined);
+
+    if (values.length === 0) return null;
+
+    switch (method) {
+      case 'count':
+        // 计数：使用行数，更符合直觉
+        return rows.length;
+      case 'sum': {
+        const nums = values
+          .map(v => (typeof v === 'number' ? v : Number(v)))
+          .filter(v => !Number.isNaN(v));
+        if (!nums.length) return null;
+        return nums.reduce((acc, v) => acc + v, 0);
+      }
+      case 'avg': {
+        const nums = values
+          .map(v => (typeof v === 'number' ? v : Number(v)))
+          .filter(v => !Number.isNaN(v));
+        if (!nums.length) return null;
+        return nums.reduce((acc, v) => acc + v, 0) / nums.length;
+      }
+      case 'mode': {
+        const freq = new Map<string, { value: any; count: number }>();
+        values.forEach(v => {
+          const key = String(v);
+          const rec = freq.get(key);
+          if (rec) {
+            rec.count += 1;
+          } else {
+            freq.set(key, { value: v, count: 1 });
+          }
+        });
+        let best: { value: any; count: number } | null = null;
+        freq.forEach(rec => {
+          if (!best || rec.count > best.count) {
+            best = rec;
+          }
+        });
+        return best ? best.value : null;
+      }
+      case 'median': {
+        const nums = values
+          .map(v => (typeof v === 'number' ? v : Number(v)))
+          .filter(v => !Number.isNaN(v))
+          .sort((a, b) => a - b);
+        if (!nums.length) return null;
+        const mid = Math.floor(nums.length / 2);
+        if (nums.length % 2 === 0) {
+          return (nums[mid - 1] + nums[mid]) / 2;
+        }
+        return nums[mid];
+      }
+      default:
+        return null;
+    }
+  };
+
+  const result: any[] = [];
+  groups.forEach(group => {
+    const record: any = { [xField]: group.xValue };
+    yFields.forEach(field => {
+      record[field] = aggregateField(group.rows, field);
+    });
+    result.push(record);
+  });
+
+  return result;
+};
 
 export const ChartFactory: React.FC<ChartFactoryProps> = ({
   config,
@@ -172,10 +281,32 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const showTitle = titleText.length > 0;
 
     // 处理xAxis数据 - 使用配置的xField
-    const xField = config.xField || (Object.keys(data[0] || {})[0]) || '';
+    const sourceData = Array.isArray(data) ? data : [];
+    const xField = config.xField || (Object.keys(sourceData[0] || {})[0]) || '';
+
+    // 按图表类型判断是否“明细型图表”（默认不按 X 聚合）
+    const chartType = (config.type || '').toLowerCase();
+    const isDetailChartType = chartType === 'scatter';
+
+    // 统一确定本次是否启用按 X 聚合：
+    // - 优先使用调用方显式传入的 x_group_by_enabled
+    // - 否则：明细型图表默认 false，其它图表默认 true
+    const xGroupByEnabled =
+      typeof config.x_group_by_enabled === 'boolean'
+        ? config.x_group_by_enabled
+        : !isDetailChartType;
+
+    // 如果配置了聚合方式且启用了按 X 聚合，则先按照 X 轴字段和 Y 轴字段做聚合，再参与后续排序和绘图
+    const baseData =
+      config.y_agg_method &&
+      xField &&
+      (config.yFields && config.yFields.length > 0) &&
+      xGroupByEnabled
+        ? aggregateDataByX(sourceData, xField, config.yFields, config.y_agg_method)
+        : sourceData;
     
     // 排序处理
-    let sortedData = [...data];
+    let sortedData = [...baseData];
     console.log('=== 排序处理开始 ===');
     console.log('原始数据:', data);
     console.log('配置信息:', { sort_by: config.sort_by, sort_order: config.sort_order, xField: xField });

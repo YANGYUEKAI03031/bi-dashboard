@@ -66,6 +66,10 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       y_axis_title: "Y轴",
       x_field: "",
       y_fields: [],
+      // Y轴聚合方式：count / sum / avg / mode / median
+      y_agg_method: 'sum',
+      // 是否按 X 聚合（group by），统计型图表默认开启，明细型图表（如散点图）默认关闭
+      x_group_by_enabled: true,
       // 添加更多配置项
       show_legend: true,
       show_tooltip: true,
@@ -161,7 +165,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: false,
           showMultipleY: false,
           title: '饼图',
-          description: '需要1个分类字段和1个数值字段'
+          description: '需要1个分类字段和1个数值字段',
+          defaultXGroupBy: true
         };
       case 'scatter':
         return {
@@ -171,7 +176,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: true,
           showMultipleY: false,
           title: '散点图',
-          description: '需要2个数值字段作为X和Y坐标'
+          description: '需要2个数值字段作为X和Y坐标',
+          // 明细型图表：默认不按 X 聚合
+          defaultXGroupBy: false
         };
       case 'radar':
         return {
@@ -181,7 +188,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: false,
           showMultipleY: true,
           title: '雷达图',
-          description: '需要多个数值字段作为维度'
+          description: '需要多个数值字段作为维度',
+          defaultXGroupBy: true
         };
       case 'boxplot':
         return {
@@ -191,7 +199,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: false,
           showMultipleY: true,
           title: '箱线图',
-          description: '需要数值字段用于箱体计算'
+          description: '需要数值字段用于箱体计算',
+          defaultXGroupBy: true
         };
       case 'funnel':
         return {
@@ -201,7 +210,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: false,
           showMultipleY: false,
           title: '漏斗图',
-          description: '需要1个阶段字段和1个数值字段'
+          description: '需要1个阶段字段和1个数值字段',
+          defaultXGroupBy: true
         };
       case 'waterfall':
         return {
@@ -211,7 +221,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: false,
           showMultipleY: false,
           title: '瀑布图',
-          description: '需要1个阶段字段和1个增量数值字段'
+          description: '需要1个阶段字段和1个增量数值字段',
+          defaultXGroupBy: true
         };
       case 'stacked_bar':
         return {
@@ -221,7 +232,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: true,
           showMultipleY: true,
           title: '堆积柱形图',
-          description: '需要1个分类字段和多个数值字段进行堆积'
+          description: '需要1个分类字段和多个数值字段进行堆积',
+          defaultXGroupBy: true
         };
       default:
         return {
@@ -231,7 +243,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showColorField: true,
           showMultipleY: true,
           title: '柱状图/折线图',
-          description: '需要1个分类字段和1个或多个数值字段'
+          description: '需要1个分类字段和1个或多个数值字段',
+          defaultXGroupBy: true
         };
     }
   };
@@ -389,10 +402,25 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     setLoading(true);
     try {
       const sources = await DataSourceService.getDataSources();
-      setDataSources(sources);
-      if (sources.length > 0) {
-        setSelectedDataSource(sources[0].type);
-        loadTables(sources[0].type);
+
+      // 过滤掉默认数据源：约定后端返回列表中的第一个为默认数据源
+      const filteredSources =
+        sources.length > 1
+          ? sources.slice(1)
+          : []; // 如果只有一个（默认）数据源，则在图表构建器中不展示
+
+      setDataSources(filteredSources);
+
+      if (filteredSources.length > 0) {
+        // 使用具体的数据源ID，而不是类型
+        const firstId = filteredSources[0].id.toString();
+        setSelectedDataSource(firstId);
+        // 同步更新当前图表所绑定的 database_id
+        setChartData(prev => ({
+          ...prev,
+          database_id: parseInt(firstId, 10) || prev.database_id,
+        }));
+        loadTables(firstId);
       }
     } catch (error: any) {
       message.error(error.message || '获取数据源失败');
@@ -401,15 +429,17 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     }
   };
 
-  const loadTables = async (dataSourceType: string) => {
+  const loadTables = async (dataSourceId: string) => {
     setLoading(true);
     try {
-      const tableList = await DataSourceService.getTables(dataSourceType);
+      const tableList = await DataSourceService.getTables(dataSourceId);
       setTables(tableList);
       
       if (tableList.length > 0) {
-        setSelectedTable(tableList[0].name);
-        loadPreviewData(tableList[0].name);
+        const firstTableName = tableList[0].name;
+        setSelectedTable(firstTableName);
+        // 显式使用当前数据源ID进行预览查询，避免误用默认数据源
+        loadPreviewData(dataSourceId, firstTableName);
       }
     } catch (error: any) {
       message.error(error.message || '获取表列表失败');
@@ -419,7 +449,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   };
 
   const handleDataSourceChange = (value: string) => {
+    // value 为后端的 Database.id（字符串形式）
     setSelectedDataSource(value);
+    setChartData(prev => ({
+      ...prev,
+      database_id: parseInt(value, 10) || prev.database_id,
+    }));
     setTables([]);
     setSelectedTable('');
     setQueryResult([]);
@@ -430,18 +465,21 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
 
   const handleTableChange = (value: string) => {
     setSelectedTable(value);
-    loadPreviewData(value);
+    // 此处使用当前选中的数据源ID
+    if (selectedDataSource) {
+      loadPreviewData(selectedDataSource, value);
+    }
   };
 
-  const loadPreviewData = async (tableName: string) => {
+  const loadPreviewData = async (dataSourceId: string, tableName: string) => {
     console.log('开始加载预览数据，表名:', tableName);
     console.log('当前数据源:', selectedDataSource);
     
     setLoading(true);
     try {
       const result = await DataSourceService.executeQuery({
-        data_source_id: selectedDataSource,
-        query: `SELECT * FROM ${tableName}`
+        data_source_id: dataSourceId,
+        query: `SELECT * FROM ${tableName}`,
       });
       
       console.log('查询结果:', result);
@@ -459,8 +497,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       setPreviewData(formattedData.slice(0, 10));
       
       const countResult = await DataSourceService.executeQuery({
-        data_source_id: selectedDataSource,
-        query: `SELECT COUNT(*) as total FROM ${tableName}`
+        data_source_id: dataSourceId,
+        query: `SELECT COUNT(*) as total FROM ${tableName}`,
       });
       
       console.log('计数结果:', countResult);
@@ -484,7 +522,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     try {
       const result = await DataSourceService.executeQuery({
         data_source_id: selectedDataSource,
-        query: `SELECT * FROM ${selectedTable}`
+        query: `SELECT * FROM ${selectedTable}`,
       });
       
       console.log('=== Execute Query Result ===');
@@ -563,12 +601,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       }
       
       // 处理字符串类型字段
-      if (['legend_position'].includes(fieldType)) {
+      if (['legend_position', 'y_agg_method'].includes(fieldType)) {
         newSettings[fieldType] = value;
       }
       
       // 其他字段正常处理
-      if (!['x_field', 'y_fields', 'sort_by', 'sort_order', 'color_field', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position'].includes(fieldType)) {
+      if (!['x_field', 'y_fields', 'sort_by', 'sort_order', 'color_field', 'show_legend', 'animation', 'rotate_labels', 'show_grid', 'legend_position', 'x_group_by_enabled'].includes(fieldType)) {
         newSettings[fieldType] = value;
       }
       
@@ -679,6 +717,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           y_axis_title: chartData.visualization_settings.y_axis_title || 'Y轴',
           show_legend: chartData.visualization_settings.show_legend !== false,
           tooltip_enabled: chartData.visualization_settings.show_tooltip !== false,
+          // Y轴聚合方式
+          y_agg_method: chartData.visualization_settings.y_agg_method || 'sum',
           // 排序配置
           sort_by: chartData.visualization_settings.sort_by || 'x',
           sort_order: chartData.visualization_settings.sort_order || 'asc',
@@ -796,8 +836,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                           placeholder="选择数据源"
                         >
                           {dataSources.map(source => (
-                            <Option key={source.type} value={source.type}>
-                              <DatabaseOutlined /> {source.name}
+                            <Option key={source.id} value={source.id}>
+                              <DatabaseOutlined /> {source.name} ({source.type})
                             </Option>
                           ))}
                         </Select>
@@ -948,6 +988,41 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                           <div style={{ marginTop: '4px', fontSize: '12px', color: '#999' }}>
                             {getChartFieldConfig(chartData.chart_type).description}
                           </div>
+                        </div>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={16} style={{ marginTop: '16px' }}>
+                      <Col span={8}>
+                        <div>
+                          <label>Y轴统计方式:</label>
+                          <Select
+                            value={chartData.visualization_settings.y_agg_method || 'sum'}
+                            onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
+                            style={{ width: '100%' }}
+                            placeholder="选择Y轴统计方式"
+                          >
+                            <Option value="count">计数</Option>
+                            <Option value="sum">求和</Option>
+                            <Option value="avg">平均数</Option>
+                            <Option value="mode">众数</Option>
+                            <Option value="median">中位数</Option>
+                          </Select>
+                        </div>
+                      </Col>
+
+                      <Col span={8}>
+                        <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                          <span>按X轴聚合（group by）:</span>
+                          <Switch
+                            checked={
+                              typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
+                                ? chartData.visualization_settings.x_group_by_enabled
+                                : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false
+                            }
+                            onChange={(checked) => handleFieldMappingChange('x_group_by_enabled', checked)}
+                            style={{ marginLeft: 8 }}
+                          />
                         </div>
                       </Col>
                     </Row>
@@ -1103,6 +1178,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                               title: '',
                               xField: chartData.visualization_settings.x_field,
                               yFields: chartData.visualization_settings.y_fields || [],
+                              // 按所选统计方式对 Y 轴做聚合
+                              y_agg_method: chartData.visualization_settings.y_agg_method,
+                              x_group_by_enabled:
+                                typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
+                                  ? chartData.visualization_settings.x_group_by_enabled
+                                  : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false,
                               sort_by: chartData.visualization_settings.sort_by,
                               sort_order: chartData.visualization_settings.sort_order,
                               

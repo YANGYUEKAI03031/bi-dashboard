@@ -776,6 +776,11 @@ export const DashboardPage: React.FC = () => {
                 const yFields =
                   viz.y_fields ??
                   (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
+                // Y 轴聚合方式：优先使用新字段，其次兼容老的 graph.y_agg_method
+                const yAggMethod =
+                  viz.y_agg_method ??
+                  viz['graph.y_agg_method'] ??
+                  undefined;
 
                 return (
                   <ChartFactory
@@ -796,6 +801,7 @@ export const DashboardPage: React.FC = () => {
                       xField,
                       yFields,
                       colorField: viz.color_field,
+                      y_agg_method: yAggMethod,
                       // 排序配置（如果没有配置则交给 ChartFactory 自己跳过排序）
                       sort_by: sortBy,
                       sort_order: sortOrder,

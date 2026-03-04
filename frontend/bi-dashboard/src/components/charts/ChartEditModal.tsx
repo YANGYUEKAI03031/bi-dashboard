@@ -68,6 +68,8 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       type: chart.chart_type,
       xField: 'category',
       yFields: ['value1'],
+      // 示例预览中默认使用求和聚合
+      y_agg_method: 'sum' as const,
       title: chart.name,
       xAxis: { name: '类别' },
       yAxis: { name: '数值' },

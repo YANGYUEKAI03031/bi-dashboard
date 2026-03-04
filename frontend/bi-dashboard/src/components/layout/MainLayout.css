@@ -70,6 +70,8 @@
   transition: opacity 0.3s ease, transform 0.3s ease;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar.collapsed .nav-menu {
@@ -88,6 +90,10 @@
   font-size: 14px;
   font-weight: 500;
   justify-content: flex-start;
+}
+
+.nav-item-bottom {
+  margin-top: auto;
 }
 
 .sidebar.collapsed .nav-item {
