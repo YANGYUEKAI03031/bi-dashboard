@@ -383,7 +383,7 @@ export const ChartsManagementPage: React.FC = () => {
           selectFields.push(...editingChart.visualization_settings.y_fields);
         }
         
-        const querySql = `SELECT ${selectFields.join(', ')} FROM ${editingChart.table_name || 'zfcount'} LIMIT 1000`;
+        const querySql = `SELECT ${selectFields.join(', ')} FROM ${editingChart.table_name || 'zfcount'}`;
         
         const updateData = {
           name: editingChart.name,

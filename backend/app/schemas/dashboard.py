@@ -55,6 +55,80 @@ class DashboardCardResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# ============ 筛选器相关 Schema ============
+
+class DashboardFilterCreate(BaseModel):
+    """创建筛选器"""
+    name: str
+    filter_type: str  # date_range, date_relative, select, multi_select, input
+    field_name: str
+    field_label: Optional[str] = None
+    dashboard_tab_id: Optional[int] = None
+    data_source_id: Optional[int] = None
+    options_table: Optional[str] = None
+    options_field: Optional[str] = None
+    options_sql: Optional[str] = None
+    default_value: Optional[Dict[str, Any]] = None
+    position: int = 0
+
+
+class DashboardFilterUpdate(BaseModel):
+    """更新筛选器"""
+    name: Optional[str] = None
+    filter_type: Optional[str] = None
+    field_name: Optional[str] = None
+    field_label: Optional[str] = None
+    dashboard_tab_id: Optional[int] = None
+    data_source_id: Optional[int] = None
+    options_table: Optional[str] = None
+    options_field: Optional[str] = None
+    options_sql: Optional[str] = None
+    default_value: Optional[Dict[str, Any]] = None
+    position: Optional[int] = None
+
+
+class DashboardFilterBindingCreate(BaseModel):
+    """创建筛选器绑定"""
+    card_id: int
+    param_name: str
+
+
+class DashboardFilterBindingResponse(BaseModel):
+    """筛选器绑定响应"""
+    id: int
+    filter_id: int
+    card_id: int
+    param_name: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class DashboardFilterResponse(BaseModel):
+    """筛选器响应"""
+    id: int
+    dashboard_id: int
+    dashboard_tab_id: Optional[int]
+    name: str
+    filter_type: str
+    field_name: str
+    field_label: Optional[str]
+    data_source_id: Optional[int]
+    options_table: Optional[str]
+    options_field: Optional[str]
+    options_sql: Optional[str]
+    default_value: Optional[Dict[str, Any]]
+    position: int
+    created_at: datetime
+    updated_at: datetime
+    bindings: List[DashboardFilterBindingResponse] = []
+    
+    class Config:
+        from_attributes = True
+
+
 class DashboardResponse(BaseModel):
     """仪表板响应"""
     id: int
@@ -68,6 +142,7 @@ class DashboardResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     cards: List[DashboardCardResponse] = []
+    filters: List[DashboardFilterResponse] = []
     
     class Config:
         from_attributes = True

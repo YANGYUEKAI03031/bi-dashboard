@@ -199,9 +199,13 @@ class ChartService:
             logger.error(f"删除图表失败: {str(e)}")
             raise Exception(f"删除图表失败: {str(e)}")
     
-    async def execute_chart_query(self, chart: VisualizationCard) -> List[Dict]:
-        """执行图表的SQL查询"""
+    async def execute_chart_query(self, chart: VisualizationCard, filter_params: Dict[str, Any] = None) -> List[Dict]:
+        """执行图表的SQL查询（支持筛选器参数 - 自动生成WHERE条件）"""
         try:
+            filter_params = filter_params or {}
+
+            logger.info(f"execute_chart_query 接收到的 filter_params: {filter_params}")
+
             # 解析dataset_query获取SQL
             dataset_query = chart.dataset_query
             if isinstance(dataset_query, str):
@@ -210,6 +214,85 @@ class ChartService:
             sql_query = dataset_query.get('native', {}).get('query', '')
             if not sql_query:
                 return []
+            
+            # ========== 方案2: 自动生成 WHERE 条件 ==========
+            # 构建WHERE子句
+            where_conditions = []
+            for param_name, param_value in filter_params.items():
+                if param_value is None or param_value == '':
+                    continue
+                    
+                # 处理日期范围 {start: '...', end: '...'}
+                if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
+                    start_value = param_value.get('start')
+                    end_value = param_value.get('end')
+                    if start_value and end_value:
+                        # 日期范围: BETWEEN
+                        condition = f"`{param_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                        where_conditions.append(condition)
+                    elif start_value:
+                        # 只有开始日期: >=
+                        condition = f"`{param_name}` >= '{start_value}'"
+                        where_conditions.append(condition)
+                    elif end_value:
+                        # 只有结束日期: <=
+                        condition = f"`{param_name}` <= '{end_value}'"
+                        where_conditions.append(condition)
+                # 处理多值列表 ['广东', '浙江']
+                elif isinstance(param_value, list) and len(param_value) > 0:
+                    values_str = "', '".join(str(v) for v in param_value)
+                    condition = f"`{param_name}` IN ('{values_str}')"
+                    where_conditions.append(condition)
+                # 处理单值 '广东'
+                else:
+                    condition = f"`{param_name}` = '{param_value}'"
+                    where_conditions.append(condition)
+            
+            # 将生成的WHERE条件拼接到SQL中
+            if where_conditions:
+                where_clause = " AND ".join(where_conditions)
+                
+                # 检查SQL是否已包含WHERE子句
+                sql_upper = sql_query.upper().strip()
+                if 'WHERE' in sql_upper:
+                    # 已有WHERE子句，追加AND条件
+                    # 找到WHERE关键字的位置，在其后面添加条件
+                    import re
+                    # 使用正则找到WHERE后面的位置
+                    match = re.search(r'\bWHERE\b', sql_query, re.IGNORECASE)
+                    if match:
+                        insert_pos = match.end()
+                        sql_query = sql_query[:insert_pos] + " " + where_clause + " AND" + sql_query[insert_pos:]
+                else:
+                    # 没有WHERE子句，需要正确插入位置
+                    # SQL正确顺序: SELECT ... FROM ... [WHERE ...] [GROUP BY ...] [ORDER BY ...] [LIMIT ...]
+                    # 需要找到 LIMIT/ORDER BY/GROUP BY 的位置，在它们之前插入 WHERE
+                    import re
+                    
+                    # 查找各个子句的位置
+                    limit_match = re.search(r'\bLIMIT\b', sql_query, re.IGNORECASE)
+                    order_match = re.search(r'\bORDER\s+BY\b', sql_query, re.IGNORECASE)
+                    group_match = re.search(r'\bGROUP\s+BY\b', sql_query, re.IGNORECASE)
+                    
+                    # 找到最早出现的位置
+                    positions = []
+                    if limit_match:
+                        positions.append(limit_match.start())
+                    if order_match:
+                        positions.append(order_match.start())
+                    if group_match:
+                        positions.append(group_match.start())
+                    
+                    if positions:
+                        # 在最早的关键字之前插入 WHERE
+                        insert_pos = min(positions)
+                        sql_query = sql_query[:insert_pos] + " WHERE " + where_clause + " " + sql_query[insert_pos:]
+                    else:
+                        # 没有找到任何关键字，直接在末尾添加（但要在;之前）
+                        sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
+            
+            logger.info(f"执行SQL查询（自动生成WHERE后）: {sql_query[:200]}...")
+            # ========== 方案2 结束 ==========
             
             # 获取数据源连接信息
             db_model = await self.db.get(Database, chart.data_source_id)
@@ -237,3 +320,35 @@ class ChartService:
         except Exception as e:
             logger.error(f"执行查询失败: {str(e)}")
             raise Exception(f"查询执行失败: {str(e)}")
+
+    async def get_filter_options(self, data_source_id: int, table_name: str, field_name: str, limit: int = 100) -> List[Any]:
+        """获取筛选器的选项列表（从数据库查询唯一值）"""
+        try:
+            # 获取数据源连接信息
+            db_model = await self.db.get(Database, data_source_id)
+            if not db_model:
+                raise Exception("数据源不存在")
+            
+            # 构建数据库连接URL
+            db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+            
+            # 构建查询SQL
+            sql_query = f"SELECT DISTINCT `{field_name}` FROM `{table_name}` ORDER BY `{field_name}` LIMIT {limit}"
+            
+            # 创建临时连接执行查询
+            temp_engine = create_async_engine(db_url)
+            try:
+                async with temp_engine.connect() as conn:
+                    result = await conn.execute(text(sql_query))
+                    rows = result.fetchall()
+                    
+                    # 提取值
+                    options = [row[0] for row in rows if row[0] is not None]
+                    
+                    return options
+            finally:
+                await temp_engine.dispose()
+                
+        except Exception as e:
+            logger.error(f"获取筛选器选项失败: {str(e)}")
+            raise Exception(f"获取筛选器选项失败: {str(e)}")

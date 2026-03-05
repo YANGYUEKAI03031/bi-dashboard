@@ -8,12 +8,13 @@ from datetime import datetime
 import json
 import logging
 
-from app.models.dashboard import Dashboard, DashboardCard, DashboardTab
+from app.models.dashboard import Dashboard, DashboardCard, DashboardTab, DashboardFilter, DashboardFilterBinding
 from app.models.visualization import VisualizationCard
 from app.models.report_page import ReportPageDashboard
 from app.schemas.dashboard import (
     DashboardCreate, DashboardUpdate, 
-    DashboardCardCreate, DashboardCardUpdate
+    DashboardCardCreate, DashboardCardUpdate,
+    DashboardFilterCreate, DashboardFilterUpdate, DashboardFilterBindingCreate
 )
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,9 @@ class DashboardService:
             # 手动加载关联的图表数据
             dashboard_card.chart = chart
             
+            # 自动绑定到已有的筛选器
+            await self.bind_filter_to_new_card(dashboard_card.id, dashboard_id)
+            
             logger.info(f"图表添加到仪表板成功: 仪表板ID {dashboard_id}, 图表ID {card_data.chart_id}")
             return dashboard_card
             
@@ -335,3 +339,395 @@ class DashboardService:
             await self.db.rollback()
             logger.error(f"删除仪表板失败: {str(e)}")
             raise Exception(f"删除仪表板失败: {str(e)}")
+
+    # ============ 筛选器相关方法 ============
+
+    async def create_filter(self, dashboard_id: int, filter_data: DashboardFilterCreate, user_id: int) -> DashboardFilter:
+        """创建筛选器"""
+        try:
+            # 验证仪表板属于用户
+            dashboard_stmt = select(Dashboard).where(
+                Dashboard.id == dashboard_id,
+                Dashboard.creator_id == user_id
+            )
+            dashboard_result = await self.db.execute(dashboard_stmt)
+            dashboard = dashboard_result.scalar_one_or_none()
+            
+            if not dashboard:
+                raise Exception("仪表板不存在或无权限访问")
+            
+            # 创建筛选器
+            filter_obj = DashboardFilter(
+                dashboard_id=dashboard_id,
+                dashboard_tab_id=filter_data.dashboard_tab_id,
+                name=filter_data.name,
+                filter_type=filter_data.filter_type,
+                field_name=filter_data.field_name,
+                field_label=filter_data.field_label,
+                data_source_id=filter_data.data_source_id,
+                options_table=filter_data.options_table,
+                options_field=filter_data.options_field,
+                options_sql=filter_data.options_sql,
+                default_value=filter_data.default_value,
+                position=filter_data.position
+            )
+            
+            self.db.add(filter_obj)
+            await self.db.commit()
+            await self.db.refresh(filter_obj)
+            
+            # 自动绑定相关图表
+            await self._auto_bind_filter_to_charts(filter_obj, dashboard_id)
+            
+            logger.info(f"筛选器创建成功: {filter_obj.name} (ID: {filter_obj.id})")
+            return filter_obj
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"创建筛选器失败: {str(e)}")
+            raise Exception(f"创建筛选器失败: {str(e)}")
+
+    async def _auto_bind_filter_to_charts(self, filter_obj: DashboardFilter, dashboard_id: int):
+        """自动根据 SQL 中的字段名，将筛选器绑定到相关图表卡片。"""
+        try:
+            cards_stmt = select(DashboardCard).where(
+                DashboardCard.dashboard_id == dashboard_id
+            )
+            cards_result = await self.db.execute(cards_stmt)
+            cards = cards_result.scalars().all()
+
+            filter_field = (filter_obj.field_name or "").lower()
+            if not filter_field:
+                return
+
+            import re
+
+            for card in cards:
+                chart_stmt = select(VisualizationCard).where(
+                    VisualizationCard.id == card.chart_id
+                )
+                chart_result = await self.db.execute(chart_stmt)
+                chart = chart_result.scalar_one_or_none()
+
+                if not chart:
+                    continue
+
+                # 优先使用已解析好的 query_sql；如果没有，则从 dataset_query 中尝试提取
+                sql_query = getattr(chart, "query_sql", None) or ""
+                if not sql_query and chart.dataset_query:
+                    try:
+                        sql_data = chart.dataset_query
+                        if isinstance(sql_data, str):
+                            import json
+                            sql_data = json.loads(sql_data)
+                        if isinstance(sql_data, dict):
+                            sql_query = sql_data.get("native", {}).get("query", "") or ""
+                    except Exception:
+                        sql_query = ""
+
+                sql_lower = sql_query.lower()
+                if not sql_lower:
+                    continue
+
+                where_pos = sql_lower.find("where")
+                if where_pos != -1:
+                    where_clause = sql_lower[where_pos:]
+                else:
+                    where_clause = sql_lower
+
+                pattern = r"(?:^|[\s\(\[\{,]|\b)" + re.escape(filter_field) + r"(?:[\s\)\]\}\.,]|$)"
+                if not re.search(pattern, where_clause):
+                    continue
+
+                existing_binding_stmt = select(DashboardFilterBinding).where(
+                    DashboardFilterBinding.filter_id == filter_obj.id,
+                    DashboardFilterBinding.card_id == card.id
+                )
+                existing_result = await self.db.execute(existing_binding_stmt)
+                existing_binding = existing_result.scalar_one_or_none()
+
+                if not existing_binding:
+                    binding = DashboardFilterBinding(
+                        filter_id=filter_obj.id,
+                        card_id=card.id,
+                        param_name=filter_obj.field_name,
+                    )
+                    self.db.add(binding)
+
+            await self.db.commit()
+            logger.info(f"筛选器自动绑定完成: 筛选器ID {filter_obj.id}")
+
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"自动绑定筛选器失败: {str(e)}")
+            raise Exception(f"自动绑定筛选器失败: {str(e)}")
+
+    async def get_filters(self, dashboard_id: int, user_id: int) -> List[DashboardFilter]:
+        """获取仪表板的所有筛选器"""
+        try:
+            # 验证仪表板属于用户
+            dashboard_stmt = select(Dashboard).where(
+                Dashboard.id == dashboard_id,
+                Dashboard.creator_id == user_id
+            )
+            dashboard_result = await self.db.execute(dashboard_stmt)
+            dashboard = dashboard_result.scalar_one_or_none()
+            
+            if not dashboard:
+                raise Exception("仪表板不存在或无权限访问")
+            
+            # 获取筛选器及其绑定关系
+            stmt = select(DashboardFilter).options(
+                selectinload(DashboardFilter.bindings)
+            ).where(
+                DashboardFilter.dashboard_id == dashboard_id
+            ).order_by(DashboardFilter.position)
+            
+            result = await self.db.execute(stmt)
+            filters = result.scalars().all()
+            
+            return filters
+            
+        except SQLAlchemyError as e:
+            logger.error(f"获取筛选器失败: {str(e)}")
+            raise Exception(f"获取筛选器失败: {str(e)}")
+
+    async def get_filter(self, filter_id: int, user_id: int) -> Optional[DashboardFilter]:
+        """获取单个筛选器详情"""
+        try:
+            stmt = select(DashboardFilter).options(
+                selectinload(DashboardFilter.bindings)
+            ).join(Dashboard).where(
+                DashboardFilter.id == filter_id,
+                Dashboard.creator_id == user_id
+            )
+            
+            result = await self.db.execute(stmt)
+            filter_obj = result.scalar_one_or_none()
+            
+            return filter_obj
+            
+        except SQLAlchemyError as e:
+            logger.error(f"获取筛选器失败: {str(e)}")
+            raise Exception(f"获取筛选器失败: {str(e)}")
+
+    async def update_filter(self, filter_id: int, filter_data: DashboardFilterUpdate, user_id: int) -> Optional[DashboardFilter]:
+        """更新筛选器"""
+        try:
+            filter_obj = await self.get_filter(filter_id, user_id)
+            if not filter_obj:
+                return None
+            
+            # 更新字段
+            update_fields: Dict[str, Any] = {}
+            if filter_data.name is not None:
+                update_fields["name"] = filter_data.name
+            if filter_data.filter_type is not None:
+                update_fields["filter_type"] = filter_data.filter_type
+            if filter_data.field_name is not None:
+                update_fields["field_name"] = filter_data.field_name
+            if filter_data.field_label is not None:
+                update_fields["field_label"] = filter_data.field_label
+            if filter_data.dashboard_tab_id is not None:
+                update_fields["dashboard_tab_id"] = filter_data.dashboard_tab_id
+            if filter_data.data_source_id is not None:
+                update_fields["data_source_id"] = filter_data.data_source_id
+            if filter_data.options_table is not None:
+                update_fields["options_table"] = filter_data.options_table
+            if filter_data.options_field is not None:
+                update_fields["options_field"] = filter_data.options_field
+            if filter_data.options_sql is not None:
+                update_fields["options_sql"] = filter_data.options_sql
+            if filter_data.default_value is not None:
+                update_fields["default_value"] = filter_data.default_value
+            if filter_data.position is not None:
+                update_fields["position"] = filter_data.position
+            
+            update_fields["updated_at"] = datetime.utcnow()
+            
+            if update_fields:
+                stmt = update(DashboardFilter).where(
+                    DashboardFilter.id == filter_id
+                ).values(update_fields)
+                
+                await self.db.execute(stmt)
+                await self.db.commit()
+                
+                # 重新获取更新后的筛选器
+                filter_obj = await self.get_filter(filter_id, user_id)
+                
+                logger.info(f"筛选器更新成功: ID {filter_id}")
+            
+            return filter_obj
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"更新筛选器失败: {str(e)}")
+            raise Exception(f"更新筛选器失败: {str(e)}")
+
+    async def delete_filter(self, filter_id: int, user_id: int) -> bool:
+        """删除筛选器"""
+        try:
+            filter_obj = await self.get_filter(filter_id, user_id)
+            if not filter_obj:
+                return False
+            
+            # 删除筛选器（级联删除绑定关系）
+            delete_stmt = delete(DashboardFilter).where(DashboardFilter.id == filter_id)
+            await self.db.execute(delete_stmt)
+            await self.db.commit()
+            
+            logger.info(f"筛选器删除成功: ID {filter_id}")
+            return True
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"删除筛选器失败: {str(e)}")
+            raise Exception(f"删除筛选器失败: {str(e)}")
+
+    async def bind_filter_to_card(self, filter_id: int, binding_data: DashboardFilterBindingCreate, user_id: int) -> Optional[DashboardFilterBinding]:
+        """手动绑定筛选器到图表卡片"""
+        try:
+            # 验证筛选器属于用户的仪表板
+            filter_obj = await self.get_filter(filter_id, user_id)
+            if not filter_obj:
+                raise Exception("筛选器不存在或无权限访问")
+            
+            # 验证卡片属于用户的仪表板
+            card_stmt = select(DashboardCard).join(Dashboard).where(
+                DashboardCard.id == binding_data.card_id,
+                Dashboard.creator_id == user_id
+            )
+            card_result = await self.db.execute(card_stmt)
+            card = card_result.scalar_one_or_none()
+            
+            if not card:
+                raise Exception("图表卡片不存在或无权限访问")
+            
+            # 检查是否已存在绑定
+            existing_stmt = select(DashboardFilterBinding).where(
+                DashboardFilterBinding.filter_id == filter_id,
+                DashboardFilterBinding.card_id == binding_data.card_id
+            )
+            existing_result = await self.db.execute(existing_stmt)
+            existing_binding = existing_result.scalar_one_or_none()
+            
+            if existing_binding:
+                # 更新已存在的绑定
+                existing_binding.param_name = binding_data.param_name
+                await self.db.commit()
+                await self.db.refresh(existing_binding)
+                return existing_binding
+            else:
+                # 创建新绑定
+                binding = DashboardFilterBinding(
+                    filter_id=filter_id,
+                    card_id=binding_data.card_id,
+                    param_name=binding_data.param_name
+                )
+                self.db.add(binding)
+                await self.db.commit()
+                await self.db.refresh(binding)
+                return binding
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"绑定筛选器失败: {str(e)}")
+            raise Exception(f"绑定筛选器失败: {str(e)}")
+
+    async def unbind_filter_from_card(self, filter_id: int, card_id: int, user_id: int) -> bool:
+        """解除筛选器与图表卡片的绑定"""
+        try:
+            # 验证筛选器属于用户的仪表板
+            filter_obj = await self.get_filter(filter_id, user_id)
+            if not filter_obj:
+                raise Exception("筛选器不存在或无权限访问")
+            
+            # 删除绑定
+            delete_stmt = delete(DashboardFilterBinding).where(
+                DashboardFilterBinding.filter_id == filter_id,
+                DashboardFilterBinding.card_id == card_id
+            )
+            await self.db.execute(delete_stmt)
+            await self.db.commit()
+            
+            logger.info(f"解除筛选器绑定成功: 筛选器ID {filter_id}, 卡片ID {card_id}")
+            return True
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"解除绑定失败: {str(e)}")
+            raise Exception(f"解除绑定失败: {str(e)}")
+
+    async def bind_filter_to_new_card(self, card_id: int, dashboard_id: int):
+        """当图表添加到仪表盘时，基于 SQL 自动绑定到当前仪表盘下的筛选器。"""
+        try:
+            filters_stmt = select(DashboardFilter).where(
+                DashboardFilter.dashboard_id == dashboard_id
+            )
+            filters_result = await self.db.execute(filters_stmt)
+            filters = filters_result.scalars().all()
+
+            # 先找到这张卡片对应的图表
+            card_stmt = select(DashboardCard).where(DashboardCard.id == card_id)
+            card_result = await self.db.execute(card_stmt)
+            card = card_result.scalar_one_or_none()
+            if not card:
+                return
+
+            chart_stmt = select(VisualizationCard).where(
+                VisualizationCard.id == card.chart_id
+            )
+            chart_result = await self.db.execute(chart_stmt)
+            chart = chart_result.scalar_one_or_none()
+
+            if not chart:
+                return
+
+            # 同样优先使用 query_sql，其次从 dataset_query 里提取
+            sql_query = getattr(chart, "query_sql", None) or ""
+            if not sql_query and chart.dataset_query:
+                try:
+                    sql_data = chart.dataset_query
+                    if isinstance(sql_data, str):
+                        import json
+                        sql_data = json.loads(sql_data)
+                    if isinstance(sql_data, dict):
+                        sql_query = sql_data.get("native", {}).get("query", "") or ""
+                except Exception:
+                    sql_query = ""
+
+            sql_lower = sql_query.lower()
+            if not sql_lower:
+                return
+
+            for filter_obj in filters:
+                filter_field = (filter_obj.field_name or "").lower()
+                if not filter_field:
+                    continue
+
+                if filter_field not in sql_lower:
+                    continue
+
+                existing_stmt = select(DashboardFilterBinding).where(
+                    DashboardFilterBinding.filter_id == filter_obj.id,
+                    DashboardFilterBinding.card_id == card_id
+                )
+                existing_result = await self.db.execute(existing_stmt)
+                existing_binding = existing_result.scalar_one_or_none()
+
+                if not existing_binding:
+                    binding = DashboardFilterBinding(
+                        filter_id=filter_obj.id,
+                        card_id=card_id,
+                        param_name=filter_obj.field_name,
+                    )
+                    self.db.add(binding)
+
+            await self.db.commit()
+            logger.info(f"新卡片自动绑定筛选器完成: 卡片ID {card_id}")
+
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"新卡片绑定筛选器失败: {str(e)}")
+            raise Exception(f"新卡片绑定筛选器失败: {str(e)}")

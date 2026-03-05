@@ -139,11 +139,45 @@ export class ChartService {
     }
   }
 
-  static async executeChartQuery(chartId: number): Promise<any[]> {
+  static async executeChartQuery(chartId: number, filterParams?: Record<string, any>): Promise<any[]> {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}/query`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filterParams || {}),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('执行图表查询失败:', error);
+      throw error;
+    }
+  }
+
+  static async getFilterOptions(dataSourceId: number, tableName: string, fieldName: string, limit?: number): Promise<string[]> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const params = new URLSearchParams({
+        data_source_id: dataSourceId.toString(),
+        table_name: tableName,
+        field_name: fieldName,
+      });
+      if (limit) {
+        params.append('limit', limit.toString());
+      }
+
+      const response = await fetch(`${API_BASE_URL}/visualization/charts/filter-options?${params}`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -156,9 +190,9 @@ export class ChartService {
       }
 
       const data = await response.json();
-      return data.data;
+      return data.options || [];
     } catch (error) {
-      console.error('执行图表查询失败:', error);
+      console.error('获取筛选器选项失败:', error);
       throw error;
     }
   }

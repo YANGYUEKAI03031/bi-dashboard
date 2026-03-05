@@ -723,8 +723,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         
         finalQuery = `SELECT ${selectFields.join(', ')} FROM ${selectedTable}`;
         
-        // 添加LIMIT防止数据过大
-        finalQuery += ' LIMIT 1000';
+        // 注意：不添加LIMIT，让用户自己决定是否需要限制
       }
       
       const chartToSave = {

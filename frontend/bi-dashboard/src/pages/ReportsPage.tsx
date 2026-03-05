@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps } from 'antd';
+import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
+import { DataSourceService } from '../services/dataSourceService';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate, useParams } from 'react-router-dom';
-import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, FilterOutlined } from '@ant-design/icons';
 import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
 const { Title, Paragraph } = Typography;
@@ -41,6 +42,31 @@ interface Dashboard {
   cards?: DashboardCard[]; // 可选，因为新创建的仪表盘可能没有 cards
   settings?: any;
   tags?: string[] | string; // 支持数组或字符串格式
+  filters?: DashboardFilter[];
+}
+
+interface DashboardFilter {
+  id: number;
+  dashboard_id: number;
+  dashboard_tab_id?: number;
+  name: string;
+  filter_type: 'date_range' | 'date_relative' | 'select' | 'multi_select' | 'input';
+  field_name: string;
+  field_label?: string;
+  data_source_id?: number;
+  options_table?: string;
+  options_field?: string;
+  options_sql?: string;
+  default_value?: any;
+  position: number;
+  bindings: DashboardFilterBinding[];
+}
+
+interface DashboardFilterBinding {
+  id: number;
+  filter_id: number;
+  card_id: number;
+  param_name: string;
 }
 
 type ChartResponse = Awaited<ReturnType<typeof ChartService.getUserCharts>>[0];
@@ -84,7 +110,7 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
 };
 
 // 图表卡片组件（只读模式）
-const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
+const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any> }> = ({ card, filterValues = {} }) => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +127,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
       setDataLoading(true);
       setError(null);
       try {
-        const data = await ChartService.executeChartQuery(card.chart!.id);
+        const data = await ChartService.executeChartQuery(card.chart!.id, filterValues);
 
         if (cancelled) return;
 
@@ -135,7 +161,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
     return () => {
       cancelled = true;
     };
-  }, [card.chart?.id]);
+  }, [card.chart?.id, filterValues]);
 
   if (!card.chart) {
     return (
@@ -261,9 +287,49 @@ const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
 };
 
 // 仪表盘视图组件
-const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
+const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<string, any>; onFilterChange?: (values: Record<string, any>) => void }> = ({ dashboard, filterValues = {}, onFilterChange }) => {
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
+  const filters = dashboard.filters || [];
+
+  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState<Record<number, boolean>>({});
+
+  // 加载筛选器选项
+  useEffect(() => {
+    filters.forEach(filter => {
+      if ((filter.filter_type === 'select' || filter.filter_type === 'multi_select') &&
+          filter.data_source_id && filter.options_table && filter.options_field) {
+        if (!filterSelectOptions[filter.id]) {
+          loadFilterOptions(filter);
+        }
+      }
+    });
+  }, [filters]);
+
+  const loadFilterOptions = async (filter: DashboardFilter) => {
+    if (!filter.data_source_id || !filter.options_table || !filter.options_field) {
+      return;
+    }
+
+    setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
+
+    try {
+      const options = await ChartService.getFilterOptions(
+        filter.data_source_id,
+        filter.options_table,
+        filter.options_field
+      );
+      setFilterSelectOptions(prev => ({
+        ...prev,
+        [filter.id]: options.map((opt: string) => ({ label: opt, value: opt }))
+      }));
+    } catch (error) {
+      console.error('加载筛选器选项失败:', error);
+    } finally {
+      setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
+    }
+  };
 
   // 统计每一行有多少张卡片，用于判断“该行是否只有 1 张图”，从而做视觉居中
   const rowCardCount = new Map<number, number>();
@@ -274,6 +340,90 @@ const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
 
   return (
     <div className="reports-dashboard-view">
+      {/* 筛选器渲染区域 */}
+      {filters.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+            {filters.map(filter => {
+              const handleFilterChange = (value: any) => {
+                const newValues = {
+                  ...filterValues,
+                  [filter.field_name]: value,
+                };
+                // 使用 onFilterChange 回调更新父组件状态
+                onFilterChange?.(newValues);
+              };
+
+              return (
+                <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>
+                    {filter.field_label || filter.name}
+                  </label>
+                  {filter.filter_type === 'date_range' && (
+                    <DatePicker.RangePicker
+                      style={{ width: 240 }}
+                      onChange={(dates) => {
+                        if (dates) {
+                          handleFilterChange({
+                            start: dates[0]?.format('YYYY-MM-DD'),
+                            end: dates[1]?.format('YYYY-MM-DD'),
+                          });
+                        } else {
+                          handleFilterChange(null);
+                        }
+                      }}
+                    />
+                  )}
+                  {filter.filter_type === 'date_relative' && (
+                    <Select
+                      style={{ width: 150 }}
+                      placeholder="选择时间范围"
+                      options={[
+                        { label: '今天', value: 'today' },
+                        { label: '昨天', value: 'yesterday' },
+                        { label: '最近7天', value: 'last_7_days' },
+                        { label: '最近30天', value: 'last_30_days' },
+                        { label: '本月', value: 'this_month' },
+                        { label: '上月', value: 'last_month' },
+                      ]}
+                      onChange={handleFilterChange}
+                    />
+                  )}
+                  {filter.filter_type === 'select' && (
+                    <Select
+                      style={{ width: 150 }}
+                      placeholder="请选择"
+                      allowClear
+                      options={filterSelectOptions[filter.id] || []}
+                      loading={filterOptionsLoading[filter.id]}
+                      onChange={handleFilterChange}
+                    />
+                  )}
+                  {filter.filter_type === 'multi_select' && (
+                    <Select
+                      style={{ width: 150 }}
+                      mode="multiple"
+                      placeholder="请选择"
+                      allowClear
+                      options={filterSelectOptions[filter.id] || []}
+                      loading={filterOptionsLoading[filter.id]}
+                      onChange={handleFilterChange}
+                    />
+                  )}
+                  {filter.filter_type === 'input' && (
+                    <Input
+                      style={{ width: 150 }}
+                      placeholder="请输入"
+                      onChange={(e) => handleFilterChange(e.target.value)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 标题组件 */}
       {widgets
         .filter((w: any) => w && w.type === 'title')
@@ -346,7 +496,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard }> = ({ dashboard }) => {
                   alignItems: 'stretch',
                 }}
               >
-                <ChartCardComponent card={card} />
+                <ChartCardComponent card={card} filterValues={filterValues} />
               </Card>
             </div>
           ))}
@@ -380,6 +530,13 @@ export const ReportsPage: React.FC = () => {
   const [addDashboardForm] = Form.useForm();
   const [availableDashboardsForAdd, setAvailableDashboardsForAdd] = useState<Dashboard[]>([]);
   const [addingDashboard, setAddingDashboard] = useState(false);
+  // 当前仪表盘的筛选器值
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+
+  // 处理筛选器变化
+  const handleFilterChange = (newValues: Record<string, any>) => {
+    setFilterValues(newValues);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -467,6 +624,9 @@ export const ReportsPage: React.FC = () => {
     try {
       const dashboard = await DashboardService.getDashboard(dashboardId);
       const hydratedDashboard = hydrateDashboardCards(dashboard, availableCharts);
+      // 加载筛选器
+      const filters = await DashboardService.getDashboardFilters(dashboardId);
+      hydratedDashboard.filters = filters;
       setDashboardDetails(prev => new Map(prev).set(dashboardId, hydratedDashboard));
     } catch (error: any) {
       message.error(`加载仪表盘详情失败: ${error?.message || '未知错误'}`);
@@ -805,7 +965,11 @@ export const ReportsPage: React.FC = () => {
           <div className="reports-content-area">
             {currentDashboard ? (
               <Card className="reports-content-card">
-                <DashboardView dashboard={currentDashboard} />
+                <DashboardView
+                  dashboard={currentDashboard}
+                  filterValues={filterValues}
+                  onFilterChange={handleFilterChange}
+                />
               </Card>
             ) : activeDashboardId && loadingDashboard.has(activeDashboardId) ? (
               <Card className="reports-content-card">

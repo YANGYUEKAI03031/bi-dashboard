@@ -29,6 +29,7 @@ class Dashboard(Base):
     creator = relationship("User", back_populates="created_dashboards")
     dashboard_cards = relationship("DashboardCard", back_populates="dashboard", cascade="all, delete-orphan")
     tabs = relationship("DashboardTab", back_populates="dashboard", cascade="all, delete-orphan")
+    filters = relationship("DashboardFilter", back_populates="dashboard", cascade="all, delete-orphan")
 
 class DashboardCard(Base):
     """仪表板卡片 - 对应Metabase的DashboardCard"""
@@ -61,6 +62,7 @@ class DashboardCard(Base):
     dashboard = relationship("Dashboard", back_populates="dashboard_cards")
     chart = relationship("VisualizationCard")
     tab = relationship("DashboardTab")
+    filter_bindings = relationship("DashboardFilterBinding", back_populates="card", cascade="all, delete-orphan")
 
 class DashboardTab(Base):
     """仪表板标签页"""
@@ -78,3 +80,59 @@ class DashboardTab(Base):
     # 关系
     dashboard = relationship("Dashboard", back_populates="tabs")
     dashboard_cards = relationship("DashboardCard", back_populates="tab")
+    filters = relationship("DashboardFilter", back_populates="tab", cascade="all, delete-orphan")
+
+
+class DashboardFilter(Base):
+    """仪表盘筛选器"""
+    __tablename__ = "dashboard_filters"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    dashboard_id = Column(Integer, ForeignKey("dashboards.id"), nullable=False)
+    dashboard_tab_id = Column(Integer, ForeignKey("dashboard_tabs.id"))
+    
+    # 筛选器配置
+    name = Column(String(100), nullable=False)  # 筛选器名称
+    filter_type = Column(String(50), nullable=False)  # 筛选器类型: date_range, date_relative, select, multi_select, input
+    field_name = Column(String(100), nullable=False)  # 关联字段名，用于匹配图表SQL
+    field_label = Column(String(100))  # 显示标签
+    
+    # 数据配置
+    data_source_id = Column(Integer, ForeignKey("databases.id"))  # 数据源ID（用于获取选项）
+    options_table = Column(String(100))  # 选项来源表
+    options_field = Column(String(100))  # 选项来源字段
+    options_sql = Column(Text)  # 自定义SQL获取选项
+    
+    # 默认值
+    default_value = Column(JSON)
+    
+    # 位置
+    position = Column(Integer, default=0)
+    
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关系
+    dashboard = relationship("Dashboard", back_populates="filters")
+    tab = relationship("DashboardTab", back_populates="filters")
+    bindings = relationship("DashboardFilterBinding", back_populates="filter", cascade="all, delete-orphan")
+
+
+class DashboardFilterBinding(Base):
+    """筛选器与图表卡片的绑定关系"""
+    __tablename__ = "dashboard_filter_bindings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    filter_id = Column(Integer, ForeignKey("dashboard_filters.id"), nullable=False)
+    card_id = Column(Integer, ForeignKey("dashboard_cards.id"), nullable=False)
+    
+    # 参数名映射：筛选器的参数名 -> 图表SQL中的参数名
+    param_name = Column(String(100), nullable=False)
+    
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # 关系
+    filter = relationship("DashboardFilter", back_populates="bindings")
+    card = relationship("DashboardCard", back_populates="filter_bindings")

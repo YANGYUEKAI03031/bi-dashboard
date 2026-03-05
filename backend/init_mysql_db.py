@@ -34,7 +34,7 @@ async def init_tables():
     from sqlalchemy.ext.asyncio import create_async_engine
     from app.db.base import Base
     from app.models.user import User
-    from app.models.dashboard import Dashboard, DashboardCard, DashboardTab
+    from app.models.dashboard import Dashboard, DashboardCard, DashboardTab, DashboardFilter, DashboardFilterBinding
     from app.models.visualization import VisualizationCard, Database
     from app.models.report_page import ReportPage, ReportPageDashboard
     from app.models.data_source import ProcessedDataset

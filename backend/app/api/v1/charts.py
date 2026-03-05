@@ -1,8 +1,9 @@
 # backend/app/api/v1/charts.py
 # backend/app/api/v1/charts.py
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
 
 from app.db.session import get_db
@@ -196,6 +197,7 @@ async def delete_chart(
 @router.post("/{chart_id}/query", response_model=dict)
 async def execute_chart_query(
     chart_id: int,
+    filter_params: Optional[dict] = Body(default=None),  # 接收筛选器参数
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
@@ -207,8 +209,8 @@ async def execute_chart_query(
         if not chart:
             raise HTTPException(status_code=404, detail="图表不存在")
         
-        # 执行查询
-        query_result = await service.execute_chart_query(chart)
+        # 执行查询（带筛选器参数）
+        query_result = await service.execute_chart_query(chart, filter_params if filter_params else {})
         
         return {
             "data": query_result,
@@ -220,4 +222,23 @@ async def execute_chart_query(
         raise
     except Exception as e:
         logger.error(f"执行图表查询API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/filter-options")
+async def get_filter_options(
+    data_source_id: int,
+    table_name: str,
+    field_name: str,
+    limit: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """获取筛选器的选项列表"""
+    try:
+        service = ChartService(db)
+        options = await service.get_filter_options(data_source_id, table_name, field_name, limit)
+        return {"options": options}
+    except Exception as e:
+        logger.error(f"获取筛选器选项API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

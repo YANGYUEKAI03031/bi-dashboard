@@ -14,6 +14,7 @@ import {
   Select,
   Typography,
   Empty,
+  DatePicker,
 } from 'antd';
 import {
   DeleteOutlined,
@@ -22,10 +23,13 @@ import {
   MenuUnfoldOutlined,
   FontSizeOutlined,
   EditOutlined,
+  FilterOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
+import { DataSourceService } from '../services/dataSourceService';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
@@ -85,6 +89,31 @@ interface Dashboard {
   cards: DashboardCard[];
   settings?: any;
   layout?: any;
+  filters?: DashboardFilter[];
+}
+
+interface DashboardFilter {
+  id: number;
+  dashboard_id: number;
+  dashboard_tab_id?: number;
+  name: string;
+  filter_type: 'date_range' | 'date_relative' | 'select' | 'multi_select' | 'input';
+  field_name: string;
+  field_label?: string;
+  data_source_id?: number;
+  options_table?: string;
+  options_field?: string;
+  options_sql?: string;
+  default_value?: any;
+  position: number;
+  bindings: DashboardFilterBinding[];
+}
+
+interface DashboardFilterBinding {
+  id: number;
+  filter_id: number;
+  card_id: number;
+  param_name: string;
 }
 
 interface GridLayoutItem {
@@ -253,6 +282,25 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   });
 
+  // 筛选器相关状态
+  const [filters, setFilters] = useState<DashboardFilter[]>([]);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilterId, setEditingFilterId] = useState<number | null>(null);
+  const [filterForm] = Form.useForm();
+  const [filterLoading, setFilterLoading] = useState(false);
+  // 筛选器当前值（用于传递给图表查询）
+  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  // 数据源列表（用于筛选器配置）
+  const [dataSources, setDataSources] = useState<Array<{ id: number; name: string }>>([]);
+  // 筛选器选项加载状态
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState<Record<number, boolean>>({});
+  // 筛选器选项缓存
+  const [filterOptionsCache, setFilterOptionsCache] = useState<Record<number, string[]>>({});
+  // 所有图表的X轴字段列表（用于筛选器关联字段名下拉选择）
+  const [chartXFields, setChartXFields] = useState<string[]>([]);
+  // 筛选器下拉选项（按筛选器ID索引）
+  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
+
   // 用于防抖保存布局变化
   const layoutUpdateTimerRef = useRef<number | null>(null);
   const pendingLayoutRef = useRef<any[] | null>(null);
@@ -342,6 +390,19 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         const convertedCharts = userCharts.map(convertChartResponseToChart);
         setCharts(convertedCharts);
 
+        // 提取所有图表的X轴字段（去重）
+        const xFieldsSet = new Set<string>();
+        convertedCharts.forEach(chart => {
+          const vizSettings = chart.visualization_settings || {};
+          const xField = vizSettings.x_field || 
+            (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
+            (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
+          if (xField) {
+            xFieldsSet.add(xField);
+          }
+        });
+        setChartXFields(Array.from(xFieldsSet).sort());
+
         // 编辑模式下加载当前仪表盘
         if (isEditMode && id) {
           const dashboardId = Number(id);
@@ -381,6 +442,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             name: d.name,
             description: d.description,
           });
+
+          // 加载筛选器列表
+          const dashboardFilters = await DashboardService.getDashboardFilters(dashboardId);
+          setFilters(dashboardFilters || []);
+
+          // 加载数据源列表（用于筛选器配置）
+          try {
+            const dsList = await DataSourceService.getDataSources();
+            setDataSources(dsList.map((ds: any) => ({ id: Number(ds.id), name: ds.name })));
+          } catch (dsError) {
+            console.error('加载数据源列表失败:', dsError);
+          }
         }
       } catch (error: any) {
         if (!cancelled) message.error(getErrorMessage(error, '加载仪表盘编辑数据失败'));
@@ -395,6 +468,57 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       cancelled = true;
     };
   }, [user, id, isEditMode, form, navigate]);
+
+  // 当筛选器列表变化时，加载需要选项的筛选器
+  useEffect(() => {
+    filters.forEach(filter => {
+      if ((filter.filter_type === 'select' || filter.filter_type === 'multi_select') &&
+          filter.data_source_id && filter.options_table && filter.options_field) {
+        // 如果还没有加载过选项，则加载
+        if (!filterSelectOptions[filter.id]) {
+          loadFilterOptions(filter);
+        }
+      }
+    });
+  }, [filters]);
+
+  // 加载筛选器选项（动态从数据库获取）
+  const loadFilterOptions = async (filter: DashboardFilter) => {
+    if (!filter.data_source_id || !filter.options_table || !filter.options_field) {
+      return [];
+    }
+
+    // 检查缓存
+    const cacheKey = filter.id;
+    if (filterOptionsCache[cacheKey]) {
+      return filterOptionsCache[cacheKey];
+    }
+
+    // 设置加载状态
+    setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
+
+    try {
+      const options = await ChartService.getFilterOptions(
+        filter.data_source_id,
+        filter.options_table,
+        filter.options_field
+      );
+
+      // 更新缓存
+      setFilterOptionsCache(prev => ({ ...prev, [cacheKey]: options }));
+
+      // 更新下拉选项格式
+      const selectOptions = options.map((opt: string) => ({ label: opt, value: opt }));
+      setFilterSelectOptions(prev => ({ ...prev, [filter.id]: selectOptions }));
+
+      return options;
+    } catch (error) {
+      console.error('加载筛选器选项失败:', error);
+      return [];
+    } finally {
+      setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
+    }
+  };
 
   const handleBack = () => {
     navigate('/dashboard');
@@ -721,7 +845,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   // 图表卡片组件 - 加载并显示图表数据
-  const ChartCardComponent: React.FC<{ card: DashboardCard }> = ({ card }) => {
+  const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any> }> = ({ card, filterValues = {} }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -739,7 +863,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         setDataLoading(true);
         setError(null);
         try {
-          const data = await ChartService.executeChartQuery(card.chart!.id);
+          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filterValues);
+          const data = await ChartService.executeChartQuery(card.chart!.id, filterValues);
 
           if (cancelled) return;
 
@@ -774,7 +899,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       return () => {
         cancelled = true;
       };
-    }, [card.chart?.id]);
+    }, [card.chart?.id, filterValues]);
 
     if (!card.chart) {
       return (
@@ -1022,6 +1147,93 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             </div>
           </Card>
 
+          {dashboard && (
+            <Card
+              title="添加筛选器"
+              size="small"
+              extra={
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FilterOutlined />}
+                  onClick={() => {
+                    setEditingFilterId(null);
+                    filterForm.resetFields();
+                    setFilterModalOpen(true);
+                  }}
+                >
+                  <PlusOutlined /> 新建
+                </Button>
+              }
+            >
+              {filters.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#999' }}>
+                  暂无筛选器，点击"新建"添加筛选器。
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {filters.map(filter => (
+                    <div
+                      key={filter.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: '#f5f5f5',
+                        borderRadius: 4,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{filter.name}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>
+                          {filter.filter_type} | 绑定 {filter.bindings?.length || 0} 个图表
+                        </div>
+                      </div>
+                      <Space>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<EditOutlined />}
+                          onClick={() => {
+                            setEditingFilterId(filter.id);
+                            filterForm.setFieldsValue({
+                              name: filter.name,
+                              filter_type: filter.filter_type,
+                              field_name: filter.field_name,
+                              field_label: filter.field_label,
+                              data_source_id: filter.data_source_id,
+                              options_table: filter.options_table,
+                              options_field: filter.options_field,
+                              default_value: filter.default_value,
+                            });
+                            setFilterModalOpen(true);
+                          }}
+                        />
+                        <Popconfirm
+                          title="删除此筛选器？"
+                          okText="删除"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={async () => {
+                            try {
+                              await DashboardService.deleteFilter(filter.id);
+                              setFilters(filters.filter(f => f.id !== filter.id));
+                              message.success('筛选器已删除');
+                            } catch (error: any) {
+                              message.error(getErrorMessage(error, '删除筛选器失败'));
+                            }
+                          }}
+                        >
+                          <Button type="text" size="small" icon={<DeleteOutlined />} danger />
+                        </Popconfirm>
+                      </Space>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
           <Card
             title="添加图表"
             size="small"
@@ -1034,6 +1246,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     const latest = await ChartService.getUserCharts();
                     const converted = latest.map(convertChartResponseToChart);
                     setCharts(converted);
+                    // 更新图表X轴字段列表
+                    const xFieldsSet = new Set<string>();
+                    converted.forEach(chart => {
+                      const vizSettings = chart.visualization_settings || {};
+                      const xField = vizSettings.x_field || 
+                        (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
+                        (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
+                      if (xField) {
+                        xFieldsSet.add(xField);
+                      }
+                    });
+                    setChartXFields(Array.from(xFieldsSet).sort());
                     // Important: do NOT reset canvas cards; only hydrate missing card.chart.
                     setDashboard(prev => (prev ? hydrateDashboardCards(prev, converted) : prev));
                     message.success('图表列表已刷新');
@@ -1147,6 +1371,89 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             </div>
           ) : (
             <div className="dashboard-editor-grid">
+              {/* 筛选器渲染区域 */}
+              {filters.length > 0 && (
+                <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+                    {filters.map(filter => {
+                      // 筛选器组件渲染
+                      const handleFilterChange = (value: any) => {
+                        setFilterValues(prev => ({
+                          ...prev,
+                          [filter.field_name]: value,
+                        }));
+                      };
+
+                      return (
+                        <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <label style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>
+                            {filter.field_label || filter.name}
+                          </label>
+                          {filter.filter_type === 'date_range' && (
+                            <DatePicker.RangePicker
+                              style={{ width: 240 }}
+                              onChange={(dates) => {
+                                if (dates) {
+                                  handleFilterChange({
+                                    start: dates[0]?.format('YYYY-MM-DD'),
+                                    end: dates[1]?.format('YYYY-MM-DD'),
+                                  });
+                                } else {
+                                  handleFilterChange(null);
+                                }
+                              }}
+                            />
+                          )}
+                          {filter.filter_type === 'date_relative' && (
+                            <Select
+                              style={{ width: 150 }}
+                              placeholder="选择时间范围"
+                              options={[
+                                { label: '今天', value: 'today' },
+                                { label: '昨天', value: 'yesterday' },
+                                { label: '最近7天', value: 'last_7_days' },
+                                { label: '最近30天', value: 'last_30_days' },
+                                { label: '本月', value: 'this_month' },
+                                { label: '上月', value: 'last_month' },
+                              ]}
+                              onChange={handleFilterChange}
+                            />
+                          )}
+                          {filter.filter_type === 'select' && (
+                            <Select
+                              style={{ width: 150 }}
+                              placeholder="请选择"
+                              allowClear
+                              options={filterSelectOptions[filter.id] || []}
+                              loading={filterOptionsLoading[filter.id]}
+                              onChange={handleFilterChange}
+                            />
+                          )}
+                          {filter.filter_type === 'multi_select' && (
+                            <Select
+                              style={{ width: 150 }}
+                              mode="multiple"
+                              placeholder="请选择"
+                              allowClear
+                              options={filterSelectOptions[filter.id] || []}
+                              loading={filterOptionsLoading[filter.id]}
+                              onChange={handleFilterChange}
+                            />
+                          )}
+                          {filter.filter_type === 'input' && (
+                            <Input
+                              style={{ width: 150 }}
+                              placeholder="请输入"
+                              onChange={(e) => handleFilterChange(e.target.value)}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* 标题组件（从 dashboard.settings.widgets 渲染） */}
               {widgets.map(w => (
                 <div
@@ -1344,7 +1651,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       }}
                     >
                       {/* ChartCardComponent 会占满 body，高度 100%，从而让图表垂直填充整个卡片 */}
-                      <ChartCardComponent card={card} />
+                      <ChartCardComponent card={card} filterValues={filterValues} />
                     </Card>
                   </div>
                 ))}
@@ -1405,6 +1712,142 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 { label: '小（H3）', value: 3 },
               ]}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 筛选器配置弹窗 */}
+      <Modal
+        title={editingFilterId ? '编辑筛选器' : '添加筛选器'}
+        open={filterModalOpen}
+        onCancel={() => setFilterModalOpen(false)}
+        onOk={async () => {
+          try {
+            const values = await filterForm.validateFields();
+            if (!dashboard) {
+              message.warning('请先保存仪表盘');
+              return;
+            }
+
+            setFilterLoading(true);
+
+            if (editingFilterId) {
+              // 更新筛选器
+              const updated = await DashboardService.updateFilter(editingFilterId, values);
+              setFilters(filters.map(f => f.id === editingFilterId ? updated : f));
+              message.success('筛选器已更新');
+            } else {
+              // 创建筛选器
+              const created = await DashboardService.createFilter(dashboard.id, {
+                ...values,
+                position: filters.length,
+              });
+              setFilters([...filters, created]);
+              message.success('筛选器已创建');
+            }
+
+            setFilterModalOpen(false);
+          } catch (error: any) {
+            if (error?.errorFields) return;
+            message.error(getErrorMessage(error, '保存筛选器失败'));
+          } finally {
+            setFilterLoading(false);
+          }
+        }}
+        confirmLoading={filterLoading}
+        okText="保存"
+        cancelText="取消"
+        width={600}
+      >
+        <Form form={filterForm} layout="vertical">
+          <Form.Item
+            label="筛选器名称"
+            name="name"
+            rules={[{ required: true, message: '请输入筛选器名称' }]}
+          >
+            <Input placeholder="例如：日期筛选、地区筛选" />
+          </Form.Item>
+
+          <Form.Item
+            label="筛选器类型"
+            name="filter_type"
+            rules={[{ required: true, message: '请选择筛选器类型' }]}
+          >
+            <Select
+              placeholder="选择筛选器类型"
+              options={[
+                { label: '日期范围', value: 'date_range' },
+                { label: '相对日期', value: 'date_relative' },
+                { label: '单选下拉', value: 'select' },
+                { label: '多选下拉', value: 'multi_select' },
+                { label: '文本输入', value: 'input' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="关联字段名"
+            name="field_name"
+            rules={[{ required: true, message: '请选择关联字段名' }]}
+            extra="选择图表的X轴字段，用于自动匹配SQL参数"
+          >
+            <Select
+              placeholder="选择字段名"
+              showSearch
+              allowClear
+              optionFilterProp="children"
+            >
+              {chartXFields.map(field => (
+                <Select.Option key={field} value={field}>
+                  {field}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="显示标签"
+            name="field_label"
+          >
+            <Input placeholder="例如：订单日期、所属地区" />
+          </Form.Item>
+
+          <Form.Item
+            label="数据源"
+            name="data_source_id"
+            extra="用于获取下拉选项（仅对 select/multi_select 类型生效）"
+          >
+            <Select
+              placeholder="选择数据源"
+              allowClear
+              onChange={() => {
+                // 清除选项相关字段
+                filterForm.setFieldsValue({
+                  options_table: undefined,
+                  options_field: undefined,
+                });
+              }}
+            >
+              {dataSources.map(ds => (
+                <Select.Option key={ds.id} value={ds.id}>
+                  {ds.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="选项来源表"
+            name="options_table"
+          >
+            <Input placeholder="例如：orders" disabled={!filterForm.getFieldValue('data_source_id')} />
+          </Form.Item>
+
+          <Form.Item
+            label="选项来源字段"
+            name="options_field"
+          >
+            <Input placeholder="例如：region" disabled={!filterForm.getFieldValue('data_source_id')} />
           </Form.Item>
         </Form>
       </Modal>

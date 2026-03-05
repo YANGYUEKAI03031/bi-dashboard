@@ -302,4 +302,142 @@ export class DashboardService {
       throw error;
     }
   }
+
+  // ============ 筛选器相关方法 ============
+
+  static async getDashboardFilters(dashboardId: number): Promise<any[]> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/filters`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('获取筛选器列表失败:', error);
+      throw error;
+    }
+  }
+
+  static async createFilter(dashboardId: number, filterData: any): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/filters`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filterData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('创建筛选器失败:', error);
+      throw error;
+    }
+  }
+
+  static async updateFilter(filterId: number, filterData: any): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(filterData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('更新筛选器失败:', error);
+      throw error;
+    }
+  }
+
+  static async deleteFilter(filterId: number): Promise<void> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('删除筛选器失败:', error);
+      throw error;
+    }
+  }
+
+  static async bindFilterToCard(filterId: number, bindingData: any): Promise<any> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}/bindings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bindingData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('绑定筛选器失败:', error);
+      throw error;
+    }
+  }
+
+  static async unbindFilterFromCard(filterId: number, cardId: number): Promise<void> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}/bindings/${cardId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('解除筛选器绑定失败:', error);
+      throw error;
+    }
+  }
 }
