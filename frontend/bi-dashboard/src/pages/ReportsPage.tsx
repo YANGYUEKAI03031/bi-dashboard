@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
+import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
@@ -298,8 +299,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
   // 加载筛选器选项
   useEffect(() => {
     filters.forEach(filter => {
-      if ((filter.filter_type === 'select' || filter.filter_type === 'multi_select') &&
-          filter.data_source_id && filter.options_table && filter.options_field) {
+      if (filter.filter_type === 'select' || filter.filter_type === 'multi_select') {
         if (!filterSelectOptions[filter.id]) {
           loadFilterOptions(filter);
         }
@@ -308,24 +308,54 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
   }, [filters]);
 
   const loadFilterOptions = async (filter: DashboardFilter) => {
-    if (!filter.data_source_id || !filter.options_table || !filter.options_field) {
-      return;
-    }
+    console.log('[FilterDebug-Report] loadFilterOptions called for filter:', filter.id, filter.name);
+    console.log('[FilterDebug-Report] filter.bindings:', filter.bindings);
+    console.log('[FilterDebug-Report] filter.field_name:', filter.field_name);
+    console.log('[FilterDebug-Report] cards:', cards?.map(c => ({ id: c.id, chartId: c.chart?.id })));
 
     setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
 
     try {
-      const options = await ChartService.getFilterOptions(
-        filter.data_source_id,
-        filter.options_table,
-        filter.options_field
-      );
+      let options: string[] = [];
+
+      if (filter.data_source_id && filter.options_table && filter.options_field) {
+        options = await ChartService.getFilterOptions(
+          filter.data_source_id,
+          filter.options_table,
+          filter.options_field
+        );
+      } else {
+        const firstBinding = filter.bindings?.[0];
+        console.log('[FilterDebug-Report] firstBinding:', firstBinding);
+
+        const boundCard = firstBinding
+          ? cards.find(c => c.id === firstBinding.card_id)
+          : undefined;
+        console.log('[FilterDebug-Report] boundCard:', boundCard);
+
+        const chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
+        console.log('[FilterDebug-Report] chartId:', chartId);
+
+        if (chartId && filter.field_name) {
+          console.log('[FilterDebug-Report] calling getFilterOptionsFromChart');
+          try {
+            const result = await ChartService.getFilterOptionsFromChart(chartId, filter.field_name);
+            console.log('[FilterDebug-Report] result:', result);
+            options = result.options || [];
+          } catch (e) {
+            console.error('[FilterDebug-Report] error:', e);
+          }
+        }
+      }
+
+      console.log('[FilterDebug-Report] options:', options);
+
       setFilterSelectOptions(prev => ({
         ...prev,
         [filter.id]: options.map((opt: string) => ({ label: opt, value: opt }))
       }));
     } catch (error) {
-      console.error('加载筛选器选项失败:', error);
+      console.error('[FilterDebug-Report] 加载筛选器选项失败:', error);
     } finally {
       setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
     }
@@ -372,6 +402,16 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                           handleFilterChange(null);
                         }
                       }}
+                      presets={[
+                        { label: '今日', value: [dayjs().startOf('day'), dayjs().endOf('day')] },
+                        { label: '昨日', value: [dayjs().subtract(1, 'day').startOf('day'), dayjs().subtract(1, 'day').endOf('day')] },
+                        { label: '近7天', value: [dayjs().subtract(6, 'day'), dayjs()] },
+                        { label: '近30天', value: [dayjs().subtract(29, 'day'), dayjs()] },
+                        { label: '本月', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+                        { label: '上月', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+                        { label: '本年', value: [dayjs().startOf('year'), dayjs().endOf('year')] },
+                        { label: '去年', value: [dayjs().subtract(1, 'year').startOf('year'), dayjs().subtract(1, 'year').endOf('year')] },
+                      ]}
                     />
                   )}
                   {filter.filter_type === 'date_relative' && (

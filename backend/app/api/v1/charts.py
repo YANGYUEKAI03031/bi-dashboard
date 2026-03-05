@@ -242,3 +242,51 @@ async def get_filter_options(
     except Exception as e:
         logger.error(f"获取筛选器选项API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/filter-options-from-chart/{chart_id}")
+async def get_filter_options_from_chart(
+    chart_id: int,
+    field_name: str,
+    limit: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """从图表的SQL查询中获取筛选器选项（自动提取表名和字段名）"""
+    try:
+        service = ChartService(db)
+        chart = await service.get_chart(chart_id, user_id)
+
+        if not chart:
+            raise HTTPException(status_code=404, detail="图表不存在")
+
+        # 解析SQL获取表名和字段
+        dataset_query = chart.dataset_query
+        if isinstance(dataset_query, str):
+            dataset_query = json.loads(dataset_query)
+
+        sql_query = dataset_query.get('native', {}).get('query', '')
+        if not sql_query:
+            raise HTTPException(status_code=400, detail="图表SQL查询为空")
+
+        # 提取表名（简单解析FROM后面的表名）
+        import re
+        from_match = re.search(r'\bFROM\s+`?(\w+)`?', sql_query, re.IGNORECASE)
+        if not from_match:
+            raise HTTPException(status_code=400, detail="无法从SQL中提取表名")
+
+        table_name = from_match.group(1)
+
+        # 获取筛选器选项
+        options = await service.get_filter_options(chart.data_source_id, table_name, field_name, limit)
+        return {
+            "options": options,
+            "data_source_id": chart.data_source_id,
+            "table_name": table_name,
+            "field_name": field_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"从图表获取筛选器选项API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

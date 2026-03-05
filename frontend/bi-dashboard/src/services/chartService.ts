@@ -196,4 +196,40 @@ export class ChartService {
       throw error;
     }
   }
+
+  // 从图表ID获取筛选器选项（自动从SQL中提取表名）
+  static async getFilterOptionsFromChart(chartId: number, fieldName: string, limit?: number): Promise<{
+    options: string[];
+    data_source_id: number;
+    table_name: string;
+    field_name: string;
+  }> {
+    try {
+      const token = localStorage.getItem('authToken');
+      const params = new URLSearchParams({
+        field_name: fieldName,
+      });
+      if (limit) {
+        params.append('limit', limit.toString());
+      }
+
+      const response = await fetch(`${API_BASE_URL}/visualization/charts/filter-options-from-chart/${chartId}?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('从图表获取筛选器选项失败:', error);
+      throw error;
+    }
+  }
 }

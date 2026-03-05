@@ -286,6 +286,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   const [filters, setFilters] = useState<DashboardFilter[]>([]);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [editingFilterId, setEditingFilterId] = useState<number | null>(null);
+  const editingFilterIdRef = useRef<number | null>(null); // 用ref解决异步问题
+
+  // 保持 ref 和 state 同步
+  useEffect(() => {
+    editingFilterIdRef.current = editingFilterId;
+  }, [editingFilterId]);
+
   const [filterForm] = Form.useForm();
   const [filterLoading, setFilterLoading] = useState(false);
   // 筛选器当前值（用于传递给图表查询）
@@ -373,6 +380,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       }
     };
   }, []);
+
+  // 当编辑筛选器时，同步刷新filters以获取最新的bindings
+  useEffect(() => {
+    if (filterModalOpen && editingFilterId) {
+      // 打开编辑弹窗时刷新筛选器数据
+      DashboardService.getDashboard(dashboard!.id).then(updated => {
+        if (updated?.filters) {
+          setFilters(updated.filters);
+        }
+      }).catch(console.error);
+    }
+  }, [filterModalOpen, editingFilterId, dashboard]);
 
 
   useEffect(() => {
@@ -472,9 +491,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   // 当筛选器列表变化时，加载需要选项的筛选器
   useEffect(() => {
     filters.forEach(filter => {
-      if ((filter.filter_type === 'select' || filter.filter_type === 'multi_select') &&
-          filter.data_source_id && filter.options_table && filter.options_field) {
-        // 如果还没有加载过选项，则加载
+      if (filter.filter_type === 'select' || filter.filter_type === 'multi_select') {
         if (!filterSelectOptions[filter.id]) {
           loadFilterOptions(filter);
         }
@@ -484,25 +501,63 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
   // 加载筛选器选项（动态从数据库获取）
   const loadFilterOptions = async (filter: DashboardFilter) => {
-    if (!filter.data_source_id || !filter.options_table || !filter.options_field) {
-      return [];
-    }
+    console.log('[FilterDebug] loadFilterOptions called for filter:', filter.id, filter.name, filter.filter_type);
+    console.log('[FilterDebug] filter.bindings:', filter.bindings);
+    console.log('[FilterDebug] filter.field_name:', filter.field_name);
+    console.log('[FilterDebug] filter.data_source_id:', filter.data_source_id);
+    console.log('[FilterDebug] filter.options_table:', filter.options_table);
+    console.log('[FilterDebug] filter.options_field:', filter.options_field);
+    console.log('[FilterDebug] dashboard?.cards:', dashboard?.cards?.map(c => ({ id: c.id, chartId: c.chart?.id, chartName: c.chart?.name })));
 
-    // 检查缓存
+    // 先检查缓存
     const cacheKey = filter.id;
     if (filterOptionsCache[cacheKey]) {
+      console.log('[FilterDebug] using cache for filter:', filter.id);
       return filterOptionsCache[cacheKey];
     }
 
-    // 设置加载状态
     setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
 
     try {
-      const options = await ChartService.getFilterOptions(
-        filter.data_source_id,
-        filter.options_table,
-        filter.options_field
-      );
+      let options: string[] = [];
+
+      if (filter.data_source_id && filter.options_table && filter.options_field) {
+        console.log('[FilterDebug] using explicit data source config');
+        // 优先使用显式配置的数据源/表/字段
+        options = await ChartService.getFilterOptions(
+          filter.data_source_id,
+          filter.options_table,
+          filter.options_field
+        );
+      } else {
+        // 否则尝试根据绑定的图表自动推断
+        console.log('[FilterDebug] trying to auto-detect from bindings');
+        const firstBinding = filter.bindings?.[0];
+        console.log('[FilterDebug] firstBinding:', firstBinding);
+
+        const boundCard = firstBinding && dashboard?.cards
+          ? dashboard.cards.find(c => c.id === firstBinding.card_id)
+          : undefined;
+        console.log('[FilterDebug] boundCard:', boundCard);
+
+        const chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
+        console.log('[FilterDebug] chartId:', chartId);
+
+        if (chartId && filter.field_name) {
+          console.log('[FilterDebug] calling getFilterOptionsFromChart with chartId:', chartId, 'field_name:', filter.field_name);
+          try {
+            const result = await ChartService.getFilterOptionsFromChart(chartId, filter.field_name);
+            console.log('[FilterDebug] getFilterOptionsFromChart result:', result);
+            options = result.options || [];
+          } catch (e) {
+            console.error('[FilterDebug] 根据图表自动获取筛选器选项失败:', e);
+          }
+        } else {
+          console.log('[FilterDebug] skipping - no chartId or no field_name');
+        }
+      }
+
+      console.log('[FilterDebug] final options for filter', filter.id, ':', options);
 
       // 更新缓存
       setFilterOptionsCache(prev => ({ ...prev, [cacheKey]: options }));
@@ -513,7 +568,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
       return options;
     } catch (error) {
-      console.error('加载筛选器选项失败:', error);
+      console.error('[FilterDebug] 加载筛选器选项失败:', error);
       return [];
     } finally {
       setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
@@ -1196,7 +1251,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           size="small"
                           icon={<EditOutlined />}
                           onClick={() => {
-                            setEditingFilterId(filter.id);
+                            const filterId = filter.id;
+                            setEditingFilterId(filterId);
                             filterForm.setFieldsValue({
                               name: filter.name,
                               filter_type: filter.filter_type,
@@ -1789,7 +1845,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             label="关联字段名"
             name="field_name"
             rules={[{ required: true, message: '请选择关联字段名' }]}
-            extra="选择图表的X轴字段，用于自动匹配SQL参数"
+            extra="选择图表的X轴字段名，用于筛选"
           >
             <Select
               placeholder="选择字段名"
@@ -1805,50 +1861,85 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             </Select>
           </Form.Item>
 
-          <Form.Item
-            label="显示标签"
-            name="field_label"
-          >
-            <Input placeholder="例如：订单日期、所属地区" />
-          </Form.Item>
-
-          <Form.Item
-            label="数据源"
-            name="data_source_id"
-            extra="用于获取下拉选项（仅对 select/multi_select 类型生效）"
-          >
-            <Select
-              placeholder="选择数据源"
-              allowClear
-              onChange={() => {
-                // 清除选项相关字段
-                filterForm.setFieldsValue({
-                  options_table: undefined,
-                  options_field: undefined,
-                });
-              }}
+          {dashboard?.cards && dashboard.cards.length > 0 && (
+            <Form.Item
+              label="绑定图表"
+              extra="select/multi_select类型需要绑定图表以获取选项"
             >
-              {dataSources.map(ds => (
-                <Select.Option key={ds.id} value={ds.id}>
-                  {ds.name}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Select
+                  mode="multiple"
+                  style={{ width: '100%' }}
+                  placeholder="选择要绑定的图表"
+                  value={filters.find(f => f.id === editingFilterIdRef.current)?.bindings?.map((b: any) => b.card_id) || []}
+                  onChange={async (selectedCardIds: number[]) => {
+                    console.log('[FilterBinding] onChange triggered, selected:', selectedCardIds);
+                    // 优先使用 state 中的 editingFilterId，因为 ref 可能还没更新
+                    const currentFilterId = editingFilterId || editingFilterIdRef.current;
+                    if (!currentFilterId) {
+                      console.log('[FilterBinding] no currentFilterId, editingFilterId:', editingFilterId);
+                      message.error('请先保存筛选器');
+                      return;
+                    }
 
-          <Form.Item
-            label="选项来源表"
-            name="options_table"
-          >
-            <Input placeholder="例如：orders" disabled={!filterForm.getFieldValue('data_source_id')} />
-          </Form.Item>
+                    const currentFilter = filters.find(f => f.id === currentFilterId);
+                    if (!currentFilter) {
+                      console.log('[FilterBinding] filter not found, id:', currentFilterId);
+                      message.error('筛选器不存在');
+                      return;
+                    }
+                    const currentBindings = currentFilter.bindings || [];
+                    const currentCardIds = currentBindings.map((b: any) => b.card_id);
+                    console.log('[FilterBinding] currentCardIds:', currentCardIds);
 
-          <Form.Item
-            label="选项来源字段"
-            name="options_field"
-          >
-            <Input placeholder="例如：region" disabled={!filterForm.getFieldValue('data_source_id')} />
-          </Form.Item>
+                    // 找出新增的和移除的
+                    const added = selectedCardIds.filter((id: number) => !currentCardIds.includes(id));
+                    const removed = currentCardIds.filter((id: number) => !selectedCardIds.includes(id));
+                    console.log('[FilterBinding] added:', added, 'removed:', removed);
+
+                    try {
+                      // 绑定新增的
+                      for (const cardId of added) {
+                        console.log('[FilterBinding] binding card:', cardId);
+                        await DashboardService.bindFilterToCard(currentFilterId, {
+                          card_id: cardId,
+                          param_name: filterForm.getFieldValue('field_name') || '',
+                        });
+                      }
+
+                      // 解绑移除的
+                      for (const cardId of removed) {
+                        console.log('[FilterBinding] unbinding card:', cardId);
+                        await DashboardService.unbindFilterFromCard(currentFilterId, cardId);
+                      }
+
+                      // 刷新绑定列表
+                      const updated = await DashboardService.getDashboard(dashboard!.id);
+                      if (updated?.filters) {
+                        const updatedFilter = updated.filters.find((f: any) => f.id === currentFilterId);
+                        if (updatedFilter) {
+                          setFilters(filters.map(f => f.id === currentFilterId ? updatedFilter : f));
+                        }
+                      }
+                      message.success('绑定已更新');
+                    } catch (err) {
+                      console.error('[FilterBinding] error:', err);
+                      message.error('绑定失败: ' + (err as any)?.message);
+                    }
+                  }}
+                >
+                  {dashboard.cards.map(card => (
+                    <Select.Option key={card.id} value={card.id}>
+                      {card.chart?.name || `图表 #${card.chart_id}`}
+                    </Select.Option>
+                  ))}
+                </Select>
+                <div style={{ fontSize: 12, color: '#888' }}>
+                  当前绑定: {filters.find(f => f.id === editingFilterIdRef.current)?.bindings?.length || 0} 个图表
+                </div>
+              </Space>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </Layout>
