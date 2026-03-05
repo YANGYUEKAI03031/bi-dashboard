@@ -918,8 +918,16 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         setDataLoading(true);
         setError(null);
         try {
-          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filterValues);
-          const data = await ChartService.executeChartQuery(card.chart!.id, filterValues);
+          // 过滤掉空值，只传递有实际值的筛选条件
+          const filteredFilterValues: Record<string, any> = {};
+          Object.entries(filterValues).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '' &&
+                !(Array.isArray(value) && value.length === 0)) {
+              filteredFilterValues[key] = value;
+            }
+          });
+          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filteredFilterValues);
+          const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
           if (cancelled) return;
 

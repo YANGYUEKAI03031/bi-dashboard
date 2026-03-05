@@ -5,6 +5,7 @@ from fastapi import Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 import logging
+import json
 
 from app.db.session import get_db
 from app.services.chart_service import ChartService

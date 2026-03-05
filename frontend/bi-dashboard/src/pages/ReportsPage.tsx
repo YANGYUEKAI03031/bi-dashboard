@@ -128,7 +128,15 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
       setDataLoading(true);
       setError(null);
       try {
-        const data = await ChartService.executeChartQuery(card.chart!.id, filterValues);
+        // 过滤掉空值，只传递有实际值的筛选条件
+        const filteredFilterValues: Record<string, any> = {};
+        Object.entries(filterValues).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '' &&
+              !(Array.isArray(value) && value.length === 0)) {
+            filteredFilterValues[key] = value;
+          }
+        });
+        const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
         if (cancelled) return;
 
