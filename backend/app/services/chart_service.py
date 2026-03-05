@@ -7,12 +7,33 @@ from datetime import datetime
 import json
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine
+import re
 
 from app.models.visualization import VisualizationCard, Database
 from app.schemas.chart import ChartCreate, ChartUpdate
 from app.core.security import get_current_user_id
 
 logger = logging.getLogger(__name__)
+
+def _normalize_identifier_part(part: str) -> str:
+    p = (part or "").strip()
+    if p.startswith("`") and p.endswith("`") and len(p) >= 2:
+        p = p[1:-1]
+    return p
+
+def _quote_mysql_identifier(identifier: str) -> str:
+    """
+    Quote MySQL identifiers safely.
+    Supports schema-qualified names like db.table by quoting each segment: `db`.`table`.
+    """
+    raw = (identifier or "").strip()
+    if not raw:
+        raise ValueError("identifier is empty")
+
+    parts = [p for p in re.split(r"\s*\.\s*", raw) if p]
+    normalized = [_normalize_identifier_part(p) for p in parts]
+    escaped = [p.replace("`", "``") for p in normalized]
+    return ".".join(f"`{p}`" for p in escaped)
 
 class ChartService:
     def __init__(self, db: AsyncSession):
@@ -333,7 +354,26 @@ class ChartService:
             db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
             
             # 构建查询SQL
-            sql_query = f"SELECT DISTINCT `{field_name}` FROM `{table_name}` ORDER BY `{field_name}` LIMIT {limit}"
+            # 注意：这里是单表取唯一值；如果 field_name 带别名/前缀（如 t.col），只取最后一段 col
+            base_field_name = (field_name or "").strip()
+            if "." in base_field_name:
+                base_field_name = base_field_name.split(".")[-1].strip()
+            if not base_field_name:
+                raise Exception("字段名为空")
+
+            quoted_table = _quote_mysql_identifier(table_name)
+            quoted_field = _quote_mysql_identifier(base_field_name)
+            safe_limit = int(limit) if limit is not None else 100
+            if safe_limit < 1:
+                safe_limit = 1
+
+            sql_query = (
+                f"SELECT DISTINCT {quoted_field} AS value "
+                f"FROM {quoted_table} "
+                f"WHERE {quoted_field} IS NOT NULL "
+                f"ORDER BY {quoted_field} "
+                f"LIMIT {safe_limit}"
+            )
             
             # 创建临时连接执行查询
             temp_engine = create_async_engine(db_url)
@@ -343,7 +383,7 @@ class ChartService:
                     rows = result.fetchall()
                     
                     # 提取值
-                    options = [row[0] for row in rows if row[0] is not None]
+                    options = [row[0] for row in rows if row and row[0] is not None]
                     
                     return options
             finally:

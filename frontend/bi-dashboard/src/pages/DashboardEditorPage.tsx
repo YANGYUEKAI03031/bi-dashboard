@@ -1262,6 +1262,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                               options_table: filter.options_table,
                               options_field: filter.options_field,
                               default_value: filter.default_value,
+                              binding_card_ids: filter.bindings?.map((b: any) => b.card_id) || [],
                             });
                             setFilterModalOpen(true);
                           }}
@@ -1273,7 +1274,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           onConfirm={async () => {
                             try {
                               await DashboardService.deleteFilter(filter.id);
-                              setFilters(filters.filter(f => f.id !== filter.id));
+                              setFilters(prevFilters => prevFilters.filter(f => f.id !== filter.id));
                               message.success('筛选器已删除');
                             } catch (error: any) {
                               message.error(getErrorMessage(error, '删除筛选器失败'));
@@ -1787,18 +1788,71 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
             setFilterLoading(true);
 
+            // 分离绑定信息和其他字段
+            const { binding_card_ids, ...basicInfo } = values;
+
             if (editingFilterId) {
-              // 更新筛选器
-              const updated = await DashboardService.updateFilter(editingFilterId, values);
-              setFilters(filters.map(f => f.id === editingFilterId ? updated : f));
+              // 更新筛选器基本信息
+              const updated = await DashboardService.updateFilter(editingFilterId, basicInfo);
+
+              // 处理绑定关系
+              const currentFilter = filters.find(f => f.id === editingFilterId);
+              const currentBindingCardIds = currentFilter?.bindings?.map((b: any) => b.card_id) || [];
+              const newBindingCardIds = binding_card_ids || [];
+
+              // 计算新增和移除的
+              const added = newBindingCardIds.filter((id: number) => !currentBindingCardIds.includes(id));
+              const removed = currentBindingCardIds.filter((id: number) => !newBindingCardIds.includes(id));
+
+              // 执行绑定和解绑
+              for (const cardId of added) {
+                await DashboardService.bindFilterToCard(editingFilterId, {
+                  card_id: cardId,
+                  param_name: basicInfo.field_name || '',
+                });
+              }
+              for (const cardId of removed) {
+                await DashboardService.unbindFilterFromCard(editingFilterId, cardId);
+              }
+
+              // 刷新完整数据
+              const refreshed = await DashboardService.getDashboard(dashboard.id);
+              if (refreshed?.filters) {
+                const refreshedFilter = refreshed.filters.find((f: any) => f.id === editingFilterId);
+                if (refreshedFilter) {
+                  setFilters(prevFilters => prevFilters.map(f => f.id === editingFilterId ? refreshedFilter : f));
+                }
+              }
               message.success('筛选器已更新');
             } else {
               // 创建筛选器
               const created = await DashboardService.createFilter(dashboard.id, {
-                ...values,
+                ...basicInfo,
                 position: filters.length,
               });
-              setFilters([...filters, created]);
+
+              // 如果有绑定，处理绑定关系
+              if (binding_card_ids && binding_card_ids.length > 0) {
+                for (const cardId of binding_card_ids) {
+                  await DashboardService.bindFilterToCard(created.id, {
+                    card_id: cardId,
+                    param_name: basicInfo.field_name || '',
+                  });
+                }
+                // 刷新以获取完整的 bindings
+                const refreshed = await DashboardService.getDashboard(dashboard.id);
+                if (refreshed?.filters) {
+                  const refreshedFilter = refreshed.filters.find((f: any) => f.id === created.id);
+                  if (refreshedFilter) {
+                    setFilters(prevFilters => [...prevFilters.filter(f => f.id !== created.id), refreshedFilter]);
+                    setFilterModalOpen(false);
+                    message.success('筛选器已创建并绑定图表');
+                    return;
+                  }
+                }
+              }
+
+              setFilters(prevFilters => [...prevFilters, created]);
               message.success('筛选器已创建');
             }
 
@@ -1864,80 +1918,21 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           {dashboard?.cards && dashboard.cards.length > 0 && (
             <Form.Item
               label="绑定图表"
-              extra="select/multi_select类型需要绑定图表以获取选项"
+              name="binding_card_ids"
+              extra="select/multi_select类型需要绑定图表以获取选项，保存时生效"
             >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Select
-                  mode="multiple"
-                  style={{ width: '100%' }}
-                  placeholder="选择要绑定的图表"
-                  value={filters.find(f => f.id === editingFilterIdRef.current)?.bindings?.map((b: any) => b.card_id) || []}
-                  onChange={async (selectedCardIds: number[]) => {
-                    console.log('[FilterBinding] onChange triggered, selected:', selectedCardIds);
-                    // 优先使用 state 中的 editingFilterId，因为 ref 可能还没更新
-                    const currentFilterId = editingFilterId || editingFilterIdRef.current;
-                    if (!currentFilterId) {
-                      console.log('[FilterBinding] no currentFilterId, editingFilterId:', editingFilterId);
-                      message.error('请先保存筛选器');
-                      return;
-                    }
-
-                    const currentFilter = filters.find(f => f.id === currentFilterId);
-                    if (!currentFilter) {
-                      console.log('[FilterBinding] filter not found, id:', currentFilterId);
-                      message.error('筛选器不存在');
-                      return;
-                    }
-                    const currentBindings = currentFilter.bindings || [];
-                    const currentCardIds = currentBindings.map((b: any) => b.card_id);
-                    console.log('[FilterBinding] currentCardIds:', currentCardIds);
-
-                    // 找出新增的和移除的
-                    const added = selectedCardIds.filter((id: number) => !currentCardIds.includes(id));
-                    const removed = currentCardIds.filter((id: number) => !selectedCardIds.includes(id));
-                    console.log('[FilterBinding] added:', added, 'removed:', removed);
-
-                    try {
-                      // 绑定新增的
-                      for (const cardId of added) {
-                        console.log('[FilterBinding] binding card:', cardId);
-                        await DashboardService.bindFilterToCard(currentFilterId, {
-                          card_id: cardId,
-                          param_name: filterForm.getFieldValue('field_name') || '',
-                        });
-                      }
-
-                      // 解绑移除的
-                      for (const cardId of removed) {
-                        console.log('[FilterBinding] unbinding card:', cardId);
-                        await DashboardService.unbindFilterFromCard(currentFilterId, cardId);
-                      }
-
-                      // 刷新绑定列表
-                      const updated = await DashboardService.getDashboard(dashboard!.id);
-                      if (updated?.filters) {
-                        const updatedFilter = updated.filters.find((f: any) => f.id === currentFilterId);
-                        if (updatedFilter) {
-                          setFilters(filters.map(f => f.id === currentFilterId ? updatedFilter : f));
-                        }
-                      }
-                      message.success('绑定已更新');
-                    } catch (err) {
-                      console.error('[FilterBinding] error:', err);
-                      message.error('绑定失败: ' + (err as any)?.message);
-                    }
-                  }}
-                >
-                  {dashboard.cards.map(card => (
-                    <Select.Option key={card.id} value={card.id}>
-                      {card.chart?.name || `图表 #${card.chart_id}`}
-                    </Select.Option>
-                  ))}
-                </Select>
-                <div style={{ fontSize: 12, color: '#888' }}>
-                  当前绑定: {filters.find(f => f.id === editingFilterIdRef.current)?.bindings?.length || 0} 个图表
-                </div>
-              </Space>
+              <Select
+                mode="multiple"
+                style={{ width: '100%' }}
+                placeholder="选择要绑定的图表"
+                allowClear
+              >
+                {dashboard.cards.map(card => (
+                  <Select.Option key={card.id} value={card.id}>
+                    {card.chart?.name || `图表 #${card.chart_id}`}
+                  </Select.Option>
+                ))}
+              </Select>
             </Form.Item>
           )}
         </Form>

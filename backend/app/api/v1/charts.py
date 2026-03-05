@@ -260,7 +260,10 @@ async def get_filter_options_from_chart(
         if not chart:
             raise HTTPException(status_code=404, detail="图表不存在")
 
-        # 解析SQL获取表名和字段
+        # 优先使用图表创建/更新时解析好的表名（更可靠）
+        table_name = getattr(chart, "table_name", None)
+
+        # 解析SQL获取表名（兜底）
         dataset_query = chart.dataset_query
         if isinstance(dataset_query, str):
             dataset_query = json.loads(dataset_query)
@@ -269,13 +272,26 @@ async def get_filter_options_from_chart(
         if not sql_query:
             raise HTTPException(status_code=400, detail="图表SQL查询为空")
 
-        # 提取表名（简单解析FROM后面的表名）
-        import re
-        from_match = re.search(r'\bFROM\s+`?(\w+)`?', sql_query, re.IGNORECASE)
-        if not from_match:
-            raise HTTPException(status_code=400, detail="无法从SQL中提取表名")
+        if not table_name:
+            # 提取 FROM 后的主表名，支持：
+            # - FROM table t
+            # - FROM `table` AS t
+            # - FROM schema.table
+            # - FROM `schema`.`table` t
+            import re
+            from_match = re.search(
+                r"\bFROM\s+"
+                r"(?:(?:`(?P<schema_bt>[^`]+)`|(?P<schema>\w+))\s*\.\s*)?"
+                r"(?:`(?P<table_bt>[^`]+)`|(?P<table>\w+))",
+                sql_query,
+                re.IGNORECASE,
+            )
+            if not from_match:
+                raise HTTPException(status_code=400, detail="无法从SQL中提取表名（请在筛选器中显式配置选项来源表/字段）")
 
-        table_name = from_match.group(1)
+            schema = from_match.group("schema_bt") or from_match.group("schema")
+            table = from_match.group("table_bt") or from_match.group("table")
+            table_name = f"{schema}.{table}" if schema else table
 
         # 获取筛选器选项
         options = await service.get_filter_options(chart.data_source_id, table_name, field_name, limit)
