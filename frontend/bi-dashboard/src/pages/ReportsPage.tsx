@@ -111,7 +111,7 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
 };
 
 // 图表卡片组件（只读模式）
-const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any> }> = ({ card, filterValues = {} }) => {
+const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any>; allFilters?: DashboardFilter[] }> = ({ card, filterValues = {}, allFilters = [] }) => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,14 +128,32 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
       setDataLoading(true);
       setError(null);
       try {
-        // 过滤掉空值，只传递有实际值的筛选条件
+        // 根据卡片获取需要应用的筛选条件
+        // 对于日期类型筛选器（不需要绑定），应用到所有图表
+        // 对于其他筛选器，只应用绑定到该卡片的筛选器
         const filteredFilterValues: Record<string, any> = {};
-        Object.entries(filterValues).forEach(([key, value]) => {
-          if (value !== null && value !== undefined && value !== '' &&
-              !(Array.isArray(value) && value.length === 0)) {
-            filteredFilterValues[key] = value;
+
+        allFilters.forEach(filter => {
+          const filterValue = filterValues[filter.field_name];
+          if (filterValue === undefined) return;
+
+          // 日期类型筛选器不需要绑定，应用到所有图表
+          if (filter.filter_type === 'date_range' || filter.filter_type === 'date_relative') {
+            if (filterValue !== null && filterValue !== '' &&
+                !(Array.isArray(filterValue) && filterValue.length === 0)) {
+              filteredFilterValues[filter.field_name] = filterValue;
+            }
+            return;
+          }
+
+          // 其他类型筛选器，检查是否绑定到当前卡片
+          const isBound = filter.bindings?.some((binding: any) => binding.card_id === card.id);
+          if (isBound && filterValue !== null && filterValue !== '' &&
+              !(Array.isArray(filterValue) && filterValue.length === 0)) {
+            filteredFilterValues[filter.field_name] = filterValue;
           }
         });
+
         const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
         if (cancelled) return;
@@ -170,7 +188,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
     return () => {
       cancelled = true;
     };
-  }, [card.chart?.id, filterValues]);
+  }, [card.chart?.id, filterValues, allFilters]);
 
   if (!card.chart) {
     return (
@@ -400,6 +418,10 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                   {filter.filter_type === 'date_range' && (
                     <DatePicker.RangePicker
                       style={{ width: 240 }}
+                      value={filterValues[filter.field_name] ? [
+                        filterValues[filter.field_name].start ? dayjs(filterValues[filter.field_name].start) : null,
+                        filterValues[filter.field_name].end ? dayjs(filterValues[filter.field_name].end) : null
+                      ] : null}
                       onChange={(dates) => {
                         if (dates) {
                           handleFilterChange({
@@ -426,6 +448,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                     <Select
                       style={{ width: 150 }}
                       placeholder="选择时间范围"
+                      value={filterValues[filter.field_name]}
                       options={[
                         { label: '今天', value: 'today' },
                         { label: '昨天', value: 'yesterday' },
@@ -444,6 +467,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                       allowClear
                       options={filterSelectOptions[filter.id] || []}
                       loading={filterOptionsLoading[filter.id]}
+                      value={filterValues[filter.field_name]}
                       onChange={handleFilterChange}
                     />
                   )}
@@ -455,6 +479,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                       allowClear
                       options={filterSelectOptions[filter.id] || []}
                       loading={filterOptionsLoading[filter.id]}
+                      value={filterValues[filter.field_name]}
                       onChange={handleFilterChange}
                     />
                   )}
@@ -462,6 +487,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                     <Input
                       style={{ width: 150 }}
                       placeholder="请输入"
+                      value={filterValues[filter.field_name]}
                       onChange={(e) => handleFilterChange(e.target.value)}
                     />
                   )}
@@ -544,7 +570,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                   alignItems: 'stretch',
                 }}
               >
-                <ChartCardComponent card={card} filterValues={filterValues} />
+                <ChartCardComponent card={card} filterValues={filterValues} allFilters={filters} />
               </Card>
             </div>
           ))}

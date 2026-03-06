@@ -1,5 +1,6 @@
 // src/pages/DashboardEditorPage.tsx
 import React, { useEffect, useState, useRef } from 'react';
+import dayjs from 'dayjs';
 import {
   Layout,
   Form,
@@ -900,7 +901,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   // 图表卡片组件 - 加载并显示图表数据
-  const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any> }> = ({ card, filterValues = {} }) => {
+  const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any>; allFilters?: DashboardFilter[] }> = ({ card, filterValues = {}, allFilters = [] }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -918,15 +919,26 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         setDataLoading(true);
         setError(null);
         try {
-          // 过滤掉空值，只传递有实际值的筛选条件
+          // 根据卡片获取需要应用的筛选条件
+          // 所有筛选器都应用到所有图表，让数据库自然处理不存在的字段
           const filteredFilterValues: Record<string, any> = {};
-          Object.entries(filterValues).forEach(([key, value]) => {
-            if (value !== null && value !== undefined && value !== '' &&
-                !(Array.isArray(value) && value.length === 0)) {
-              filteredFilterValues[key] = value;
-            }
+
+          allFilters.forEach(filter => {
+            const filterValue = filterValues[filter.id];
+
+            // 跳过未设置的筛选器
+            if (filterValue === undefined || filterValue === null) return;
+            if (filterValue === '') return;
+            if (Array.isArray(filterValue) && filterValue.length === 0) return;
+
+            // 使用 filterId_fieldName 格式作为key，避免相同字段名的筛选器互相覆盖
+            const paramKey = `${filter.id}_${filter.field_name}`;
+            filteredFilterValues[paramKey] = filterValue;
           });
-          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filteredFilterValues);
+
+          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'allFilters:', allFilters.map(f => ({ id: f.id, field_name: f.field_name })));
+          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filterValues);
+          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filteredFilterValues:', filteredFilterValues);
           const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
           if (cancelled) return;
@@ -962,7 +974,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       return () => {
         cancelled = true;
       };
-    }, [card.chart?.id, filterValues]);
+    }, [card.chart?.id, filterValues, allFilters]);
 
     if (!card.chart) {
       return (
@@ -1443,10 +1455,16 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     {filters.map(filter => {
                       // 筛选器组件渲染
                       const handleFilterChange = (value: any) => {
-                        setFilterValues(prev => ({
-                          ...prev,
-                          [filter.field_name]: value,
-                        }));
+                        console.log('[FilterDebug] handleFilterChange called:', filter.id, filter.field_name, 'value:', value);
+                        console.log('[FilterDebug] filterValues before:', filterValues);
+                        setFilterValues(prev => {
+                          const newValues = {
+                            ...prev,
+                            [filter.id]: value,
+                          };
+                          console.log('[FilterDebug] filterValues after:', newValues);
+                          return newValues;
+                        });
                       };
 
                       return (
@@ -1457,6 +1475,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           {filter.filter_type === 'date_range' && (
                             <DatePicker.RangePicker
                               style={{ width: 240 }}
+                              value={filterValues[filter.id] ? [
+                                filterValues[filter.id].start ? dayjs(filterValues[filter.id].start) : null,
+                                filterValues[filter.id].end ? dayjs(filterValues[filter.id].end) : null
+                              ] : null}
                               onChange={(dates) => {
                                 if (dates) {
                                   handleFilterChange({
@@ -1473,6 +1495,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                             <Select
                               style={{ width: 150 }}
                               placeholder="选择时间范围"
+                              value={filterValues[filter.id]}
                               options={[
                                 { label: '今天', value: 'today' },
                                 { label: '昨天', value: 'yesterday' },
@@ -1491,6 +1514,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                               allowClear
                               options={filterSelectOptions[filter.id] || []}
                               loading={filterOptionsLoading[filter.id]}
+                              value={filterValues[filter.id]}
                               onChange={handleFilterChange}
                             />
                           )}
@@ -1502,6 +1526,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                               allowClear
                               options={filterSelectOptions[filter.id] || []}
                               loading={filterOptionsLoading[filter.id]}
+                              value={filterValues[filter.id]}
                               onChange={handleFilterChange}
                             />
                           )}
@@ -1509,6 +1534,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                             <Input
                               style={{ width: 150 }}
                               placeholder="请输入"
+                              value={filterValues[filter.id]}
                               onChange={(e) => handleFilterChange(e.target.value)}
                             />
                           )}
@@ -1716,7 +1742,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       }}
                     >
                       {/* ChartCardComponent 会占满 body，高度 100%，从而让图表垂直填充整个卡片 */}
-                      <ChartCardComponent card={card} filterValues={filterValues} />
+                      <ChartCardComponent card={card} filterValues={filterValues} allFilters={filters} />
                     </Card>
                   </div>
                 ))}

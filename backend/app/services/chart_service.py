@@ -239,34 +239,69 @@ class ChartService:
             # ========== 方案2: 自动生成 WHERE 条件 ==========
             # 构建WHERE子句
             where_conditions = []
+
+            # 提取SQL中使用的所有字段（简单匹配）
+            import re
+            sql_field_pattern = re.compile(r'`?(\w+)`?\s*(?:AS\s+\w+)?(?:,|\s+FROM|\s+WHERE|\s+AND|\s+OR|\s+GROUP|\s+ORDER|\s+LIMIT|$)', re.IGNORECASE)
+            # 更准确地提取字段名
+            sql_fields = set()
+            # 匹配 SELECT ... FROM 之间的字段
+            select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql_query, re.IGNORECASE | re.DOTALL)
+            if select_match:
+                select_fields = select_match.group(1)
+                # 提取字段名（忽略函数和表达式）
+                for field in select_fields.split(','):
+                    field = field.strip()
+                    # 匹配 `field` 或 field 或 field AS alias
+                    field_match = re.match(r'`?(\w+)`?(?:\s+AS|\s+|$)', field, re.IGNORECASE)
+                    if field_match:
+                        sql_fields.add(field_match.group(1).lower())
+
+            logger.info(f"SQL中检测到的字段: {sql_fields}")
+
             for param_name, param_value in filter_params.items():
                 if param_value is None or param_value == '':
                     continue
-                    
+
+                # 处理 filterId_fieldName 格式的key，提取真正的字段名
+                # 例如: "1_支付日期" -> "支付日期"
+                actual_field_name = param_name
+                if '_' in param_name:
+                    # 检查是否是数字开头（filterId）
+                    parts = param_name.split('_', 1)
+                    if parts[0].isdigit() and len(parts) == 2:
+                        actual_field_name = parts[1]
+                        logger.info(f"解析筛选器参数: {param_name} -> {actual_field_name}")
+
+                # 检查字段是否在SQL中使用
+                if actual_field_name.lower() not in sql_fields:
+                    logger.info(f"字段 '{actual_field_name}' 不在SQL中，跳过筛选条件")
+                    continue
+
                 # 处理日期范围 {start: '...', end: '...'}
                 if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
                     start_value = param_value.get('start')
                     end_value = param_value.get('end')
                     if start_value and end_value:
                         # 日期范围: BETWEEN
-                        condition = f"`{param_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                        condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
                         where_conditions.append(condition)
                     elif start_value:
                         # 只有开始日期: >=
-                        condition = f"`{param_name}` >= '{start_value}'"
+                        condition = f"`{actual_field_name}` >= '{start_value}'"
                         where_conditions.append(condition)
                     elif end_value:
                         # 只有结束日期: <=
-                        condition = f"`{param_name}` <= '{end_value}'"
+                        condition = f"`{actual_field_name}` <= '{end_value}'"
                         where_conditions.append(condition)
                 # 处理多值列表 ['广东', '浙江']
                 elif isinstance(param_value, list) and len(param_value) > 0:
                     values_str = "', '".join(str(v) for v in param_value)
-                    condition = f"`{param_name}` IN ('{values_str}')"
+                    condition = f"`{actual_field_name}` IN ('{values_str}')"
                     where_conditions.append(condition)
                 # 处理单值 '广东'
                 else:
-                    condition = f"`{param_name}` = '{param_value}'"
+                    condition = f"`{actual_field_name}` = '{param_value}'"
                     where_conditions.append(condition)
             
             # 将生成的WHERE条件拼接到SQL中
