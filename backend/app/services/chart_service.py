@@ -238,26 +238,8 @@ class ChartService:
             
             # ========== 方案2: 自动生成 WHERE 条件 ==========
             # 构建WHERE子句
+            # 所有筛选器都应用，数据库会自动处理不存在的字段
             where_conditions = []
-
-            # 提取SQL中使用的所有字段（简单匹配）
-            import re
-            sql_field_pattern = re.compile(r'`?(\w+)`?\s*(?:AS\s+\w+)?(?:,|\s+FROM|\s+WHERE|\s+AND|\s+OR|\s+GROUP|\s+ORDER|\s+LIMIT|$)', re.IGNORECASE)
-            # 更准确地提取字段名
-            sql_fields = set()
-            # 匹配 SELECT ... FROM 之间的字段
-            select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql_query, re.IGNORECASE | re.DOTALL)
-            if select_match:
-                select_fields = select_match.group(1)
-                # 提取字段名（忽略函数和表达式）
-                for field in select_fields.split(','):
-                    field = field.strip()
-                    # 匹配 `field` 或 field 或 field AS alias
-                    field_match = re.match(r'`?(\w+)`?(?:\s+AS|\s+|$)', field, re.IGNORECASE)
-                    if field_match:
-                        sql_fields.add(field_match.group(1).lower())
-
-            logger.info(f"SQL中检测到的字段: {sql_fields}")
 
             for param_name, param_value in filter_params.items():
                 if param_value is None or param_value == '':
@@ -272,11 +254,6 @@ class ChartService:
                     if parts[0].isdigit() and len(parts) == 2:
                         actual_field_name = parts[1]
                         logger.info(f"解析筛选器参数: {param_name} -> {actual_field_name}")
-
-                # 检查字段是否在SQL中使用
-                if actual_field_name.lower() not in sql_fields:
-                    logger.info(f"字段 '{actual_field_name}' 不在SQL中，跳过筛选条件")
-                    continue
 
                 # 处理日期范围 {start: '...', end: '...'}
                 if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
@@ -349,27 +326,121 @@ class ChartService:
             
             logger.info(f"执行SQL查询（自动生成WHERE后）: {sql_query[:200]}...")
             # ========== 方案2 结束 ==========
-            
+
             # 获取数据源连接信息
             db_model = await self.db.get(Database, chart.data_source_id)
             if not db_model:
                 raise Exception("数据源不存在")
-            
+
             # 构建数据库连接URL
             db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
-            
+
             # 创建临时连接执行查询
             temp_engine = create_async_engine(db_url)
             try:
                 async with temp_engine.connect() as conn:
                     result = await conn.execute(text(sql_query))
                     rows = result.fetchall()
-                    
+
                     # 转换为字典列表
                     columns = result.keys()
                     data = [dict(zip(columns, row)) for row in rows]
-                    
+
                     return data
+            except Exception as query_error:
+                error_msg = str(query_error)
+                logger.warning(f"查询失败: {error_msg}，尝试检查字段有效性...")
+
+                # 如果有筛选条件且失败，尝试获取表字段并重新生成筛选条件
+                if where_conditions and db_model:
+                    try:
+                        # 获取表的字段列表
+                        table_match = re.search(r'FROM\s+`?(\w+)`?', sql_query, re.IGNORECASE)
+                        if table_match:
+                            table_name = table_match.group(1)
+                            # 创建新连接获取字段
+                            temp_engine2 = create_async_engine(db_url)
+                            try:
+                                async with temp_engine2.connect() as conn2:
+                                    result = await conn2.execute(text(f"DESCRIBE `{table_name}`"))
+                                    table_fields = set()
+                                    for row in result.fetchall():
+                                        table_fields.add(row[0].lower())
+                                    logger.info(f"表 '{table_name}' 字段: {table_fields}")
+                            finally:
+                                await temp_engine2.dispose()
+
+                            # 重新生成有效的筛选条件
+                            valid_conditions = []
+                            for param_name, param_value in filter_params.items():
+                                if param_value is None or param_value == '':
+                                    continue
+
+                                actual_field_name = param_name
+                                if '_' in param_name:
+                                    parts = param_name.split('_', 1)
+                                    if parts[0].isdigit() and len(parts) == 2:
+                                        actual_field_name = parts[1]
+
+                                # 只保留表中存在的字段
+                                if actual_field_name.lower() in table_fields:
+                                    # 重新生成条件
+                                    if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
+                                        start_value = param_value.get('start')
+                                        end_value = param_value.get('end')
+                                        if start_value and end_value:
+                                            condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                                            valid_conditions.append(condition)
+                                        elif start_value:
+                                            condition = f"`{actual_field_name}` >= '{start_value}'"
+                                            valid_conditions.append(condition)
+                                        elif end_value:
+                                            condition = f"`{actual_field_name}` <= '{end_value}'"
+                                            valid_conditions.append(condition)
+                                    elif isinstance(param_value, list) and len(param_value) > 0:
+                                        values_str = "', '".join(str(v) for v in param_value)
+                                        condition = f"`{actual_field_name}` IN ('{values_str}')"
+                                        valid_conditions.append(condition)
+                                    else:
+                                        condition = f"`{actual_field_name}` = '{param_value}'"
+                                        valid_conditions.append(condition)
+
+                            # 如果有有效条件，重新生成SQL
+                            if valid_conditions:
+                                sql_query = dataset_query.get('native', {}).get('query', '')
+                                where_clause = " AND ".join(valid_conditions)
+
+                                # 重新插入WHERE条件
+                                if 'WHERE' in sql_query.upper():
+                                    match = re.search(r'\bWHERE\b', sql_query, re.IGNORECASE)
+                                    if match:
+                                        insert_pos = match.end()
+                                        sql_query = sql_query[:insert_pos] + " " + where_clause + " AND" + sql_query[insert_pos:]
+                                else:
+                                    limit_match = re.search(r'\bLIMIT\b', sql_query, re.IGNORECASE)
+                                    order_match = re.search(r'\bORDER\s+BY\b', sql_query, re.IGNORECASE)
+                                    group_match = re.search(r'\bGROUP\s+BY\b', sql_query, re.IGNORECASE)
+                                    positions = []
+                                    if limit_match: positions.append(limit_match.start())
+                                    if order_match: positions.append(order_match.start())
+                                    if group_match: positions.append(group_match.start())
+                                    if positions:
+                                        insert_pos = min(positions)
+                                        sql_query = sql_query[:insert_pos] + " WHERE " + where_clause + " " + sql_query[insert_pos:]
+                                    else:
+                                        sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
+
+                                logger.info(f"重试SQL查询: {sql_query[:200]}...")
+                                async with temp_engine.connect() as conn:
+                                    result = await conn.execute(text(sql_query))
+                                    rows = result.fetchall()
+                                    columns = result.keys()
+                                    data = [dict(zip(columns, row)) for row in rows]
+                                    return data
+                    except Exception as retry_error:
+                        logger.error(f"重试查询也失败: {retry_error}")
+                        # 重试失败，抛出原始错误
+                        raise query_error
             finally:
                 await temp_engine.dispose()
                 
