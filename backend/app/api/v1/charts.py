@@ -232,13 +232,15 @@ async def get_filter_options(
     table_name: str,
     field_name: str,
     limit: int = Query(100, ge=1, le=1000),
+    filter_conditions: Optional[str] = None,  # JSON 字符串，级联筛选条件
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
-    """获取筛选器的选项列表"""
+    """获取筛选器的选项列表（支持级联条件 filter_conditions=JSON）"""
     try:
         service = ChartService(db)
-        options = await service.get_filter_options(data_source_id, table_name, field_name, limit)
+        conditions = json.loads(filter_conditions) if filter_conditions else None
+        options = await service.get_filter_options(data_source_id, table_name, field_name, limit, conditions)
         return {"options": options}
     except Exception as e:
         logger.error(f"获取筛选器选项API错误: {str(e)}")
@@ -250,10 +252,11 @@ async def get_filter_options_from_chart(
     chart_id: int,
     field_name: str,
     limit: int = Query(100, ge=1, le=1000),
+    filter_conditions: Optional[str] = None,  # JSON 字符串，级联筛选条件
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
-    """从图表的SQL查询中获取筛选器选项（自动提取表名和字段名）"""
+    """从图表的SQL查询中获取筛选器选项（自动提取表名和字段名，支持级联条件）"""
     try:
         service = ChartService(db)
         chart = await service.get_chart(chart_id, user_id)
@@ -274,11 +277,6 @@ async def get_filter_options_from_chart(
             raise HTTPException(status_code=400, detail="图表SQL查询为空")
 
         if not table_name:
-            # 提取 FROM 后的主表名，支持：
-            # - FROM table t
-            # - FROM `table` AS t
-            # - FROM schema.table
-            # - FROM `schema`.`table` t
             import re
             from_match = re.search(
                 r"\bFROM\s+"
@@ -294,8 +292,11 @@ async def get_filter_options_from_chart(
             table = from_match.group("table_bt") or from_match.group("table")
             table_name = f"{schema}.{table}" if schema else table
 
-        # 获取筛选器选项
-        options = await service.get_filter_options(chart.data_source_id, table_name, field_name, limit)
+        # 解析级联条件
+        conditions = json.loads(filter_conditions) if filter_conditions else None
+
+        # 获取筛选器选项（传入级联条件）
+        options = await service.get_filter_options(chart.data_source_id, table_name, field_name, limit, conditions)
         return {
             "options": options,
             "data_source_id": chart.data_source_id,

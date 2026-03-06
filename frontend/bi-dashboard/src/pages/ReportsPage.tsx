@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
 import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
@@ -110,7 +110,7 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
   );
 };
 
-// 图表卡片组件（只读模式）
+// 图表卡片组件（只读模式）—— 与 DashboardEditorPage 保持一致
 const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any>; allFilters?: DashboardFilter[] }> = ({ card, filterValues = {}, allFilters = [] }) => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
@@ -128,30 +128,18 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
       setDataLoading(true);
       setError(null);
       try {
-        // 根据卡片获取需要应用的筛选条件
-        // 对于日期类型筛选器（不需要绑定），应用到所有图表
-        // 对于其他筛选器，只应用绑定到该卡片的筛选器
+        // 所有筛选器都传给后端，让后端自动判断字段是否存在
+        // key 格式: filterId_fieldName，与 DashboardEditorPage 完全一致
         const filteredFilterValues: Record<string, any> = {};
 
         allFilters.forEach(filter => {
-          const filterValue = filterValues[filter.field_name];
-          if (filterValue === undefined) return;
+          const filterValue = filterValues[filter.id];
+          if (filterValue === undefined || filterValue === null) return;
+          if (filterValue === '') return;
+          if (Array.isArray(filterValue) && filterValue.length === 0) return;
 
-          // 日期类型筛选器不需要绑定，应用到所有图表
-          if (filter.filter_type === 'date_range' || filter.filter_type === 'date_relative') {
-            if (filterValue !== null && filterValue !== '' &&
-                !(Array.isArray(filterValue) && filterValue.length === 0)) {
-              filteredFilterValues[filter.field_name] = filterValue;
-            }
-            return;
-          }
-
-          // 其他类型筛选器，检查是否绑定到当前卡片
-          const isBound = filter.bindings?.some((binding: any) => binding.card_id === card.id);
-          if (isBound && filterValue !== null && filterValue !== '' &&
-              !(Array.isArray(filterValue) && filterValue.length === 0)) {
-            filteredFilterValues[filter.field_name] = filterValue;
-          }
+          const paramKey = `${filter.id}_${filter.field_name}`;
+          filteredFilterValues[paramKey] = filterValue;
         });
 
         const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
@@ -313,75 +301,137 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
   );
 };
 
-// 仪表盘视图组件
-const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<string, any>; onFilterChange?: (values: Record<string, any>) => void }> = ({ dashboard, filterValues = {}, onFilterChange }) => {
+// 仪表盘视图组件 —— 筛选逻辑与 DashboardEditorPage 完全对齐
+const DashboardView: React.FC<{
+  dashboard: Dashboard;
+  filterValues?: Record<number, any>;
+  onFilterChange?: (values: Record<number, any>) => void;
+}> = ({ dashboard, filterValues = {}, onFilterChange }) => {
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
   const filters = dashboard.filters || [];
 
   const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
   const [filterOptionsLoading, setFilterOptionsLoading] = useState<Record<number, boolean>>({});
+  const [filterOptionsCache, setFilterOptionsCache] = useState<Record<number, string[]>>({});
 
-  // 加载筛选器选项
+  // 初始加载：筛选器列表变化时，加载 select/multi_select 的选项
   useEffect(() => {
     filters.forEach(filter => {
       if (filter.filter_type === 'select' || filter.filter_type === 'multi_select') {
         if (!filterSelectOptions[filter.id]) {
-          loadFilterOptions(filter);
+          loadFilterOptions(filter, undefined);
         }
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  const loadFilterOptions = async (filter: DashboardFilter) => {
-    console.log('[FilterDebug-Report] loadFilterOptions called for filter:', filter.id, filter.name);
-    console.log('[FilterDebug-Report] filter.bindings:', filter.bindings);
-    console.log('[FilterDebug-Report] filter.field_name:', filter.field_name);
-    console.log('[FilterDebug-Report] cards:', cards?.map(c => ({ id: c.id, chartId: c.chart?.id })));
+  // 级联联动：任一筛选器值变化时，重新加载其他 select/multi_select 的选项
+  const prevFilterValuesRef = useRef<Record<number, any>>({});
+  useEffect(() => {
+    const prev = prevFilterValuesRef.current;
+    const allKeys = Array.from(new Set([...Object.keys(prev), ...Object.keys(filterValues)]));
+    const hasChanged = allKeys.some(k => (prev as any)[k] !== (filterValues as any)[k]);
+    if (!hasChanged) return;
+    prevFilterValuesRef.current = filterValues;
+
+    filters.forEach(filter => {
+      if (filter.filter_type !== 'select' && filter.filter_type !== 'multi_select') return;
+      const cascadeConditions: Record<string, any> = {};
+      filters.forEach(f => {
+        if (f.id === filter.id) return;
+        const val = filterValues[f.id];
+        if (val === undefined || val === null || val === '') return;
+        if (Array.isArray(val) && val.length === 0) return;
+        cascadeConditions[`${f.id}_${f.field_name}`] = val;
+      });
+      loadFilterOptions(filter, Object.keys(cascadeConditions).length > 0 ? cascadeConditions : undefined);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterValues]);
+
+  /**
+   * 加载筛选器下拉选项，支持级联条件
+   * ① 显式配置数据源/表/字段 → 直接查询
+   * ② 有绑定图表 → 从绑定图表推断
+   * ③ 无绑定 → 遍历所有仪表盘图表找第一个能返回选项的
+   */
+  const loadFilterOptions = async (
+    filter: DashboardFilter,
+    filterConditions: Record<string, any> | undefined,
+  ) => {
+    const hasCascade = filterConditions && Object.keys(filterConditions).length > 0;
+
+    // 命中缓存时仍需刷新 UI（防止级联缩小的选项残留）
+    if (!hasCascade && filterOptionsCache[filter.id]) {
+      const cached = filterOptionsCache[filter.id];
+      setFilterSelectOptions(prev => ({
+        ...prev,
+        [filter.id]: cached.map((opt: string) => ({ label: String(opt), value: String(opt) })),
+      }));
+      return cached;
+    }
 
     setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
 
     try {
       let options: string[] = [];
 
-      if (filter.data_source_id && filter.options_table && filter.options_field) {
+      if (filter.data_source_id && filter.options_table && (filter.options_field || filter.field_name)) {
+        // ① 显式配置
+        const optField = filter.options_field || filter.field_name;
         options = await ChartService.getFilterOptions(
           filter.data_source_id,
           filter.options_table,
-          filter.options_field
+          optField,
+          undefined,
+          filterConditions,
         );
       } else {
+        // ② 从绑定图表推断
         const firstBinding = filter.bindings?.[0];
-        console.log('[FilterDebug-Report] firstBinding:', firstBinding);
+        const boundCard = firstBinding ? cards.find(c => c.id === firstBinding.card_id) : undefined;
+        let chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
 
-        const boundCard = firstBinding
-          ? cards.find(c => c.id === firstBinding.card_id)
-          : undefined;
-        console.log('[FilterDebug-Report] boundCard:', boundCard);
-
-        const chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
-        console.log('[FilterDebug-Report] chartId:', chartId);
-
-        if (chartId && filter.field_name) {
-          console.log('[FilterDebug-Report] calling getFilterOptionsFromChart');
+        // ③ 无绑定 → 遍历所有图表
+        if (!chartId && filter.field_name && cards.length > 0) {
+          for (const dashCard of cards) {
+            const candidateId = dashCard.chart?.id ?? dashCard.chart_id;
+            if (!candidateId) continue;
+            try {
+              const result = await ChartService.getFilterOptionsFromChart(
+                candidateId, filter.field_name, undefined, filterConditions,
+              );
+              if (result.options && result.options.length > 0) {
+                options = result.options;
+                break;
+              }
+            } catch { continue; }
+          }
+        } else if (chartId && filter.field_name) {
           try {
-            const result = await ChartService.getFilterOptionsFromChart(chartId, filter.field_name);
-            console.log('[FilterDebug-Report] result:', result);
+            const result = await ChartService.getFilterOptionsFromChart(
+              chartId, filter.field_name, undefined, filterConditions,
+            );
             options = result.options || [];
           } catch (e) {
-            console.error('[FilterDebug-Report] error:', e);
+            console.error('[Report] 获取筛选器选项失败:', e);
           }
         }
       }
 
-      console.log('[FilterDebug-Report] options:', options);
-
+      if (!hasCascade) {
+        setFilterOptionsCache(prev => ({ ...prev, [filter.id]: options }));
+      }
       setFilterSelectOptions(prev => ({
         ...prev,
-        [filter.id]: options.map((opt: string) => ({ label: opt, value: opt }))
+        [filter.id]: options.map((opt: string) => ({ label: String(opt), value: String(opt) })),
       }));
+      return options;
     } catch (error) {
-      console.error('[FilterDebug-Report] 加载筛选器选项失败:', error);
+      console.error('[Report] 加载筛选器选项失败:', error);
+      return [];
     } finally {
       setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
     }
@@ -401,14 +451,11 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
         <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
             {filters.map(filter => {
+              // 统一用 filter.id 作 key，与 DashboardEditorPage 一致
               const handleFilterChange = (value: any) => {
-                const newValues = {
-                  ...filterValues,
-                  [filter.field_name]: value,
-                };
-                // 使用 onFilterChange 回调更新父组件状态
-                onFilterChange?.(newValues);
+                onFilterChange?.({ ...filterValues, [filter.id]: value });
               };
+              const currentVal = filterValues[filter.id];
 
               return (
                 <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -418,9 +465,9 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                   {filter.filter_type === 'date_range' && (
                     <DatePicker.RangePicker
                       style={{ width: 240 }}
-                      value={filterValues[filter.field_name] ? [
-                        filterValues[filter.field_name].start ? dayjs(filterValues[filter.field_name].start) : null,
-                        filterValues[filter.field_name].end ? dayjs(filterValues[filter.field_name].end) : null
+                      value={currentVal ? [
+                        currentVal.start ? dayjs(currentVal.start) : null,
+                        currentVal.end ? dayjs(currentVal.end) : null,
                       ] : null}
                       onChange={(dates) => {
                         if (dates) {
@@ -448,7 +495,8 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                     <Select
                       style={{ width: 150 }}
                       placeholder="选择时间范围"
-                      value={filterValues[filter.field_name]}
+                      allowClear
+                      value={currentVal}
                       options={[
                         { label: '今天', value: 'today' },
                         { label: '昨天', value: 'yesterday' },
@@ -467,7 +515,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                       allowClear
                       options={filterSelectOptions[filter.id] || []}
                       loading={filterOptionsLoading[filter.id]}
-                      value={filterValues[filter.field_name]}
+                      value={currentVal}
                       onChange={handleFilterChange}
                     />
                   )}
@@ -479,7 +527,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                       allowClear
                       options={filterSelectOptions[filter.id] || []}
                       loading={filterOptionsLoading[filter.id]}
-                      value={filterValues[filter.field_name]}
+                      value={currentVal}
                       onChange={handleFilterChange}
                     />
                   )}
@@ -487,7 +535,7 @@ const DashboardView: React.FC<{ dashboard: Dashboard; filterValues?: Record<stri
                     <Input
                       style={{ width: 150 }}
                       placeholder="请输入"
-                      value={filterValues[filter.field_name]}
+                      value={currentVal}
                       onChange={(e) => handleFilterChange(e.target.value)}
                     />
                   )}
@@ -604,11 +652,11 @@ export const ReportsPage: React.FC = () => {
   const [addDashboardForm] = Form.useForm();
   const [availableDashboardsForAdd, setAvailableDashboardsForAdd] = useState<Dashboard[]>([]);
   const [addingDashboard, setAddingDashboard] = useState(false);
-  // 当前仪表盘的筛选器值
-  const [filterValues, setFilterValues] = useState<Record<string, any>>({});
+  // 当前仪表盘的筛选器值（key 为 filter.id）
+  const [filterValues, setFilterValues] = useState<Record<number, any>>({});
 
   // 处理筛选器变化
-  const handleFilterChange = (newValues: Record<string, any>) => {
+  const handleFilterChange = (newValues: Record<number, any>) => {
     setFilterValues(newValues);
   };
 
@@ -716,7 +764,8 @@ export const ReportsPage: React.FC = () => {
   const handleTabChange = async (dashboardId: string) => {
     const id = Number(dashboardId);
     setActiveDashboardId(id);
-    
+    setFilterValues({}); // 切换仪表盘时重置筛选状态
+
     // 如果还没有加载过这个仪表盘的详情，则加载
     if (!dashboardDetails.has(id)) {
       await loadDashboardDetails(id, charts);

@@ -39,6 +39,14 @@ class DashboardService:
             self.db.add(dashboard)
             await self.db.commit()
             await self.db.refresh(dashboard)
+
+            # 用 selectinload 重新查询，确保所有关系都已预加载（避免序列化时触发懒加载）
+            stmt = select(Dashboard).options(
+                selectinload(Dashboard.dashboard_cards).selectinload(DashboardCard.chart),
+                selectinload(Dashboard.filters).selectinload(DashboardFilter.bindings),
+            ).where(Dashboard.id == dashboard.id)
+            result = await self.db.execute(stmt)
+            dashboard = result.scalar_one()
             
             logger.info(f"仪表板创建成功: {dashboard.name} (ID: {dashboard.id})")
             return dashboard

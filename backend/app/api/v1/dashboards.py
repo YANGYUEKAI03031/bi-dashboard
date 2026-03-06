@@ -79,6 +79,7 @@ def _serialize_dashboard(dashboard):
         "created_at": dashboard.created_at,
         "updated_at": dashboard.updated_at,
         "cards": [],
+        "filters": [],  # 避免 Pydantic 触发懒加载
     }
 
     cards = getattr(dashboard, "cards", []) or getattr(dashboard, "dashboard_cards", [])
@@ -90,7 +91,7 @@ def _serialize_dashboard(dashboard):
 
     return response_data
 
-@router.post("/", response_model=DashboardResponse)
+@router.post("/")
 async def create_dashboard(
     dashboard_data: DashboardCreate,
     db: AsyncSession = Depends(get_db),
@@ -100,7 +101,8 @@ async def create_dashboard(
     try:
         service = DashboardService(db)
         dashboard = await service.create_dashboard(dashboard_data, user_id)
-        return DashboardResponse.model_validate(dashboard)
+        # 用手动序列化避免 Pydantic 触发异步关系的懒加载（greenlet 错误）
+        return _serialize_dashboard(dashboard)
         
     except Exception as e:
         logger.error(f"创建仪表板API错误: {str(e)}")

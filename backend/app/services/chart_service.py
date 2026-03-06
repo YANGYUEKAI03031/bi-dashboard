@@ -448,18 +448,22 @@ class ChartService:
             logger.error(f"执行查询失败: {str(e)}")
             raise Exception(f"查询执行失败: {str(e)}")
 
-    async def get_filter_options(self, data_source_id: int, table_name: str, field_name: str, limit: int = 100) -> List[Any]:
-        """获取筛选器的选项列表（从数据库查询唯一值）"""
+    async def get_filter_options(
+        self,
+        data_source_id: int,
+        table_name: str,
+        field_name: str,
+        limit: int = 100,
+        filter_conditions: Dict[str, Any] = None,
+    ) -> List[Any]:
+        """获取筛选器的选项列表（从数据库查询唯一值），支持级联条件过滤"""
         try:
-            # 获取数据源连接信息
             db_model = await self.db.get(Database, data_source_id)
             if not db_model:
                 raise Exception("数据源不存在")
-            
-            # 构建数据库连接URL
+
             db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
-            
-            # 构建查询SQL
+
             # 注意：这里是单表取唯一值；如果 field_name 带别名/前缀（如 t.col），只取最后一段 col
             base_field_name = (field_name or "").strip()
             if "." in base_field_name:
@@ -473,28 +477,70 @@ class ChartService:
             if safe_limit < 1:
                 safe_limit = 1
 
-            sql_query = (
-                f"SELECT DISTINCT {quoted_field} AS value "
-                f"FROM {quoted_table} "
-                f"WHERE {quoted_field} IS NOT NULL "
-                f"ORDER BY {quoted_field} "
-                f"LIMIT {safe_limit}"
-            )
-            
-            # 创建临时连接执行查询
+            def _build_cascade_parts(conditions: Dict[str, Any]) -> List[str]:
+                """把前端传来的 filter_conditions 转换为 WHERE 子句片段"""
+                parts = []
+                for param_name, param_value in (conditions or {}).items():
+                    if param_value is None or param_value == "":
+                        continue
+                    # 兼容 filterId_fieldName 格式
+                    actual_field = param_name
+                    if "_" in param_name:
+                        split_parts = param_name.split("_", 1)
+                        if split_parts[0].isdigit() and len(split_parts) == 2:
+                            actual_field = split_parts[1]
+                    if not actual_field:
+                        continue
+                    qf = f"`{actual_field.replace('`', '``')}`"
+                    if isinstance(param_value, dict) and ("start" in param_value or "end" in param_value):
+                        s = param_value.get("start")
+                        e = param_value.get("end")
+                        if s and e:
+                            parts.append(f"{qf} BETWEEN '{s}' AND '{e}'")
+                        elif s:
+                            parts.append(f"{qf} >= '{s}'")
+                        elif e:
+                            parts.append(f"{qf} <= '{e}'")
+                    elif isinstance(param_value, list) and param_value:
+                        vals = "', '".join(str(v) for v in param_value)
+                        parts.append(f"{qf} IN ('{vals}')")
+                    else:
+                        parts.append(f"{qf} = '{param_value}'")
+                return parts
+
+            cascade_parts = _build_cascade_parts(filter_conditions)
+
+            def _make_sql(extra_parts: List[str]) -> str:
+                where_parts = [f"{quoted_field} IS NOT NULL"] + extra_parts
+                where_clause = " AND ".join(where_parts)
+                return (
+                    f"SELECT DISTINCT {quoted_field} AS value "
+                    f"FROM {quoted_table} "
+                    f"WHERE {where_clause} "
+                    f"ORDER BY {quoted_field} "
+                    f"LIMIT {safe_limit}"
+                )
+
             temp_engine = create_async_engine(db_url)
             try:
                 async with temp_engine.connect() as conn:
-                    result = await conn.execute(text(sql_query))
+                    sql_query = _make_sql(cascade_parts)
+                    try:
+                        result = await conn.execute(text(sql_query))
+                    except Exception as cond_err:
+                        # 级联条件引用了不存在的字段，回退到无条件查询
+                        if cascade_parts:
+                            logger.warning(f"级联条件查询失败: {cond_err}，回退到无条件查询")
+                            sql_query = _make_sql([])
+                            result = await conn.execute(text(sql_query))
+                        else:
+                            raise
                     rows = result.fetchall()
-                    
-                    # 提取值
                     options = [row[0] for row in rows if row and row[0] is not None]
-                    
                     return options
             finally:
                 await temp_engine.dispose()
-                
+
         except Exception as e:
             logger.error(f"获取筛选器选项失败: {str(e)}")
             raise Exception(f"获取筛选器选项失败: {str(e)}")
