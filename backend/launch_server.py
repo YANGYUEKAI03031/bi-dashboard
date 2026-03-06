@@ -187,19 +187,19 @@ async def init_database_tables():
 
 def main():
     """主启动函数"""
+    import sys
     import uvicorn
-    from app.main_optimized import app
-    
+
+    # 修复 Windows 上 aiomysql + asyncio 的兼容问题：
+    # Python 3.8+ 在 Windows 默认使用 ProactorEventLoop，aiomysql 需要 SelectorEventLoop
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     print("🚀 启动BI仪表板后端服务...")
     print(f"🔍 Redis安装路径: {REDIS_PATH}")
-    
-    # 初始化数据库表
-    print("📋 正在初始化数据库表...")
-    init_success = asyncio.run(init_database_tables())
-    if init_success:
-        print("✅ 数据库表初始化完成")
-    else:
-        print("⚠️  数据库初始化失败，但继续启动服务")
+
+    # 注意：数据库表初始化已移至 FastAPI lifespan（main_optimized.py），
+    # 这样确保所有 DB 操作都在 uvicorn 的事件循环内运行，避免事件循环冲突。
     
     # 尝试启动Redis
     redis_started = start_redis()

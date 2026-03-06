@@ -17,12 +17,91 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+async def _init_database_tables():
+    """在 uvicorn 事件循环内初始化数据库增强表"""
+    try:
+        from sqlalchemy import text
+        from app.db.session import engine
+
+        logger.info("Creating enhanced data processing tables...")
+        async with engine.begin() as conn:
+            for ddl in [
+                """CREATE TABLE IF NOT EXISTS workflow_executions (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    workflow_id VARCHAR(255) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    status ENUM('pending','running','completed','failed','cancelled') DEFAULT 'pending',
+                    config JSON NOT NULL,
+                    result JSON,
+                    error TEXT,
+                    started_at TIMESTAMP NULL,
+                    completed_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_workflow_executions_status (status),
+                    INDEX idx_workflow_executions_created (created_at)
+                )""",
+                """CREATE TABLE IF NOT EXISTS batch_tasks (
+                    id VARCHAR(255) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    type VARCHAR(100) NOT NULL,
+                    priority INTEGER DEFAULT 2,
+                    status ENUM('pending','processing','completed','failed','cancelled') DEFAULT 'pending',
+                    config JSON NOT NULL,
+                    result JSON,
+                    error TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    max_retries INTEGER DEFAULT 3,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    started_at TIMESTAMP NULL,
+                    completed_at TIMESTAMP NULL,
+                    INDEX idx_batch_tasks_status (status),
+                    INDEX idx_batch_tasks_type (type),
+                    INDEX idx_batch_tasks_priority (priority)
+                )""",
+                """CREATE TABLE IF NOT EXISTS cache_configs (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    cache_key VARCHAR(255) NOT NULL UNIQUE,
+                    strategy VARCHAR(50) NOT NULL,
+                    config JSON NOT NULL,
+                    refresh_automatically BOOLEAN DEFAULT FALSE,
+                    invalidated_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_cache_configs_strategy (strategy),
+                    INDEX idx_cache_configs_invalidated (invalidated_at)
+                )""",
+                """CREATE TABLE IF NOT EXISTS processed_datasets (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    name VARCHAR(255) NOT NULL,
+                    data_source_id INTEGER NOT NULL,
+                    processing_steps JSON,
+                    result_schema JSON,
+                    row_count INTEGER DEFAULT 0,
+                    storage_path VARCHAR(500),
+                    is_cached BOOLEAN DEFAULT FALSE,
+                    cache_expires_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_processed_datasets_name (name),
+                    INDEX idx_processed_datasets_data_source (data_source_id)
+                )""",
+            ]:
+                await conn.execute(text(ddl))
+        logger.info("Enhanced tables created successfully!")
+    except Exception as e:
+        logger.warning(f"数据库表初始化失败（不影响启动）: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时执行
     logger.info("Starting application...")
     
+    # 初始化数据库增强表（在 uvicorn 事件循环内执行，避免事件循环冲突）
+    await _init_database_tables()
+
     # 连接缓存服务
     await cache_service.connect()
     
