@@ -3,11 +3,57 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, text
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import json
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine
 import re
+
+
+# 相对时间预设（与前端 date_relative 选项一致）
+RELATIVE_DATE_KEYS = {
+    'today', 'yesterday',
+    'last_7_days', 'last_30_days',
+    'this_month', 'last_month',
+}
+# 前端可能传首字母大写的值，统一转小写再匹配
+RELATIVE_DATE_KEYS_LOWER = {k.lower() for k in RELATIVE_DATE_KEYS}
+
+
+def _resolve_relative_date(value: str) -> Optional[Dict[str, str]]:
+    """将相对时间字符串解析为 {start, end} 日期范围，用于 SQL 筛选。"""
+    if not value or not isinstance(value, str):
+        return None
+    key = value.strip().lower()
+    if key not in RELATIVE_DATE_KEYS_LOWER:
+        return None
+    today = date.today()
+    if key == 'today':
+        s = e = today
+    elif key == 'yesterday':
+        s = e = today - timedelta(days=1)
+    elif key == 'last_7_days':
+        s = today - timedelta(days=6)
+        e = today
+    elif key == 'last_30_days':
+        s = today - timedelta(days=29)
+        e = today
+    elif key == 'this_month':
+        s = today.replace(day=1)
+        # 本月最后一天
+        next_month = s.replace(day=28) + timedelta(days=4)
+        e = next_month - timedelta(days=next_month.day)
+    elif key == 'last_month':
+        first_this = today.replace(day=1)
+        s = (first_this - timedelta(days=1)).replace(day=1)
+        next_month = s.replace(day=28) + timedelta(days=4)
+        e = next_month - timedelta(days=next_month.day)
+    else:
+        return None
+    return {
+        'start': s.isoformat(),
+        'end': e.isoformat(),
+    }
 
 from app.models.visualization import VisualizationCard, Database
 from app.schemas.chart import ChartCreate, ChartUpdate
@@ -255,6 +301,12 @@ class ChartService:
                         actual_field_name = parts[1]
                         logger.info(f"解析筛选器参数: {param_name} -> {actual_field_name}")
 
+                # 相对时间（如 last_month）转为日期范围后再按日期处理
+                if isinstance(param_value, str):
+                    resolved = _resolve_relative_date(param_value)
+                    if resolved:
+                        param_value = resolved
+
                 # 处理日期范围 {start: '...', end: '...'}
                 if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
                     start_value = param_value.get('start')
@@ -276,7 +328,7 @@ class ChartService:
                     values_str = "', '".join(str(v) for v in param_value)
                     condition = f"`{actual_field_name}` IN ('{values_str}')"
                     where_conditions.append(condition)
-                # 处理单值 '广东'
+                # 处理单值 '广东' 或无法解析的字符串
                 else:
                     condition = f"`{actual_field_name}` = '{param_value}'"
                     where_conditions.append(condition)
@@ -381,6 +433,12 @@ class ChartService:
                                     parts = param_name.split('_', 1)
                                     if parts[0].isdigit() and len(parts) == 2:
                                         actual_field_name = parts[1]
+
+                                # 相对时间转日期范围
+                                if isinstance(param_value, str):
+                                    resolved = _resolve_relative_date(param_value)
+                                    if resolved:
+                                        param_value = resolved
 
                                 # 只保留表中存在的字段
                                 if actual_field_name.lower() in table_fields:
