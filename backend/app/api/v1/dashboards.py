@@ -165,6 +165,8 @@ async def update_dashboard(
 
         return _serialize_dashboard(dashboard)
 
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -322,6 +324,8 @@ async def delete_dashboard(
             
         return {"message": "仪表板删除成功"}
         
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

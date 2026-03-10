@@ -11,6 +11,7 @@ import { ChartsManagementPage } from './pages/ChartsManagementPage'; // 图表�
 import { DataSourceManagementPage } from './pages/DataSourceManagementPage'; // 数据源管理页面
 import { DashboardEditorPage } from './pages/DashboardEditorPage';
 import { AuthService } from './services/authService';
+import { UserManagementPage } from './pages/UserManagementPage';
 
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -157,16 +158,28 @@ function App() {
 
           {/* 数据源管理路由 */}
           <Route 
-            path="/datasources" 
+            path="/datasources"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <DataSourceManagementPage />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          
+
+          {/* 用户管理路由 - 仅管理员 */}
+          <Route
+            path="/user-management"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <UserManagementPage />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
         </Routes>
       </Router>
       </AuthProvider>

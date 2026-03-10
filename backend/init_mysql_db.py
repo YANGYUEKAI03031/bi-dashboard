@@ -38,6 +38,7 @@ async def init_tables():
     from app.models.visualization import VisualizationCard, Database
     from app.models.report_page import ReportPage, ReportPageDashboard
     from app.models.data_source import ProcessedDataset
+    from app.models.permission import UserRole, ReportPagePermission, ModificationLog
     
     # 构建不包含数据库名的URL用于创建引擎
     db_url = f"mysql+aiomysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}"
@@ -50,11 +51,12 @@ async def init_tables():
         print("所有表创建完成")
 
 async def create_default_users():
-    """创建默认用户"""
+    """创建默认用户并设置管理员角色"""
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.ext.asyncio import AsyncSession
     from app.models.user import User
+    from app.models.permission import UserRole, RoleEnum
     from app.core.security import get_password_hash
 
     db_url = f"mysql+aiomysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}"
@@ -62,21 +64,44 @@ async def create_default_users():
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
+        from sqlalchemy.future import select
         result = await session.execute(select(User))
         existing_users = result.scalars().all()
 
         if not existing_users:
             admin_user = User(
                 userID=1,
-                accountName="admin",
-                passWord=get_password_hash("123456"),  # 使用哈希密码
+                accountname="admin",
+                password="123456",  # 当前项目登录逻辑为明文比对（auth.py）
                 state=1
             )
             session.add(admin_user)
+            await session.flush()
+
+            # 为 admin 用户设置管理员角色
+            admin_role = UserRole(user_id=1, role=RoleEnum.ADMIN.value)
+            session.add(admin_role)
+
             await session.commit()
-            print("默认用户创建成功")
+            print("默认用户创建成功并设置为管理员")
         else:
-            print("用户已存在，跳过创建")
+            # 确保 userID=1 为启用状态且为管理员
+            result = await session.execute(select(User).where(User.userID == 1))
+            user_one = result.scalar_one_or_none()
+            if user_one and user_one.state != 1:
+                user_one.state = 1
+                await session.commit()
+                print("已启用 userID=1 账号")
+
+            result = await session.execute(select(UserRole).where(UserRole.user_id == 1))
+            existing_role = result.scalar_one_or_none()
+            if not existing_role:
+                admin_role = UserRole(user_id=1, role=RoleEnum.ADMIN.value)
+                session.add(admin_role)
+                await session.commit()
+                print("已为 userID=1 用户添加管理员角色")
+            else:
+                print("用户已存在，跳过创建")
 
 async def main():
     """主初始化函数"""

@@ -48,6 +48,18 @@ class DashboardService:
             result = await self.db.execute(stmt)
             dashboard = result.scalar_one()
             
+            # 记录创建操作
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="dashboard",
+                resource_id=dashboard.id,
+                resource_name=dashboard.name,
+                action="create",
+                changes={"new": {"name": dashboard.name}}
+            )
+            
             logger.info(f"仪表板创建成功: {dashboard.name} (ID: {dashboard.id})")
             return dashboard
             
@@ -65,14 +77,25 @@ class DashboardService:
         """更新仪表板基本信息/布局/设置"""
         try:
             stmt = select(Dashboard).where(
-                Dashboard.id == dashboard_id,
-                Dashboard.creator_id == user_id
+                Dashboard.id == dashboard_id
             )
             result = await self.db.execute(stmt)
             dashboard = result.scalar_one_or_none()
 
             if not dashboard:
                 return None
+
+            # 权限检查：仅创建者或管理员可以编辑
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.can_edit_dashboard(user_id, dashboard.creator_id):
+                raise PermissionError("无权限编辑此仪表盘，只有创建者或管理员可以编辑")
+
+            # 记录修改前的数据
+            old_data = {
+                "name": dashboard.name,
+                "description": dashboard.description,
+            }
 
             update_fields: Dict[str, Any] = {}
             if dashboard_data.name is not None:
@@ -90,11 +113,20 @@ class DashboardService:
 
             if update_fields:
                 upd = update(Dashboard).where(
-                    Dashboard.id == dashboard_id,
-                    Dashboard.creator_id == user_id
+                    Dashboard.id == dashboard_id
                 ).values(update_fields)
                 await self.db.execute(upd)
                 await self.db.commit()
+
+            # 记录修改操作
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="dashboard",
+                resource_id=dashboard_id,
+                resource_name=dashboard.name,
+                action="update",
+                changes={"old": old_data, "new": update_fields}
+            )
 
             return await self.get_dashboard(dashboard_id, user_id)
 
@@ -312,14 +344,19 @@ class DashboardService:
         try:
             # 验证仪表板属于用户
             dashboard_stmt = select(Dashboard).where(
-                Dashboard.id == dashboard_id,
-                Dashboard.creator_id == user_id
+                Dashboard.id == dashboard_id
             )
             dashboard_result = await self.db.execute(dashboard_stmt)
             dashboard = dashboard_result.scalar_one_or_none()
             
             if not dashboard:
                 return False
+            
+            # 权限检查：仅创建者或管理员可以删除
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.can_delete_dashboard(user_id, dashboard.creator_id):
+                raise PermissionError("无权限删除此仪表盘，只有创建者或管理员可以删除")
             
             # 删除报表页与仪表盘的关联记录
             delete_rpd_stmt = delete(ReportPageDashboard).where(
@@ -330,8 +367,7 @@ class DashboardService:
             
             # 软删除：标记为已归档
             stmt = update(Dashboard).where(
-                Dashboard.id == dashboard_id,
-                Dashboard.creator_id == user_id
+                Dashboard.id == dashboard_id
             ).values(
                 archived=True,
                 updated_at=datetime.utcnow()
@@ -339,6 +375,16 @@ class DashboardService:
             
             await self.db.execute(stmt)
             await self.db.commit()
+            
+            # 记录删除操作
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="dashboard",
+                resource_id=dashboard_id,
+                resource_name=dashboard.name,
+                action="delete",
+                changes={"old": {"name": dashboard.name, "archived": dashboard.archived}}
+            )
             
             logger.info(f"仪表板软删除成功: {dashboard.name} (ID: {dashboard_id})")
             return True

@@ -146,7 +146,7 @@ async def update_chart(
         
         if not chart:
             raise HTTPException(status_code=404, detail="图表不存在")
-        
+
         # 转换为响应模型
         response_data = {
             "id": chart.id,
@@ -166,7 +166,9 @@ async def update_chart(
         }
         
         return ChartResponse(**response_data)
-        
+
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -189,6 +191,8 @@ async def delete_chart(
         
         return {"message": "图表删除成功"}
         
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

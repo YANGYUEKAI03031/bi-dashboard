@@ -1,7 +1,7 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined } from '@ant-design/icons';
 import { Modal, Form, Input, message, Popconfirm, Popover } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { ReportPageService, ReportPage } from '../../services/reportPageService';
@@ -30,7 +30,7 @@ const readCollapsedFromStorage = (userId?: number | null): boolean | null => {
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {
       return readCollapsedFromStorage(null) ?? false;
@@ -390,14 +390,26 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         <div className="sidebar-footer">
           <div className="user-info">
             <div className="user-avatar">
-              👤
+              {isAdmin ? <CrownOutlined style={{ fontSize: 24, color: '#faad14' }} /> : <TeamOutlined style={{ fontSize: 24 }} />}
             </div>
             <div className="user-details">
               <div className="user-name">{user?.full_name || user?.username || '用户'}</div>
-              <div className="user-role">管理员</div>
+              <div className="user-role">{isAdmin ? '管理员' : '普通用户'}</div>
             </div>
           </div>
-          
+
+          {/* 管理员显示用户管理入口 */}
+          {isAdmin && (
+            <Link
+              to="/user-management"
+              className={`nav-item nav-item-bottom ${isActive('/user-management') ? 'active' : ''}`}
+              style={{ marginBottom: 8 }}
+            >
+              <span className="icon">👥</span>
+              <span className="nav-text">用户管理</span>
+            </Link>
+          )}
+
           <button onClick={handleLogout} className="logout-btn">
             <span className="icon">🚪</span>
             <span className="logout-text">退出登录</span>

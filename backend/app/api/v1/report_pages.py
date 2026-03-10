@@ -164,6 +164,8 @@ async def update_report_page(
 
         return _serialize_report_page(page)
 
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -249,6 +251,8 @@ async def delete_report_page(
             
         return {"message": "报表页删除成功"}
         
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

@@ -35,6 +35,18 @@ class ReportPageService:
             await self.db.commit()
             await self.db.refresh(report_page)
             
+            # 记录创建操作
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="report_page",
+                resource_id=report_page.id,
+                resource_name=report_page.name,
+                action="create",
+                changes={"new": {"name": report_page.name}}
+            )
+            
             # 重新查询并预加载关系（即使为空），避免序列化时触发懒加载
             return await self.get_report_page(report_page.id, user_id)
             
@@ -51,15 +63,27 @@ class ReportPageService:
     ) -> Optional[ReportPage]:
         """更新报表页"""
         try:
+            # 先查询报表
             stmt = select(ReportPage).where(
-                ReportPage.id == page_id,
-                ReportPage.creator_id == user_id
+                ReportPage.id == page_id
             )
             result = await self.db.execute(stmt)
             report_page = result.scalar_one_or_none()
 
             if not report_page:
                 return None
+
+            # 权限检查：仅创建者或管理员可以编辑
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.is_admin(user_id) and report_page.creator_id != user_id:
+                raise PermissionError("无权限编辑此报表，只有创建者或管理员可以编辑")
+
+            # 记录修改前的数据
+            old_data = {
+                "name": report_page.name,
+                "description": report_page.description,
+            }
 
             update_fields = {}
             if page_data.name is not None:
@@ -77,11 +101,20 @@ class ReportPageService:
 
             if update_fields:
                 upd = update(ReportPage).where(
-                    ReportPage.id == page_id,
-                    ReportPage.creator_id == user_id
+                    ReportPage.id == page_id
                 ).values(update_fields)
                 await self.db.execute(upd)
                 await self.db.commit()
+                
+                # 记录修改操作
+                await perm_service.log_modification(
+                    user_id=user_id,
+                    resource_type="report_page",
+                    resource_id=page_id,
+                    resource_name=report_page.name,
+                    action="update",
+                    changes={"old": old_data, "new": update_fields}
+                )
 
             return await self.get_report_page(page_id, user_id)
 
@@ -91,29 +124,51 @@ class ReportPageService:
             raise Exception(f"更新报表页失败: {str(e)}")
     
     async def get_report_page(self, page_id: int, user_id: int) -> Optional[ReportPage]:
-        """获取报表页详情（包含仪表盘信息）"""
+        """获取报表页详情（包含仪表盘信息）- 支持权限检查"""
         try:
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            
+            # 先查询报表
             stmt = select(ReportPage).options(
                 selectinload(ReportPage.report_page_dashboards).selectinload(ReportPageDashboard.dashboard)
             ).where(
-                ReportPage.id == page_id,
-                ReportPage.creator_id == user_id
+                ReportPage.id == page_id
             )
-            
             result = await self.db.execute(stmt)
-            return result.scalar_one_or_none()
+            report_page = result.scalar_one_or_none()
             
+            if not report_page:
+                return None
+            
+            # 权限检查：是否可以看到此报表
+            if not await perm_service.can_view_report_page(user_id, report_page.creator_id, page_id):
+                raise PermissionError("无权限查看此报表")
+            
+            return report_page
+            
+        except PermissionError:
+            raise
         except SQLAlchemyError as e:
             logger.error(f"获取报表页失败: {str(e)}")
             raise Exception(f"获取报表页失败: {str(e)}")
     
     async def get_user_report_pages(self, user_id: int, skip: int = 0, limit: int = 100) -> List[ReportPage]:
-        """获取用户的所有报表页（按 order_index 排序）"""
+        """获取用户可见的报表页列表（按 order_index 排序）- 支持权限过滤"""
         try:
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            
+            # 获取用户可见的报表ID列表
+            visible_ids = await perm_service.get_user_visible_report_pages(user_id)
+            
+            if not visible_ids:
+                return []
+            
             stmt = select(ReportPage).options(
                 selectinload(ReportPage.report_page_dashboards).selectinload(ReportPageDashboard.dashboard)
             ).where(
-                ReportPage.creator_id == user_id,
+                ReportPage.id.in_(visible_ids),
                 ReportPage.is_active == True
             ).order_by(ReportPage.order_index.asc()).offset(skip).limit(limit)
             
@@ -248,10 +303,9 @@ class ReportPageService:
     async def delete_report_page(self, page_id: int, user_id: int) -> bool:
         """删除报表页（软删除：标记为不激活）"""
         try:
-            # 验证报表页属于用户
+            # 查询报表
             page_stmt = select(ReportPage).where(
-                ReportPage.id == page_id,
-                ReportPage.creator_id == user_id
+                ReportPage.id == page_id
             )
             page_result = await self.db.execute(page_stmt)
             page = page_result.scalar_one_or_none()
@@ -259,10 +313,15 @@ class ReportPageService:
             if not page:
                 return False
             
+            # 权限检查：仅创建者或管理员可以删除
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.is_admin(user_id) and page.creator_id != user_id:
+                raise PermissionError("无权限删除此报表，只有创建者或管理员可以删除")
+            
             # 软删除：标记为不激活
             stmt = update(ReportPage).where(
-                ReportPage.id == page_id,
-                ReportPage.creator_id == user_id
+                ReportPage.id == page_id
             ).values(
                 is_active=False,
                 updated_at=datetime.utcnow()
@@ -271,9 +330,21 @@ class ReportPageService:
             await self.db.execute(stmt)
             await self.db.commit()
             
+            # 记录删除操作
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="report_page",
+                resource_id=page_id,
+                resource_name=page.name,
+                action="delete",
+                changes={"old": {"name": page.name, "is_active": page.is_active}}
+            )
+            
             logger.info(f"报表页软删除成功: {page.name} (ID: {page_id})")
             return True
             
+        except PermissionError:
+            raise
         except SQLAlchemyError as e:
             await self.db.rollback()
             logger.error(f"删除报表页失败: {str(e)}")

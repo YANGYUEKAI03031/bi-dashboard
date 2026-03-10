@@ -133,6 +133,18 @@ class ChartService:
             await self.db.commit()
             await self.db.refresh(chart)
             
+            # 记录创建操作
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="chart",
+                resource_id=chart.id,
+                resource_name=chart.name,
+                action="create",
+                changes={"new": {"name": chart.name, "chart_type": chart.chart_type}}
+            )
+            
             logger.info(f"图表创建成功: {chart.name} (ID: {chart.id})")
             return chart
             
@@ -178,6 +190,19 @@ class ChartService:
             chart = await self.get_chart(chart_id, user_id)
             if not chart:
                 return None
+            
+            # 权限检查：仅创建者或管理员可以编辑
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.can_edit_chart(user_id, chart.created_by):
+                raise PermissionError("无权限编辑此图表，只有创建者或管理员可以编辑")
+            
+            # 记录修改前的数据（用于日志）
+            old_data = {
+                "name": chart.name,
+                "description": chart.description,
+                "chart_type": chart.chart_type,
+            }
             
             # 更新字段
             update_fields = {}
@@ -230,6 +255,26 @@ class ChartService:
                 await self.db.commit()
                 await self.db.refresh(chart)
                 
+                # 记录修改操作
+                from app.services.permission_service import PermissionService
+                perm_service = PermissionService(self.db)
+                # update_fields 的 key 是 InstrumentedAttribute（如 VisualizationCard.name），不能直接进 JSON
+                new_data = {}
+                for col, val in update_fields.items():
+                    key = getattr(col, "name", str(col))
+                    if isinstance(val, datetime):
+                        new_data[key] = val.isoformat()
+                    else:
+                        new_data[key] = val
+                await perm_service.log_modification(
+                    user_id=user_id,
+                    resource_type="chart",
+                    resource_id=chart_id,
+                    resource_name=chart.name,
+                    action="update",
+                    changes={"old": old_data, "new": new_data}
+                )
+                
                 logger.info(f"图表更新成功: {chart.name} (ID: {chart.id})")
             
             return chart
@@ -246,6 +291,12 @@ class ChartService:
             if not chart:
                 return False
             
+            # 权限检查：仅创建者或管理员可以删除
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if not await perm_service.can_delete_chart(user_id, chart.created_by):
+                raise PermissionError("无权限删除此图表，只有创建者或管理员可以删除")
+            
             # 软删除：标记为已归档
             stmt = update(VisualizationCard).where(
                 VisualizationCard.id == chart_id,
@@ -257,6 +308,18 @@ class ChartService:
             
             await self.db.execute(stmt)
             await self.db.commit()
+            
+            # 记录删除操作
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            await perm_service.log_modification(
+                user_id=user_id,
+                resource_type="chart",
+                resource_id=chart_id,
+                resource_name=chart.name,
+                action="delete",
+                changes={"old": {"name": chart.name, "archived": chart.archived}}
+            )
             
             logger.info(f"图表软删除成功: {chart.name} (ID: {chart.id})")
             return True
