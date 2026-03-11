@@ -187,18 +187,15 @@ class ReportPageService:
     ) -> ReportPageDashboard:
         """向报表页添加仪表盘"""
         try:
-            # 验证报表页属于用户
+            # 验证报表页存在且当前用户有权限（创建者、管理员、或报表可编辑）
             page = await self.get_report_page(page_id, user_id)
             if not page:
                 raise Exception("报表页不存在或无权限访问")
             
-            # 验证仪表盘存在且属于用户
-            dashboard_stmt = select(Dashboard).where(
-                Dashboard.id == dashboard_data.dashboard_id,
-                Dashboard.creator_id == user_id
-            )
-            dashboard_result = await self.db.execute(dashboard_stmt)
-            dashboard = dashboard_result.scalar_one_or_none()
+            # 验证仪表盘存在且当前用户可访问（创建者、管理员、或通过报表授权可查看）
+            from app.services.dashboard_service import DashboardService
+            dashboard_service = DashboardService(self.db)
+            dashboard = await dashboard_service.get_dashboard(dashboard_data.dashboard_id, user_id)
             if not dashboard:
                 raise Exception("仪表盘不存在或无权限访问")
             
@@ -240,17 +237,19 @@ class ReportPageService:
         update_data: ReportPageDashboardUpdate,
         user_id: int
     ) -> Optional[ReportPageDashboard]:
-        """更新报表页中的仪表盘排序"""
+        """更新报表页中的仪表盘排序。创建者、管理员、或报表可编辑权限的用户可操作。"""
         try:
-            # 验证关联属于用户的报表页
-            rpd_stmt = select(ReportPageDashboard).join(ReportPage).where(
-                ReportPageDashboard.id == rpd_id,
-                ReportPage.creator_id == user_id
-            )
+            rpd_stmt = select(ReportPageDashboard).options(
+                selectinload(ReportPageDashboard.report_page)
+            ).where(ReportPageDashboard.id == rpd_id)
             rpd_result = await self.db.execute(rpd_stmt)
             rpd = rpd_result.scalar_one_or_none()
-            
-            if not rpd:
+            if not rpd or not rpd.report_page:
+                return None
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            page = rpd.report_page
+            if page.creator_id != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_edit_report_page(user_id, page.creator_id, page.id):
                 return None
             
             # 更新排序
@@ -264,9 +263,10 @@ class ReportPageService:
             await self.db.commit()
             
             # 重新查询
-            refreshed_result = await self.db.execute(rpd_stmt.options(
+            refreshed_stmt = select(ReportPageDashboard).options(
                 selectinload(ReportPageDashboard.dashboard)
-            ))
+            ).where(ReportPageDashboard.id == rpd_id)
+            refreshed_result = await self.db.execute(refreshed_stmt)
             return refreshed_result.scalar_one_or_none()
             
         except SQLAlchemyError as e:
@@ -275,19 +275,20 @@ class ReportPageService:
             raise Exception(f"更新报表页仪表盘失败: {str(e)}")
     
     async def remove_dashboard_from_report_page(self, rpd_id: int, user_id: int) -> bool:
-        """从报表页移除仪表盘"""
+        """从报表页移除仪表盘。创建者、管理员、或报表可编辑权限的用户可操作。"""
         try:
-            # 验证关联属于用户的报表页
-            rpd_stmt = select(ReportPageDashboard).join(ReportPage).where(
-                ReportPageDashboard.id == rpd_id,
-                ReportPage.creator_id == user_id
-            )
+            rpd_stmt = select(ReportPageDashboard).options(
+                selectinload(ReportPageDashboard.report_page)
+            ).where(ReportPageDashboard.id == rpd_id)
             rpd_result = await self.db.execute(rpd_stmt)
             rpd = rpd_result.scalar_one_or_none()
-            
-            if not rpd:
+            if not rpd or not rpd.report_page:
                 return False
-            
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            page = rpd.report_page
+            if page.creator_id != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_edit_report_page(user_id, page.creator_id, page.id):
+                return False
             delete_stmt = delete(ReportPageDashboard).where(ReportPageDashboard.id == rpd_id)
             await self.db.execute(delete_stmt)
             await self.db.commit()

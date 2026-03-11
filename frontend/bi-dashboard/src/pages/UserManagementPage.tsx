@@ -71,21 +71,26 @@ export const UserManagementPage: React.FC = () => {
       const data = await PermissionService.getAllReportPages();
       // 兼容不同返回格式：可能是数组或 {results: []}
       const pages = (data as any).results || data;
-      setReportPages((pages as any[]).map((p: any) => ({
+      const pageList = (pages as any[]).map((p: any) => ({
         id: p.id,
         name: p.name || p.title || `报表 ${p.id}`,
-      })));
+      }));
+      setReportPages(pageList);
+      return pageList;  // 返回报表列表供调用方使用
     } catch (error: any) {
       console.error('加载报表列表失败:', error);
+      return [];  // 失败时返回空数组
     }
   };
 
-  // 加载指定用户的报表权限
-  const loadUserReportPermissions = async (userId: number) => {
+  // 加载指定用户的报表权限（直接接收报表列表参数，避免 state 异步问题）
+  const loadUserReportPermissions = async (userId: number, pageList?: {id: number, name: string}[]) => {
     setReportLoading(true);
+    // 使用传入的 pageList，如果没传则使用 state 中的（兼容旧调用）
+    const pages = pageList || reportPages;
     try {
       const permissions: ReportPagePermission[] = [];
-      for (const page of reportPages) {
+      for (const page of pages) {
         try {
           const perms = await PermissionService.getReportPagePermissions(page.id);
           const userPerm = perms.find((p: any) => p.user_id === userId);
@@ -112,8 +117,8 @@ export const UserManagementPage: React.FC = () => {
   // 打开报表授权弹窗
   const handleOpenReportModal = async (record: UserInfo) => {
     setSelectedUser(record);
-    await loadReportPages();
-    await loadUserReportPermissions(record.user_id);
+    const pages = await loadReportPages();  // 获取加载后的报表列表
+    await loadUserReportPermissions(record.user_id, pages);  // 直接传入
     setIsReportModalVisible(true);
   };
 

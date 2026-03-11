@@ -189,8 +189,8 @@ class PermissionService:
             ReportPagePermission.can_edit == True
         )
         result = await self.db.execute(stmt)
-        permission = result.scalar_one_or_none()
-        return permission is not None
+        permissions = result.scalars().all()
+        return len(permissions) > 0
 
     async def can_view_dashboard_via_report_page(self, user_id: int, dashboard_id: int) -> bool:
         """检查用户是否通过报表授权（可读或可编辑）可查看该仪表盘"""
@@ -210,8 +210,8 @@ class PermissionService:
             or_(ReportPagePermission.can_view == True, ReportPagePermission.can_edit == True)
         )
         result = await self.db.execute(stmt)
-        permission = result.scalar_one_or_none()
-        return permission is not None
+        permissions = result.scalars().all()
+        return len(permissions) > 0
 
     async def can_view_chart_via_report_page(self, user_id: int, chart_id: int) -> bool:
         """检查用户是否通过报表授权（可读或可编辑）可查看该图表"""
@@ -237,8 +237,8 @@ class PermissionService:
             or_(ReportPagePermission.can_view == True, ReportPagePermission.can_edit == True)
         )
         result = await self.db.execute(stmt)
-        permission = result.scalar_one_or_none()
-        return permission is not None
+        permissions = result.scalars().all()
+        return len(permissions) > 0
 
     async def can_delete_chart(self, user_id: int, chart_creator_id: int, chart_id: int = None) -> bool:
         """检查用户是否可以删除图表"""
