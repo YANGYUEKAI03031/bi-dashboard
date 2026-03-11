@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { ReloadOutlined, ApiOutlined, DeleteOutlined } from '@ant-design/icons';
 import { DataSourceService, CreateDataSourcePayload } from '../services/dataSourceService';
+import { useAuth } from '../contexts/AuthContext';
 import './DashboardPage.css';
 
 interface DataSource {
@@ -26,6 +27,7 @@ interface DataSource {
 }
 
 export const DataSourceManagementPage: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -174,6 +176,16 @@ export const DataSourceManagementPage: React.FC = () => {
       },
     },
   ];
+
+  // 非管理员访问时显示
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center' }}>
+        <Typography.Title level={4}>权限不足</Typography.Title>
+        <Typography.Text type="secondary">只有管理员才能访问数据源管理页面</Typography.Text>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-page">

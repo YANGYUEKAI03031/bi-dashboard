@@ -177,6 +177,29 @@ export class AuthService {
     }
   }
 
+  /** 修改当前用户密码（仅登录后可用） */
+  static async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; message?: string }> {
+    const token = this.getAuthToken();
+    if (!token) return { success: false, message: '请先登录' };
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me/password`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        return { success: false, message: (data as any).detail || '修改失败' };
+      }
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, message: e?.message || '网络错误' };
+    }
+  }
+
   // 登出功能
   static async logout(): Promise<void> {
     const token = this.getAuthToken();

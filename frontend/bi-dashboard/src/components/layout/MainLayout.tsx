@@ -1,11 +1,17 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined } from '@ant-design/icons';
-import { Modal, Form, Input, message, Popconfirm, Popover } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, message, Popconfirm, Popover, Dropdown } from 'antd';
+import type { MenuProps } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { ReportPageService, ReportPage } from '../../services/reportPageService';
+import { AuthService } from '../../services/authService';
 import './MainLayout.css';
+
+const AVATAR_STORAGE_KEY = 'bi-dashboard.userAvatar';
+const getAvatarKey = (userId?: number | null) => (userId ? `${AVATAR_STORAGE_KEY}.${userId}` : AVATAR_STORAGE_KEY);
+const AVATAR_PRESETS = ['👤', '🧑', '👩', '🦊', '🐱', '🌟', '💼', '🎯'];
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bi-dashboard.sidebarCollapsed';
 
@@ -42,6 +48,14 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   const [reportPagesExpanded, setReportPagesExpanded] = useState<boolean>(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+  const [avatarOption, setAvatarOption] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(getAvatarKey(user?.id)) || null;
+    } catch { return null; }
+  });
+  const [passwordForm] = Form.useForm();
 
   // When user info arrives, restore user-scoped preference (or fallback to global preference).
   useEffect(() => {
@@ -51,6 +65,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       if (v !== null) setSidebarCollapsed(v);
     } catch {
       // ignore
+    }
+  }, [user?.id]);
+
+  // 从本地恢复当前用户头像偏好
+  useEffect(() => {
+    try {
+      setAvatarOption(localStorage.getItem(getAvatarKey(user?.id)) || null);
+    } catch {
+      setAvatarOption(null);
     }
   }, [user?.id]);
 
@@ -139,6 +162,48 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     setIsAddModalVisible(false);
     form.resetFields();
   };
+
+  const handlePasswordSubmit = async () => {
+    try {
+      const values = await passwordForm.validateFields();
+      if (values.new_password !== values.new_password_confirm) {
+        message.error('两次输入的新密码不一致');
+        return;
+      }
+      const res = await AuthService.changePassword(values.old_password, values.new_password);
+      if (res.success) {
+        message.success('密码已修改，请使用新密码重新登录');
+        setPasswordModalVisible(false);
+        passwordForm.resetFields();
+        logout();
+        navigate('/login');
+      } else {
+        message.error(res.message || '修改失败');
+      }
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error(e?.message || '修改失败');
+    }
+  };
+
+  const handleAvatarSelect = (preset: string) => {
+    if (!user?.id) return;
+    try {
+      localStorage.setItem(getAvatarKey(user.id), preset);
+      setAvatarOption(preset);
+      setAvatarModalVisible(false);
+      message.success('头像已更新');
+    } catch {
+      message.error('保存失败');
+    }
+  };
+
+  const userMenuItems: MenuProps['items'] = user
+    ? [
+        { key: 'avatar', icon: <UserOutlined />, label: '换头像', onClick: () => setAvatarModalVisible(true) },
+        { key: 'password', icon: <LockOutlined />, label: '改密码', onClick: () => setPasswordModalVisible(true) },
+      ]
+    : [];
 
   const handleDeleteReportPage = async (pageId: number, pageName: string) => {
     try {
@@ -377,21 +442,31 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="nav-text">可视化构建</span>
           </Link>
 
-          {/* 数据源管理 - 固定在导航底部 */}
-          <Link
-            to="/datasources"
-            className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
-          >
-            <span className="icon">🗄</span>
-            <span className="nav-text">数据源管理</span>
-          </Link>
+          {/* 数据源管理 - 仅管理员可见 */}
+          {isAdmin && (
+            <Link
+              to="/datasources"
+              className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
+            >
+              <span className="icon">🗄</span>
+              <span className="nav-text">数据源管理</span>
+            </Link>
+          )}
         </nav>
         
         <div className="sidebar-footer">
           <div className="user-info">
-            <div className="user-avatar">
-              {isAdmin ? <CrownOutlined style={{ fontSize: 24, color: '#faad14' }} /> : <TeamOutlined style={{ fontSize: 24 }} />}
-            </div>
+            <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="topRight" disabled={!user}>
+              <div className="user-avatar user-avatar-clickable" role="button" tabIndex={0} aria-label="用户菜单">
+                {avatarOption ? (
+                  <span className="user-avatar-emoji">{avatarOption}</span>
+                ) : isAdmin ? (
+                  <CrownOutlined style={{ fontSize: 24, color: '#faad14' }} />
+                ) : (
+                  <TeamOutlined style={{ fontSize: 24 }} />
+                )}
+              </div>
+            </Dropdown>
             <div className="user-details">
               <div className="user-name">{user?.full_name || user?.username || '用户'}</div>
               <div className="user-role">{isAdmin ? '管理员' : '普通用户'}</div>
@@ -471,6 +546,53 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <Input placeholder="请输入图标（可选，例如：📄）" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 改密码弹窗 - 仅登录后可用 */}
+      <Modal
+        title="修改密码"
+        open={passwordModalVisible}
+        onOk={handlePasswordSubmit}
+        onCancel={() => { setPasswordModalVisible(false); passwordForm.resetFields(); }}
+        okText="确认修改"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Form form={passwordForm} layout="vertical">
+          <Form.Item name="old_password" label="原密码" rules={[{ required: true, message: '请输入原密码' }]}>
+            <Input.Password placeholder="请输入原密码" autoComplete="current-password" />
+          </Form.Item>
+          <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '至少 6 位' }]}>
+            <Input.Password placeholder="请输入新密码" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item name="new_password_confirm" label="确认新密码" rules={[{ required: true, message: '请再次输入新密码' }]}>
+            <Input.Password placeholder="请再次输入新密码" autoComplete="new-password" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 换头像弹窗 - 仅登录后可用 */}
+      <Modal
+        title="换头像"
+        open={avatarModalVisible}
+        onCancel={() => setAvatarModalVisible(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '8px 0' }}>
+          {AVATAR_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className={`user-avatar-emoji-option ${avatarOption === preset ? 'selected' : ''}`}
+              onClick={() => handleAvatarSelect(preset)}
+              style={{ fontSize: 28, padding: 8, border: avatarOption === preset ? '2px solid #1890ff' : '1px solid #d9d9d9', borderRadius: 8, background: 'var(--theme-background)', cursor: 'pointer' }}
+              aria-label={`选择头像 ${preset}`}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
       </Modal>
     </div>
   );
