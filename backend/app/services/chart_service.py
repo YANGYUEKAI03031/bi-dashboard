@@ -158,26 +158,40 @@ class ChartService:
             raise Exception(f"创建图表失败: {str(e)}")
     
     async def get_chart(self, chart_id: int, user_id: int) -> Optional[VisualizationCard]:
-        """获取单个图表"""
+        """获取单个图表。创建者、管理员、或通过报表授权可查看的用户均可访问。"""
         try:
             stmt = select(VisualizationCard).where(
                 VisualizationCard.id == chart_id,
-                VisualizationCard.created_by == user_id,
                 VisualizationCard.archived == False
             )
             result = await self.db.execute(stmt)
-            return result.scalar_one_or_none()
+            chart = result.scalar_one_or_none()
+            if not chart:
+                return None
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if chart.created_by == user_id:
+                return chart
+            if await perm_service.is_admin(user_id):
+                return chart
+            if await perm_service.can_view_chart_via_report_page(user_id, chart_id):
+                return chart
+            return None
         except SQLAlchemyError as e:
             logger.error(f"获取图表失败: {str(e)}")
             raise Exception(f"获取图表失败: {str(e)}")
     
     async def get_user_charts(self, user_id: int, skip: int = 0, limit: int = 100) -> List[VisualizationCard]:
-        """获取用户的所有图表"""
+        """获取用户可访问的图表列表（自己创建的 + 管理员全部 + 通过报表授权可见的）"""
         try:
-            stmt = select(VisualizationCard).where(
-                VisualizationCard.created_by == user_id,
-                VisualizationCard.archived == False
-            ).offset(skip).limit(limit)
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            accessible_ids = await perm_service.get_user_accessible_chart_ids(user_id)
+            
+            stmt = select(VisualizationCard).where(VisualizationCard.archived == False)
+            if accessible_ids:
+                stmt = stmt.where(VisualizationCard.id.in_(accessible_ids))
+            stmt = stmt.offset(skip).limit(limit)
             result = await self.db.execute(stmt)
             return list(result.scalars().all())
         except SQLAlchemyError as e:
@@ -194,7 +208,7 @@ class ChartService:
             # 权限检查：仅创建者或管理员可以编辑
             from app.services.permission_service import PermissionService
             perm_service = PermissionService(self.db)
-            if not await perm_service.can_edit_chart(user_id, chart.created_by):
+            if not await perm_service.can_edit_chart(user_id, chart.created_by, chart_id=chart.id):
                 raise PermissionError("无权限编辑此图表，只有创建者或管理员可以编辑")
             
             # 记录修改前的数据（用于日志）
@@ -246,9 +260,9 @@ class ChartService:
             update_fields[VisualizationCard.updated_at] = datetime.utcnow()
             
             if update_fields:
+                # 仅按 chart_id 更新，权限已在上面 can_edit_chart 中校验（创建者/管理员/报表可编辑）
                 stmt = update(VisualizationCard).where(
-                    VisualizationCard.id == chart_id,
-                    VisualizationCard.created_by == user_id
+                    VisualizationCard.id == chart_id
                 ).values(**{col.name: val for col, val in update_fields.items()})
                 
                 await self.db.execute(stmt)
@@ -294,13 +308,21 @@ class ChartService:
             # 权限检查：仅创建者或管理员可以删除
             from app.services.permission_service import PermissionService
             perm_service = PermissionService(self.db)
-            if not await perm_service.can_delete_chart(user_id, chart.created_by):
+            if not await perm_service.can_delete_chart(user_id, chart.created_by, chart_id=chart.id):
                 raise PermissionError("无权限删除此图表，只有创建者或管理员可以删除")
             
-            # 软删除：标记为已归档
+            # 先移除仪表盘中对该图表的引用（删除 dashboard_cards 及关联的 filter_bindings），报表通过仪表盘展示，无需单独表
+            from app.models.dashboard import DashboardCard, DashboardFilterBinding
+            card_ids_stmt = select(DashboardCard.id).where(DashboardCard.chart_id == chart_id)
+            card_ids_result = await self.db.execute(card_ids_stmt)
+            card_ids = [r[0] for r in card_ids_result.all()]
+            if card_ids:
+                await self.db.execute(delete(DashboardFilterBinding).where(DashboardFilterBinding.card_id.in_(card_ids)))
+                await self.db.execute(delete(DashboardCard).where(DashboardCard.chart_id == chart_id))
+            
+            # 软删除：标记为已归档（权限已在上面 can_delete_chart 中校验）
             stmt = update(VisualizationCard).where(
-                VisualizationCard.id == chart_id,
-                VisualizationCard.created_by == user_id
+                VisualizationCard.id == chart_id
             ).values(
                 archived=True,
                 updated_at=datetime.utcnow()

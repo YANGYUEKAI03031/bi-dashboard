@@ -42,6 +42,7 @@ class ReportPagePermission(Base):
     report_page_id = Column(Integer, ForeignKey("report_pages.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("useraccount.userID"), nullable=False)
     can_view = Column(Boolean, default=True)  # 是否可以查看
+    can_edit = Column(Boolean, default=False)  # 是否可以编辑（包括图表、仪表盘）
     
     created_at = Column(DateTime, default=datetime.utcnow)
     

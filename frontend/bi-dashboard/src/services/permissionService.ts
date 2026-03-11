@@ -105,4 +105,55 @@ export class PermissionService {
     }
     return response.json();
   }
+
+  // ============ 报表权限管理 ============
+
+  // 获取所有报表列表（仅管理员可访问）
+  static async getAllReportPages(): Promise<any[]> {
+    const response = await this.fetchWithAuth(`${API_BASE_URL}/report-pages`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || '获取报表列表失败');
+    }
+    return response.json();
+  }
+
+  // 授权用户查看/编辑报表（仅管理员或报表创建者可访问）
+  static async grantReportPagePermission(
+    reportPageId: number,
+    targetUserId: number,
+    canEdit: boolean = false
+  ): Promise<{ message: string; can_edit: boolean }> {
+    const response = await this.fetchWithAuth(
+      `${API_BASE_URL}/permissions/report-pages/${reportPageId}/grant?target_user_id=${targetUserId}&can_edit=${canEdit}`,
+      { method: 'POST' }
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || '授权失败');
+    }
+    return response.json();
+  }
+
+  // 撤销用户报表权限
+  static async revokeReportPagePermission(reportPageId: number, targetUserId: number): Promise<void> {
+    const response = await this.fetchWithAuth(
+      `${API_BASE_URL}/permissions/report-pages/${reportPageId}/revoke/${targetUserId}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || '撤销权限失败');
+    }
+  }
+
+  // 获取指定报表的权限列表（谁有权限看/编辑）
+  static async getReportPagePermissions(reportPageId: number): Promise<any[]> {
+    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/report-pages/${reportPageId}/permissions`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || '获取权限列表失败');
+    }
+    return response.json();
+  }
 }

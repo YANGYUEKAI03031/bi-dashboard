@@ -126,17 +126,18 @@ async def get_my_permissions(
 async def grant_report_page_view(
     report_page_id: int,
     target_user_id: int,
+    can_edit: bool = Query(False, description="是否授予编辑权限（包括关联的图表、仪表盘）"),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
-    """授权用户查看报表（仅管理员或报表创建者可访问）"""
+    """授权用户查看/编辑报表（仅管理员或报表创建者可访问）"""
     try:
         service = PermissionService(db)
         
         # 获取报表信息
         from app.services.report_page_service import ReportPageService
         report_service = ReportPageService(db)
-        report = await report_service.get_report_page(report_page_id)
+        report = await report_service.get_report_page(report_page_id, user_id)
         
         if not report:
             raise HTTPException(status_code=404, detail="报表不存在")
@@ -145,8 +146,12 @@ async def grant_report_page_view(
         if not await service.is_admin(user_id) and report.creator_id != user_id:
             raise HTTPException(status_code=403, detail="无权限授权此报表")
         
-        await service.grant_report_page_view(report_page_id, target_user_id)
-        return {"message": f"已授权用户 {target_user_id} 查看报表 {report_page_id}"}
+        permission = await service.grant_report_page_view(report_page_id, target_user_id, can_edit)
+        
+        if can_edit:
+            return {"message": f"已授权用户 {target_user_id} 编辑报表 {report_page_id}（包括关联的图表、仪表盘）", "can_edit": True}
+        else:
+            return {"message": f"已授权用户 {target_user_id} 查看报表 {report_page_id}", "can_edit": False}
         
     except HTTPException:
         raise
@@ -169,7 +174,7 @@ async def revoke_report_page_view(
         # 获取报表信息
         from app.services.report_page_service import ReportPageService
         report_service = ReportPageService(db)
-        report = await report_service.get_report_page(report_page_id)
+        report = await report_service.get_report_page(report_page_id, user_id)
         
         if not report:
             raise HTTPException(status_code=404, detail="报表不存在")
@@ -204,7 +209,7 @@ async def get_report_page_permissions(
         # 获取报表信息
         from app.services.report_page_service import ReportPageService
         report_service = ReportPageService(db)
-        report = await report_service.get_report_page(report_page_id)
+        report = await report_service.get_report_page(report_page_id, user_id)
         
         if not report:
             raise HTTPException(status_code=404, detail="报表不存在")

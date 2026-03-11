@@ -416,9 +416,10 @@ export const ChartsManagementPage: React.FC = () => {
           }
         };
 
-        await ChartService.updateChart(editingChart.id, updateData);
+        const updated = await ChartService.updateChart(editingChart.id, updateData);
         message.success('图表更新成功');
-        fetchCharts();
+        setCharts(prev => prev.map(c => c.id === editingChart.id ? { ...c, ...updated, visualization_settings: updated.visualization_settings ?? c.visualization_settings } : c));
+        await fetchCharts();
         setEditingChart(null);
       } catch (error) {
         console.error('更新图表失败:', error);

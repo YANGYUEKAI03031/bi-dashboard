@@ -323,14 +323,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
    * We only "hydrate" missing card.chart (name/type/settings) from latest charts.
    * If card.chart already exists, we keep it to preserve any in-canvas state.
    */
-  const hydrateDashboardCards = (d: Dashboard, latestCharts: Chart[]): Dashboard => {
+  const hydrateDashboardCards = (d: Dashboard, latestCharts: Chart[], preferLatestChart = false): Dashboard => {
     if (!d?.cards || d.cards.length === 0) return d;
     const chartMap = new Map<number, Chart>(latestCharts.map(c => [c.id, c]));
 
     const nextCards = d.cards.map(card => {
-      // Keep existing chart object to avoid resetting canvas rendering/state.
-      if (card.chart) return card;
       const hydrated = chartMap.get(card.chart_id);
+      // 初次加载时若已有 card.chart 可保留以减少重绘；刷新时用 preferLatestChart 强制用最新图表配置
+      if (!preferLatestChart && card.chart && !hydrated) return card;
       return hydrated ? { ...card, chart: hydrated } : card;
     });
 
@@ -396,6 +396,35 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   }, [filterModalOpen, editingFilterId, dashboard]);
 
+
+  // 页面从后台重新可见时刷新仪表盘和图表（编辑后返回本页能看到最新配置）
+  const refreshDashboardAndCharts = React.useCallback(async () => {
+    if (!user || !isEditMode || !id) return;
+    const dashboardId = Number(id);
+    if (Number.isNaN(dashboardId)) return;
+    try {
+      const [userCharts, d] = await Promise.all([
+        ChartService.getUserCharts(),
+        DashboardService.getDashboard(dashboardId),
+      ]);
+      const convertedCharts = userCharts.map(convertChartResponseToChart);
+      setCharts(convertedCharts);
+      const xFieldsSet = new Set<string>();
+      convertedCharts.forEach((chart: Chart) => {
+        const vizSettings = chart.visualization_settings || {};
+        const xField = vizSettings.x_field ||
+          (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
+          (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
+        if (xField) xFieldsSet.add(xField);
+      });
+      setChartXFields(Array.from(xFieldsSet).sort());
+      const hydratedDashboard = hydrateDashboardCards(d, convertedCharts, true);
+      setDashboard(hydratedDashboard);
+      dashboardRef.current = hydratedDashboard;
+    } catch (e) {
+      console.error('[DashboardEditor] refresh on visibility failed', e);
+    }
+  }, [user, isEditMode, id]);
 
   useEffect(() => {
     if (!user) return;
@@ -490,6 +519,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       cancelled = true;
     };
   }, [user, id, isEditMode, form, navigate]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshDashboardAndCharts();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [refreshDashboardAndCharts]);
 
   // 当筛选器列表变化时，加载需要选项的筛选器（初始无条件加载）
   useEffect(() => {

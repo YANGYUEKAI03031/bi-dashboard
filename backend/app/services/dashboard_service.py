@@ -88,7 +88,7 @@ class DashboardService:
             # 权限检查：仅创建者或管理员可以编辑
             from app.services.permission_service import PermissionService
             perm_service = PermissionService(self.db)
-            if not await perm_service.can_edit_dashboard(user_id, dashboard.creator_id):
+            if not await perm_service.can_edit_dashboard(user_id, dashboard.creator_id, dashboard_id=dashboard.id):
                 raise PermissionError("无权限编辑此仪表盘，只有创建者或管理员可以编辑")
 
             # 记录修改前的数据
@@ -136,18 +136,30 @@ class DashboardService:
             raise Exception(f"更新仪表板失败: {str(e)}")
     
     async def get_dashboard(self, dashboard_id: int, user_id: int) -> Optional[Dashboard]:
-        """获取仪表板详情（包含卡片和图表信息）"""
+        """获取仪表板详情（包含卡片和图表信息）。创建者、管理员、或通过报表授权可查看/编辑的用户均可访问。"""
         try:
-            # 使用selectinload预加载关联数据
+            # 使用selectinload预加载关联数据，先不限制 creator_id
             stmt = select(Dashboard).options(
                 selectinload(Dashboard.dashboard_cards).selectinload(DashboardCard.chart)
-            ).where(
-                Dashboard.id == dashboard_id,
-                Dashboard.creator_id == user_id
-            )
+            ).where(Dashboard.id == dashboard_id)
             
             result = await self.db.execute(stmt)
             dashboard = result.scalar_one_or_none()
+            
+            if not dashboard:
+                return None
+            
+            # 权限：创建者、管理员、或通过报表授权（可读/可编辑）可访问
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if dashboard.creator_id == user_id:
+                pass  # 创建者允许
+            elif await perm_service.is_admin(user_id):
+                pass  # 管理员允许
+            elif await perm_service.can_view_dashboard_via_report_page(user_id, dashboard_id):
+                pass  # 通过报表授权（可读或可编辑）可访问
+            else:
+                return None
             
             if dashboard:
                 # 确保cards属性存在并包含关联的图表数据
@@ -171,15 +183,18 @@ class DashboardService:
             raise Exception(f"获取仪表板失败: {str(e)}")
     
     async def get_user_dashboards(self, user_id: int, skip: int = 0, limit: int = 100) -> List[Dashboard]:
-        """获取用户的所有仪表板（包含完整关联数据）"""
+        """获取用户可访问的仪表板列表（自己创建的 + 管理员全部 + 通过报表授权的）"""
         try:
-            # 使用selectinload预加载所有关联数据
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            accessible_ids = await perm_service.get_user_accessible_dashboard_ids(user_id)
+            
             stmt = select(Dashboard).options(
                 selectinload(Dashboard.dashboard_cards).selectinload(DashboardCard.chart)
-            ).where(
-                Dashboard.creator_id == user_id,
-                Dashboard.archived == False
-            ).offset(skip).limit(limit)
+            ).where(Dashboard.archived == False)
+            if accessible_ids:
+                stmt = stmt.where(Dashboard.id.in_(accessible_ids))
+            stmt = stmt.offset(skip).limit(limit)
             
             result = await self.db.execute(stmt)
             dashboards = result.scalars().all()
@@ -213,14 +228,15 @@ class DashboardService:
             if not dashboard:
                 raise Exception("仪表板不存在或无权限访问")
             
-            # 验证图表存在且属于用户
-            chart_stmt = select(VisualizationCard).where(
-                VisualizationCard.id == card_data.chart_id,
-                VisualizationCard.created_by == user_id
-            )
+            # 验证图表存在且当前用户有权限使用（创建者、管理员、或通过报表授权）
+            chart_stmt = select(VisualizationCard).where(VisualizationCard.id == card_data.chart_id)
             chart_result = await self.db.execute(chart_stmt)
             chart = chart_result.scalar_one_or_none()
             if not chart:
+                raise Exception("图表不存在或无权限访问")
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if chart.created_by != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_view_chart_via_report_page(user_id, chart.id):
                 raise Exception("图表不存在或无权限访问")
             
             # 创建仪表板卡片
@@ -255,20 +271,22 @@ class DashboardService:
             raise Exception(f"添加图表到仪表板失败: {str(e)}")
     
     async def update_dashboard_card(self, card_id: int, update_data: DashboardCardUpdate, user_id: int) -> Optional[DashboardCard]:
-        """更新仪表板卡片位置和设置"""
+        """更新仪表板卡片位置和设置。创建者、管理员、或通过报表可编辑的用户均可操作。"""
         try:
-            # 验证卡片属于用户的仪表板
             card_stmt = select(DashboardCard).options(
-                # 预加载 chart，避免在路由层访问 card.chart 时触发异步懒加载（MissingGreenlet）
-                selectinload(DashboardCard.chart)
-            ).join(Dashboard).where(
-                DashboardCard.id == card_id,
-                Dashboard.creator_id == user_id
-            )
+                selectinload(DashboardCard.chart),
+                selectinload(DashboardCard.dashboard)
+            ).where(DashboardCard.id == card_id)
             card_result = await self.db.execute(card_stmt)
             card = card_result.scalar_one_or_none()
             
-            if not card:
+            if not card or not card.dashboard:
+                return None
+            
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            dashboard = card.dashboard
+            if dashboard.creator_id != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_edit_dashboard(user_id, dashboard.creator_id, dashboard_id=dashboard.id):
                 return None
             
             # 更新字段
@@ -300,8 +318,12 @@ class DashboardService:
                 await self.db.execute(stmt)
                 await self.db.commit()
 
-                # 重新查询并预加载 chart，保证返回对象不会在序列化阶段触发懒加载
-                refreshed_result = await self.db.execute(card_stmt)
+                # 重新查询并预加载 chart
+                refreshed_stmt = select(DashboardCard).options(
+                    selectinload(DashboardCard.chart),
+                    selectinload(DashboardCard.dashboard)
+                ).where(DashboardCard.id == card_id)
+                refreshed_result = await self.db.execute(refreshed_stmt)
                 card = refreshed_result.scalar_one_or_none()
                 
                 logger.info(f"仪表板卡片更新成功: ID {card_id}")
@@ -314,17 +336,19 @@ class DashboardService:
             raise Exception(f"更新仪表板卡片失败: {str(e)}")
     
     async def remove_chart_from_dashboard(self, card_id: int, user_id: int) -> bool:
-        """从仪表板移除图表"""
+        """从仪表板移除图表。创建者、管理员、或通过报表可编辑的用户均可操作。"""
         try:
-            # 验证卡片属于用户的仪表板
-            card_stmt = select(DashboardCard).join(Dashboard).where(
-                DashboardCard.id == card_id,
-                Dashboard.creator_id == user_id
-            )
+            card_stmt = select(DashboardCard).options(selectinload(DashboardCard.dashboard)).where(DashboardCard.id == card_id)
             card_result = await self.db.execute(card_stmt)
             card = card_result.scalar_one_or_none()
             
-            if not card:
+            if not card or not card.dashboard:
+                return False
+            
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            dashboard = card.dashboard
+            if dashboard.creator_id != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_edit_dashboard(user_id, dashboard.creator_id, dashboard_id=dashboard.id):
                 return False
             
             delete_stmt = delete(DashboardCard).where(DashboardCard.id == card_id)
@@ -355,7 +379,7 @@ class DashboardService:
             # 权限检查：仅创建者或管理员可以删除
             from app.services.permission_service import PermissionService
             perm_service = PermissionService(self.db)
-            if not await perm_service.can_delete_dashboard(user_id, dashboard.creator_id):
+            if not await perm_service.can_delete_dashboard(user_id, dashboard.creator_id, dashboard_id=dashboard.id):
                 raise PermissionError("无权限删除此仪表盘，只有创建者或管理员可以删除")
             
             # 删除报表页与仪表盘的关联记录
@@ -517,18 +541,19 @@ class DashboardService:
             raise Exception(f"自动绑定筛选器失败: {str(e)}")
 
     async def get_filters(self, dashboard_id: int, user_id: int) -> List[DashboardFilter]:
-        """获取仪表板的所有筛选器"""
+        """获取仪表板的所有筛选器。创建者、管理员、或通过报表授权可查看的用户均可访问。"""
         try:
-            # 验证仪表板属于用户
-            dashboard_stmt = select(Dashboard).where(
-                Dashboard.id == dashboard_id,
-                Dashboard.creator_id == user_id
-            )
+            dashboard_stmt = select(Dashboard).where(Dashboard.id == dashboard_id)
             dashboard_result = await self.db.execute(dashboard_stmt)
             dashboard = dashboard_result.scalar_one_or_none()
             
             if not dashboard:
-                raise Exception("仪表板不存在或无权限访问")
+                raise Exception("仪表板不存在")
+            
+            from app.services.permission_service import PermissionService
+            perm_service = PermissionService(self.db)
+            if dashboard.creator_id != user_id and not await perm_service.is_admin(user_id) and not await perm_service.can_view_dashboard_via_report_page(user_id, dashboard_id):
+                raise Exception("无权限访问此仪表板")
             
             # 获取筛选器及其绑定关系
             stmt = select(DashboardFilter).options(
