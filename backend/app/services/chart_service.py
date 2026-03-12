@@ -8,6 +8,12 @@ import json
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine
 import re
+from contextlib import asynccontextmanager
+
+
+# 缓存数据源引擎，避免每次查询都创建新引擎
+_data_source_engines: Dict[str, Any] = {}
+_ENGINE_EXPIRE_SECONDS = 300  # 5分钟过期
 
 
 # 相对时间预设（与前端 date_relative 选项一致）
@@ -58,8 +64,127 @@ def _resolve_relative_date(value: str) -> Optional[Dict[str, str]]:
 from app.models.visualization import VisualizationCard, Database
 from app.schemas.chart import ChartCreate, ChartUpdate
 from app.core.security import get_current_user_id
+import time
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_db_engine(db_model) -> Any:
+    """获取或创建缓存的数据源引擎（复用连接池，避免频繁建连）"""
+    global _data_source_engines
+    db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+
+    # 检查缓存是否存在且未过期
+    if db_url in _data_source_engines:
+        engine, created_at = _data_source_engines[db_url]
+        if time.time() - created_at < _ENGINE_EXPIRE_SECONDS:
+            return engine
+        # 过期了，释放旧引擎
+        try:
+            await engine.dispose()
+        except Exception:
+            pass
+        del _data_source_engines[db_url]
+
+    # 创建新引擎（使用连接池）
+    engine = create_async_engine(
+        db_url,
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=3600,
+        pool_pre_ping=True,
+    )
+    _data_source_engines[db_url] = (engine, time.time())
+    return engine
+
+
+def _sql_has_limit(sql: str) -> bool:
+    return bool(re.search(r"\bLIMIT\b", sql or "", re.IGNORECASE))
+
+
+def _apply_default_limit(sql: str, limit_rows: int) -> str:
+    """
+    给无 LIMIT 的查询加一个默认 LIMIT，避免一次性返回几十万行导致后端/前端崩溃。
+    只做最小侵入：如果原 SQL 已含 LIMIT 则不改；否则在末尾（分号前）追加 LIMIT。
+    """
+    if not sql:
+        return sql
+    if _sql_has_limit(sql):
+        return sql
+    safe_limit = int(limit_rows) if limit_rows and int(limit_rows) > 0 else 10000
+    stripped = sql.rstrip()
+    if stripped.endswith(";"):
+        stripped = stripped[:-1].rstrip()
+    return f"{stripped} LIMIT {safe_limit}"
+
+
+def _parse_chart_viz_settings(chart: VisualizationCard) -> Dict[str, Any]:
+    """从 chart.visualization_settings 中提取聚合相关配置（兼容字符串/字典）。"""
+    raw = getattr(chart, "visualization_settings", None)
+    if raw is None:
+        return {}
+    try:
+        if isinstance(raw, str):
+            return json.loads(raw) if raw.strip() else {}
+        if isinstance(raw, dict):
+            return raw
+    except Exception:
+        return {}
+    return {}
+
+
+def _quote_result_column(name: str) -> str:
+    """
+    Quote a column name in the *result set* (subquery output).
+    We intentionally do not support expressions here; only plain column names.
+    """
+    col = (name or "").strip()
+    if not col:
+        raise ValueError("column name is empty")
+    # If caller passed something like `t.col` or `schema.col`, only keep the last segment.
+    # In our wrapping query we always reference columns from subquery alias `t`.
+    if "." in col:
+        col = col.split(".")[-1].strip()
+    col = col.replace("`", "``")
+    return f"`{col}`"
+
+
+def _build_group_by_sql(original_sql: str, x_field: str, y_fields: List[str], method: str) -> str:
+    """
+    Wrap original SQL and aggregate in MySQL:
+      SELECT x, AGG(y1) AS y1, AGG(y2) AS y2
+      FROM (original_sql) t
+      GROUP BY x
+    """
+    if not original_sql:
+        return original_sql
+    agg = (method or "").lower().strip()
+    if agg not in {"count", "sum", "avg"}:
+        # mode/median 等复杂聚合不在 SQL 层做，避免实现不一致
+        return original_sql
+
+    qx = _quote_result_column(x_field)
+    select_parts = [f"t.{qx} AS {qx}"]
+    for yf in (y_fields or []):
+        qy = _quote_result_column(yf)
+        if agg == "count":
+            # 计数：对每个分组返回行数
+            expr = "COUNT(*)"
+        elif agg == "sum":
+            expr = f"SUM(t.{qy})"
+        else:  # avg
+            expr = f"AVG(t.{qy})"
+        select_parts.append(f"{expr} AS {qy}")
+
+    inner = (original_sql or "").rstrip()
+    if inner.endswith(";"):
+        inner = inner[:-1].rstrip()
+    return (
+        "SELECT " + ", ".join(select_parts) + "\n"
+        "FROM (\n" + inner + "\n) t\n"
+        f"GROUP BY t.{qx}"
+    )
+
 
 def _normalize_identifier_part(part: str) -> str:
     p = (part or "").strip()
@@ -464,16 +589,34 @@ class ChartService:
             logger.info(f"执行SQL查询（自动生成WHERE后）: {sql_query[:200]}...")
             # ========== 方案2 结束 ==========
 
+            # 兜底保护：没有 LIMIT 的情况下，默认最多返回 10000 行，避免大数据量把后端/前端拖死
+            # 注意：如果前端“按 X 聚合”是在前端做的，那么原 SQL 可能是明细查询，会导致 fetchall 拉爆内存。
+            # 这里优先尝试把聚合前移到数据库层（wrap subquery + GROUP BY），从根源减少返回行数。
+            viz = _parse_chart_viz_settings(chart)
+            x_field = viz.get("graph_dimensions")
+            if isinstance(x_field, list) and x_field:
+                x_field = x_field[0]
+            y_fields = viz.get("graph_metrics") or viz.get("y_fields")
+            if not isinstance(y_fields, list):
+                y_fields = []
+            y_agg_method = viz.get("y_agg_method") or viz.get("graph.y_agg_method")
+            x_group_by_enabled = viz.get("x_group_by_enabled")
+            if isinstance(x_field, str) and x_field and y_fields and y_agg_method and x_group_by_enabled is not False:
+                # 仅对 count/sum/avg 做 SQL 聚合，其它方法保持原样（仍会受默认 LIMIT 保护）
+                sql_query = _build_group_by_sql(sql_query, x_field, y_fields, str(y_agg_method))
+
+            # 对“明细大结果”做兜底保护：无 LIMIT 才追加 LIMIT
+            #（如果上面已经做了 GROUP BY，一般结果会很小且需要完整返回，所以不要强行 LIMIT）
+            if "GROUP BY" not in (sql_query or "").upper():
+                sql_query = _apply_default_limit(sql_query, 10000)
+
             # 获取数据源连接信息
             db_model = await self.db.get(Database, chart.data_source_id)
             if not db_model:
                 raise Exception("数据源不存在")
 
-            # 构建数据库连接URL
-            db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
-
-            # 创建临时连接执行查询
-            temp_engine = create_async_engine(db_url)
+            # 使用缓存的引擎执行查询
+            temp_engine = await _get_db_engine(db_model)
             try:
                 async with temp_engine.connect() as conn:
                     result = await conn.execute(text(sql_query))
@@ -481,7 +624,14 @@ class ChartService:
 
                     # 转换为字典列表
                     columns = result.keys()
-                    data = [dict(zip(columns, row)) for row in rows]
+                    data = []
+                    for row in rows:
+                        item = dict(zip(columns, row))
+                        # JSON 序列化友好：date/datetime 统一转 ISO 字符串
+                        for k, v in list(item.items()):
+                            if isinstance(v, (datetime, date)):
+                                item[k] = v.isoformat()
+                        data.append(item)
 
                     return data
             except Exception as query_error:
@@ -495,8 +645,8 @@ class ChartService:
                         table_match = re.search(r'FROM\s+`?(\w+)`?', sql_query, re.IGNORECASE)
                         if table_match:
                             table_name = table_match.group(1)
-                            # 创建新连接获取字段
-                            temp_engine2 = create_async_engine(db_url)
+                            # 复用已有引擎获取字段
+                            temp_engine2 = await _get_db_engine(db_model)
                             try:
                                 async with temp_engine2.connect() as conn2:
                                     result = await conn2.execute(text(f"DESCRIBE `{table_name}`"))
@@ -505,7 +655,8 @@ class ChartService:
                                         table_fields.add(row[0].lower())
                                     logger.info(f"表 '{table_name}' 字段: {table_fields}")
                             finally:
-                                await temp_engine2.dispose()
+                                # 引擎是缓存复用的，不要 dispose()
+                                pass
 
                             # 重新生成有效的筛选条件
                             valid_conditions = []
@@ -574,18 +725,26 @@ class ChartService:
                                         sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
 
                                 logger.info(f"重试SQL查询: {sql_query[:200]}...")
+                                sql_query = _apply_default_limit(sql_query, 10000)
                                 async with temp_engine.connect() as conn:
                                     result = await conn.execute(text(sql_query))
                                     rows = result.fetchall()
                                     columns = result.keys()
-                                    data = [dict(zip(columns, row)) for row in rows]
+                                    data = []
+                                    for row in rows:
+                                        item = dict(zip(columns, row))
+                                        for k, v in list(item.items()):
+                                            if isinstance(v, (datetime, date)):
+                                                item[k] = v.isoformat()
+                                        data.append(item)
                                     return data
                     except Exception as retry_error:
                         logger.error(f"重试查询也失败: {retry_error}")
                         # 重试失败，抛出原始错误
                         raise query_error
             finally:
-                await temp_engine.dispose()
+                # 引擎是全局缓存复用的，这里不要 dispose()，否则会导致频繁建连/断连，引发崩溃与性能抖动
+                pass
                 
         except Exception as e:
             logger.error(f"执行查询失败: {str(e)}")
@@ -664,7 +823,8 @@ class ChartService:
                     f"LIMIT {safe_limit}"
                 )
 
-            temp_engine = create_async_engine(db_url)
+            # 使用缓存的引擎
+            temp_engine = await _get_db_engine(db_model)
             try:
                 async with temp_engine.connect() as conn:
                     sql_query = _make_sql(cascade_parts)
@@ -682,7 +842,8 @@ class ChartService:
                     options = [row[0] for row in rows if row and row[0] is not None]
                     return options
             finally:
-                await temp_engine.dispose()
+                # 引擎是缓存复用的，不要 dispose()
+                pass
 
         except Exception as e:
             logger.error(f"获取筛选器选项失败: {str(e)}")

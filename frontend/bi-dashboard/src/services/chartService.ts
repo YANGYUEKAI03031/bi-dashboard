@@ -133,6 +133,33 @@ export class ChartService {
     return data.data;
   }
 
+  /** 批量查询多个图表数据（一次请求获取所有图表） */
+  static async executeBatchChartQuery(
+    requests: { chartId: number; filterParams?: Record<string, any> }[]
+  ): Promise<{ chartId: number; data: any[]; error?: string }[]> {
+    const token = localStorage.getItem('authToken');
+    const payload = requests.map(r => ({
+      chart_id: r.chartId,
+      filter_params: r.filterParams || {},
+    }));
+    const response = await fetch(`${API_BASE_URL}/visualization/charts/batch-query`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    }
+    const result = await response.json();
+    // 转换为 {chartId, data, error} 格式
+    return (result.results || []).map((r: any) => ({
+      chartId: r.chart_id,
+      data: r.data || [],
+      error: r.error,
+    }));
+  }
+
   /**
    * 获取筛选器的可选项列表（直接指定数据源/表/字段）
    * @param filterConditions  级联筛选条件，key 格式为 filterId_fieldName

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import * as echarts from 'echarts/core';
 import {
   BarChart,
@@ -114,6 +114,10 @@ interface ChartFactoryProps {
   style?: React.CSSProperties;
   onEvents?: Record<string, Function>;
   minHeight?: number; // 优先级高于 config.minHeight
+  /** 点击 X 轴标签时的回调，参数为选中的值 */
+  onXAxisClick?: (value: any) => void;
+  /** 当前被选中的 X 轴值（用于高亮显示） */
+  selectedXValue?: any;
 }
 
 // 根据 X 轴字段和聚合方式对原始数据做分组聚合，返回用于绘图的聚合结果
@@ -219,13 +223,23 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   data,
   style = { height: '400px' },
   onEvents,
-  minHeight
+  minHeight,
+  onXAxisClick,
+  selectedXValue
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReactECharts>(null);
   const [isReady, setIsReady] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const rafRef = useRef<number | null>(null);
+
+  const normalizeLinkValue = (v: any) => {
+    if (v == null) return '';
+    const s = String(v);
+    // 兼容 ISO datetime：2025-12-22T00:00:00 -> 2025-12-22
+    if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(s)) return s.slice(0, 10);
+    return s;
+  };
 
   // 当容器尺寸发生变化（特别是从 0 变为实际宽高，或 Tab 切换后重新可见）时，
   // 通过变更 key 强制重新挂载 ECharts 实例，避免 ECharts 在“隐藏/尺寸不正确”的状态下初始化
@@ -722,10 +736,29 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             margin: effectiveAxisLabelMargin,
             fontSize: effectiveAxisLabelFontSize,
             color: '#4a5568',
+            // 富文本样式必须挂在 axisLabel.rich 上，否则会把 `{highlight|...}` 当普通文本显示出来
+            rich: {
+              highlight: {
+                color: '#1890ff',
+                fontWeight: 'bold',
+                fontSize: effectiveAxisLabelFontSize + 1
+              }
+            },
             ...axisLabelFromConfig,
             // 用户自定义 formatter 优先
-            formatter: axisLabelFromConfig.formatter ?? defaultFormatter,
-            rotate: axisLabelFromConfig.rotate ?? 0
+            formatter: (value: unknown) => {
+              const formatted = defaultFormatter(value);
+              // 高亮选中的 X 轴标签
+              if (selectedXValue !== undefined && selectedXValue !== null) {
+                if (normalizeLinkValue(value) === normalizeLinkValue(selectedXValue)) {
+                  return `{highlight|${formatted}}`;
+                }
+              }
+              return formatted;
+            },
+            rotate: axisLabelFromConfig.rotate ?? 0,
+            // 始终启用点击事件
+            triggerEvent: true
           };
         })()
       },
@@ -803,7 +836,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               ]
             }
           },
+          // 保留 hover 阴影 + 支持高亮/变暗
           emphasis: {
+            focus: 'self',
             itemStyle: {
               shadowBlur: 10,
               shadowOffsetX: 0,
@@ -811,6 +846,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               shadowColor: 'rgba(0, 0, 0, 0.3)'
             }
           },
+          blur: { itemStyle: { opacity: 0.18 } },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -830,9 +866,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             width: 2.5,
             color: colorPalette[index % colorPalette.length]
           },
-          emphasis: {
-            focus: 'series'
-          },
+          emphasis: { focus: 'self' },
+          blur: { lineStyle: { opacity: 0.18 }, itemStyle: { opacity: 0.18 } },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -911,6 +946,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               }
             },
             emphasis: {
+              focus: 'self',
               itemStyle: {
                 shadowBlur: 15,
                 shadowOffsetX: 0,
@@ -922,6 +958,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                 fontWeight: 'bold'
               }
             },
+            blur: { itemStyle: { opacity: 0.18 } },
             animationType: 'scale',
             animationEasing: 'elasticOut',
             animationDelay: function (idx: number) {
@@ -1365,6 +1402,69 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     return baseOption;
   }, [config, data, containerSize.height, containerSize.width]);
 
+  const applySelection = useCallback((value: any) => {
+    const instance = chartRef.current?.getEchartsInstance?.();
+    if (!instance) return;
+
+    const normalized = value == null ? '' : normalizeLinkValue(value);
+
+    try {
+      // 先把所有元素变暗（清除之前的高亮）
+      instance.dispatchAction({ type: 'downplay' } as any);
+
+      if (!normalized) return;
+
+      const opt: any = instance.getOption?.() || {};
+      const chartType = (config.type || '').toLowerCase();
+
+      if (chartType === 'pie') {
+        const series0 = opt.series?.[0];
+        const arr = (series0?.data || []) as any[];
+        const idx = arr.findIndex((d: any) => {
+          const name = d?.name;
+          if (name == null) return false;
+          const s = String(name).trim();
+          if (normalizeLinkValue(s) === normalized) return true;
+          // 饼图 label 可能是 "邓玉梅: 125324 (7%)"，用冒号前一段或前缀匹配
+          const beforeColon = s.split(':')[0].trim();
+          return normalizeLinkValue(beforeColon) === normalized || s.startsWith(normalized);
+        });
+        if (idx >= 0) {
+          instance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx } as any);
+        }
+        return;
+      }
+
+      // category charts (bar/line/area/stacked_bar etc.)
+      const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
+      const xAxisData = (xAxis?.data || []) as any[];
+      const dataIndex = xAxisData.findIndex((x: any) => {
+        const v = normalizeLinkValue(x);
+        if (v === normalized) return true;
+        // 兼容：轴标签可能是富文本或带格式，用包含或前缀匹配
+        const sx = String(x ?? '').trim();
+        return sx === normalized || sx.startsWith(normalized) || normalized.startsWith(sx);
+      });
+      if (dataIndex < 0) return;
+
+      const seriesArr = (opt.series || []) as any[];
+      seriesArr.forEach((_: any, seriesIndex: number) => {
+        instance.dispatchAction({ type: 'highlight', seriesIndex, dataIndex } as any);
+      });
+    } catch {
+      // ignore highlight failures
+    }
+  }, [config.type]);
+
+  // 外部联动选中值变化时，更新高亮/变暗状态（延迟一帧确保图表已渲染完成再派发 highlight）
+  useEffect(() => {
+    if (!isReady) return;
+    const id = requestAnimationFrame(() => {
+      applySelection(selectedXValue);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [applySelection, isReady, selectedXValue]);
+
   // When parent controls height via percentages (e.g. dashboard cards), a large default minHeight
   // can cause ECharts to be clipped (overflow hidden) instead of adapting to the smaller container.
   const styleHeight = style?.height;
@@ -1376,10 +1476,97 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       (typeof style.minHeight === 'number' ? style.minHeight : undefined) ??
       defaultMinHeight);
 
+  // 记录 mousedown 时的位置（使用 ZRender 坐标系，更适合 canvas 内事件）
+  const mouseDownZrPos = useRef<{ x: number; y: number } | null>(null);
+  const ZR_MOVE_THRESHOLD_PX = 8;
+  // 去重：避免一次操作触发两次 click（柱状图更容易出现）
+  const lastClickRef = useRef<{ at: number; value: string } | null>(null);
+  const CLICK_DEDUP_WINDOW_MS = 120;
+
+  // 处理点击：X 轴标签 或 柱子/饼图扇区 都触发联动
+  const handleChartClick = (params: any, e: any) => {
+    if (!onXAxisClick) return;
+
+    // 只有“按下与抬起位置接近”才视为有效点击，避免移动中划过其他柱子时误触
+    if (mouseDownZrPos.current && e?.event) {
+      const ex = e.event.offsetX ?? e.event.zrX;
+      const ey = e.event.offsetY ?? e.event.zrY;
+      if (typeof ex === 'number' && typeof ey === 'number') {
+        const dx = Math.abs(ex - mouseDownZrPos.current.x);
+        const dy = Math.abs(ey - mouseDownZrPos.current.y);
+        if (dx > ZR_MOVE_THRESHOLD_PX || dy > ZR_MOVE_THRESHOLD_PX) {
+          return;
+        }
+      }
+    }
+
+    let value: any = null;
+    if (params.componentType === 'axisLabel') {
+      value = params.value;
+    } else if (params.componentType === 'series') {
+      // 点击柱子、饼图扇区等，用 name 作为联动值（如 "刘雨茹"）
+      value = params.name;
+    }
+    if (value != null) {
+      // 去重：同一值在极短时间内重复触发，忽略第二次
+      const now = Date.now();
+      const normalized = normalizeLinkValue(value);
+      const last = lastClickRef.current;
+      if (last && normalized && last.value === normalized && now - last.at < CLICK_DEDUP_WINDOW_MS) {
+        return;
+      }
+      lastClickRef.current = { at: now, value: normalized };
+
+      // 先在当前图上做“高亮/变暗”，再通知外部做联动
+      applySelection(value);
+      onXAxisClick(value);
+    }
+  };
+
+  const mergedEvents = {
+    ...(onEvents || {}),
+    click: handleChartClick
+  };
+
+  // 绑定 ZRender mousedown/mouseup：记录并清理按下位置（同一坐标系）
+  useEffect(() => {
+    if (!isReady) return;
+    const instance = chartRef.current?.getEchartsInstance?.();
+    const zr = instance?.getZr?.();
+    if (!zr) return;
+
+    const onDown = (ev: any) => {
+      const x = ev?.offsetX ?? ev?.zrX;
+      const y = ev?.offsetY ?? ev?.zrY;
+      if (typeof x === 'number' && typeof y === 'number') {
+        mouseDownZrPos.current = { x, y };
+      } else {
+        mouseDownZrPos.current = null;
+      }
+    };
+    const onUp = () => {
+      mouseDownZrPos.current = null;
+    };
+
+    zr.on('mousedown', onDown);
+    zr.on('mouseup', onUp);
+    zr.on('globalout', onUp);
+    return () => {
+      try {
+        zr.off('mousedown', onDown);
+        zr.off('mouseup', onUp);
+        zr.off('globalout', onUp);
+      } catch {
+        // ignore
+      }
+    };
+  }, [isReady, chartKey]);
+
   return (
     <div
       ref={containerRef}
       style={{ width: '100%', height: '100%', minHeight: resolvedMinHeight, ...style }}
+      data-chart-container="true"
     >
       {isReady && containerSize.width > 0 && containerSize.height > 0 ? (
         <ReactECharts
@@ -1391,7 +1578,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           notMerge={true}
           lazyUpdate={false}
           style={{ height: '100%', width: '100%' }}
-          onEvents={onEvents}
+          onEvents={mergedEvents}
         />
       ) : null}
     </div>

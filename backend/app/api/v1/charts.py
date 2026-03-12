@@ -230,6 +230,49 @@ async def execute_chart_query(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/batch-query", response_model=dict)
+async def execute_batch_chart_query(
+    requests: List[dict],  # [{chart_id: 1, filter_params: {...}}, ...]
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """批量执行多个图表查询，一次请求返回所有图表数据"""
+    try:
+        service = ChartService(db)
+        results = []
+        
+        for req in requests:
+            chart_id = req.get("chart_id")
+            filter_params = req.get("filter_params", {})
+            
+            if not chart_id:
+                results.append({"chart_id": chart_id, "error": "chart_id is required", "data": []})
+                continue
+            
+            try:
+                chart = await service.get_chart(chart_id, user_id)
+                if not chart:
+                    results.append({"chart_id": chart_id, "error": "图表不存在", "data": []})
+                    continue
+                
+                query_result = await service.execute_chart_query(chart, filter_params if filter_params else {})
+                results.append({
+                    "chart_id": chart_id,
+                    "data": query_result,
+                    "columns": list(query_result[0].keys()) if query_result else [],
+                    "row_count": len(query_result)
+                })
+            except Exception as e:
+                logger.error(f"批量查询中图表 {chart_id} 出错: {str(e)}")
+                results.append({"chart_id": chart_id, "error": str(e), "data": []})
+        
+        return {"results": results}
+        
+    except Exception as e:
+        logger.error(f"批量图表查询API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/filter-options")
 async def get_filter_options(
     data_source_id: int,

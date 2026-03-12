@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
 import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
@@ -111,12 +111,33 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
 };
 
 // 图表卡片组件（只读模式）—— 与 DashboardEditorPage 保持一致
-const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any>; allFilters?: DashboardFilter[] }> = ({ card, filterValues = {}, allFilters = [] }) => {
-  const [chartData, setChartData] = useState<any[]>([]);
+const ChartCardComponent: React.FC<{ 
+  card: DashboardCard; 
+  filterValues?: Record<string, any>; 
+  allFilters?: DashboardFilter[];
+  chartData?: any[];      // 外部传入的数据（批量查询时使用）
+  dataLoading?: boolean;   // 外部传入的加载状态
+  error?: string | null;  // 外部传入的错误信息
+  /** 全局图表联动筛选值 */
+  chartLinkValue?: any;
+  /** 当前联动值来自哪个图表（该图表本身不做数据过滤，只做高亮） */
+  chartLinkSourceChartId?: number | null;
+  /** 点击 X 轴时回调 */
+  onChartXAxisClick?: (value: any) => void;
+}> = ({ card, filterValues = {}, allFilters = [], chartData: externalData, dataLoading: externalLoading, error: externalError, chartLinkValue, chartLinkSourceChartId, onChartXAxisClick }) => {
+  const [internalChartData, setChartData] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 如果外部传入了数据，直接使用（批量查询模式）
   useEffect(() => {
+    if (externalData !== undefined) {
+      setChartData(externalData);
+      setError(externalError || null);
+      setDataLoading(externalLoading || false);
+      return;
+    }
+    // 否则自己加载（兼容模式）
     if (!card.chart?.id) {
       setError('图表数据缺失');
       return;
@@ -176,7 +197,13 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
     return () => {
       cancelled = true;
     };
-  }, [card.chart?.id, filterValues, allFilters]);
+  }, [card.chart?.id, filterValues, allFilters, externalData, externalLoading, externalError]);
+
+  // 使用外部或内部数据
+  const displayData = externalData !== undefined ? externalData : internalChartData;
+  
+  const displayLoading = externalData !== undefined ? (externalLoading || false) : dataLoading;
+  const displayError = externalData !== undefined ? externalError : error;
 
   if (!card.chart) {
     return (
@@ -209,9 +236,12 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
   const xField = viz.x_field ?? (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined);
   const yFields = viz.y_fields ?? (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
 
+  // 联动改为“仅高亮、不变更数据”：所有图表始终用全量数据，由 ChartFactory 根据 selectedXValue 做高亮/变暗
+  const chartDataForDisplay = displayData;
+
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
-      {dataLoading ? (
+      {displayLoading ? (
         <div
           style={{
             height: '100%',
@@ -223,7 +253,7 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
         >
           <Spin tip="加载数据中..." />
         </div>
-      ) : error ? (
+      ) : displayError ? (
         <div
           style={{
             height: '100%',
@@ -235,9 +265,9 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
           }}
         >
           <div style={{ marginBottom: 8 }}>⚠️</div>
-          <div style={{ fontSize: 12, textAlign: 'center' }}>{error}</div>
+          <div style={{ fontSize: 12, textAlign: 'center' }}>{displayError}</div>
         </div>
-      ) : chartData.length === 0 ? (
+      ) : displayData.length === 0 ? (
         <div
           style={{
             height: '100%',
@@ -293,8 +323,10 @@ const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<
             },
             // 报表页同样不再透传 grid_padding，保持与 ChartFactory 的统一居中布局。
           }}
-          data={chartData}
+          data={chartDataForDisplay}
           style={{ height: '100%', width: '100%' }}
+          onXAxisClick={onChartXAxisClick}
+          selectedXValue={chartLinkValue}
         />
       )}
     </div>
@@ -306,7 +338,16 @@ const DashboardView: React.FC<{
   dashboard: Dashboard;
   filterValues?: Record<number, any>;
   onFilterChange?: (values: Record<number, any>) => void;
-}> = ({ dashboard, filterValues = {}, onFilterChange }) => {
+  batchChartData?: Map<number, { data: any[]; loading: boolean; error: string | null }>;
+  /** 全局图表联动筛选值 */
+  chartLinkValue?: any;
+  /** 图表 X 轴点击回调 */
+  onChartXAxisClick?: (chartId: number | null, value: any) => void;
+  /** 当前联动值来自哪个图表（该图表本身不做数据过滤，只做高亮） */
+  chartLinkSourceChartId?: number | null;
+  /** 清除图表联动筛选回调 */
+  onClearChartLink?: () => void;
+}> = ({ dashboard, filterValues = {}, onFilterChange, batchChartData, chartLinkValue, onChartXAxisClick, chartLinkSourceChartId, onClearChartLink }) => {
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
   const filters = dashboard.filters || [];
@@ -543,6 +584,19 @@ const DashboardView: React.FC<{
               );
             })}
           </div>
+          {/* 清除图表联动筛选按钮 */}
+          {chartLinkValue != null && (
+            <div style={{ marginTop: 8 }}>
+              <Button
+                size="small"
+                type="link"
+                danger
+                onClick={onClearChartLink}
+              >
+                清除图表筛选 ({String(chartLinkValue)})
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -618,7 +672,17 @@ const DashboardView: React.FC<{
                   alignItems: 'stretch',
                 }}
               >
-                <ChartCardComponent card={card} filterValues={filterValues} allFilters={filters} />
+                <ChartCardComponent 
+                  card={card} 
+                  filterValues={filterValues} 
+                  allFilters={filters}
+                  chartData={card.chart?.id ? (batchChartData?.get(card.chart.id)?.data || []) : undefined}
+                  dataLoading={card.chart?.id ? batchChartData?.get(card.chart.id)?.loading : false}
+                  error={card.chart?.id ? batchChartData?.get(card.chart.id)?.error : null}
+                  chartLinkValue={chartLinkValue}
+                  chartLinkSourceChartId={chartLinkSourceChartId}
+                  onChartXAxisClick={(value) => onChartXAxisClick?.(card.chart?.id ?? null, value)}
+                />
               </Card>
             </div>
           ))}
@@ -652,13 +716,115 @@ export const ReportsPage: React.FC = () => {
   const [addDashboardForm] = Form.useForm();
   const [availableDashboardsForAdd, setAvailableDashboardsForAdd] = useState<Dashboard[]>([]);
   const [addingDashboard, setAddingDashboard] = useState(false);
-  // 当前仪表盘的筛选器值（key 为 filter.id）
+// 当前仪表盘的筛选器值（key 为 filter.id）
   const [filterValues, setFilterValues] = useState<Record<number, any>>({});
+  // 图表联动筛选值（全局选中的 X 轴值）
+  const [chartLinkValue, setChartLinkValue] = useState<any>(null);
+  // 图表联动来源（哪个图触发的点击）
+  const [chartLinkSourceChartId, setChartLinkSourceChartId] = useState<number | null>(null);
+  // 批量图表数据（chartId -> 数据）
+  const [batchChartData, setBatchChartData] = useState<Map<number, { data: any[]; loading: boolean; error: string | null }>>(new Map());
 
   // 处理筛选器变化
   const handleFilterChange = (newValues: Record<number, any>) => {
     setFilterValues(newValues);
+    
+    // 筛选值变化时重新批量加载所有图表数据
+    const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
+    if (currentDashboard && currentDashboard.cards && currentDashboard.cards.length > 0) {
+      loadBatchChartData(currentDashboard.cards, currentDashboard.filters || [], newValues);
+    }
   };
+
+  const normalizeLinkValue = (v: any) => {
+    if (v == null) return '';
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}[T\s]/.test(s)) return s.slice(0, 10);
+    return s;
+  };
+
+  // 图表联动（像筛选器一样）：点击只会“设置/更新筛选值”，不会因为同值再次触发而自动取消
+  // 取消筛选通过：点击页面空白处 / 点击清除按钮
+  const handleChartLinkClick = (chartId: number | null, value: any) => {
+    const nextVal = value == null ? null : normalizeLinkValue(value);
+    if (nextVal == null) return;
+    setChartLinkValue(nextVal);
+    setChartLinkSourceChartId(chartId ?? null);
+  };
+
+  // 点击页面“非图表区域”时清除联动筛选（符合“点其它地方取消”，避免 hover/误触取消）
+  useEffect(() => {
+    if (chartLinkValue == null) return;
+    const onDocMouseDown = (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement | null;
+      const inChart = !!target?.closest?.('[data-chart-container="true"]');
+      if (!inChart) {
+        setChartLinkValue(null);
+        setChartLinkSourceChartId(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+  }, [chartLinkValue]);
+
+  // 批量加载所有图表数据
+  const loadBatchChartData = useCallback(async (cards: DashboardCard[], filters: DashboardFilter[], currentFilterValues: Record<number, any>) => {
+    if (!cards || cards.length === 0) return;
+    
+    // 收集所有图表请求
+    const requests: { chartId: number; filterParams: Record<string, any> }[] = [];
+    
+    cards.forEach(card => {
+      if (!card.chart?.id) return;
+      
+      // 构建筛选参数
+      const filteredFilterValues: Record<string, any> = {};
+      filters.forEach(filter => {
+        const filterValue = currentFilterValues[filter.id];
+        if (filterValue === undefined || filterValue === null) return;
+        if (filterValue === '') return;
+        if (Array.isArray(filterValue) && filterValue.length === 0) return;
+        
+        const paramKey = `${filter.id}_${filter.field_name}`;
+        filteredFilterValues[paramKey] = filterValue;
+      });
+      
+      requests.push({ chartId: card.chart.id, filterParams: filteredFilterValues });
+    });
+    
+    if (requests.length === 0) return;
+    
+    // 设置所有图表为 loading 状态
+    const loadingMap = new Map(batchChartData);
+    requests.forEach(req => {
+      loadingMap.set(req.chartId, { data: [], loading: true, error: null });
+    });
+    setBatchChartData(loadingMap);
+    
+    try {
+      // 批量查询
+      const results = await ChartService.executeBatchChartQuery(requests);
+      
+      // 更新数据
+      const newDataMap = new Map(batchChartData);
+      results.forEach(result => {
+        newDataMap.set(result.chartId, {
+          data: result.data || [],
+          loading: false,
+          error: result.error || null,
+        });
+      });
+      setBatchChartData(newDataMap);
+    } catch (err: any) {
+      console.error('批量加载图表数据失败:', err);
+      // 设置错误状态
+      const errorMap = new Map(batchChartData);
+      requests.forEach(req => {
+        errorMap.set(req.chartId, { data: [], loading: false, error: err.message || '加载失败' });
+      });
+      setBatchChartData(errorMap);
+    }
+  }, []);  // 移除 batchChartData 依赖，避免无限循环
 
   useEffect(() => {
     if (!user) return;
@@ -750,6 +916,11 @@ export const ReportsPage: React.FC = () => {
       const filters = await DashboardService.getDashboardFilters(dashboardId);
       hydratedDashboard.filters = filters;
       setDashboardDetails(prev => new Map(prev).set(dashboardId, hydratedDashboard));
+      
+      // 批量加载图表数据
+      if (hydratedDashboard.cards && hydratedDashboard.cards.length > 0) {
+        loadBatchChartData(hydratedDashboard.cards, hydratedDashboard.filters || [], filterValues);
+      }
     } catch (error: any) {
       message.error(`加载仪表盘详情失败: ${error?.message || '未知错误'}`);
     } finally {
@@ -1092,6 +1263,14 @@ export const ReportsPage: React.FC = () => {
                   dashboard={currentDashboard}
                   filterValues={filterValues}
                   onFilterChange={handleFilterChange}
+                  batchChartData={batchChartData}
+                  chartLinkValue={chartLinkValue}
+                  onChartXAxisClick={handleChartLinkClick}
+                  chartLinkSourceChartId={chartLinkSourceChartId}
+                  onClearChartLink={() => {
+                    setChartLinkValue(null);
+                    setChartLinkSourceChartId(null);
+                  }}
                 />
               </Card>
             ) : activeDashboardId && loadingDashboard.has(activeDashboardId) ? (
