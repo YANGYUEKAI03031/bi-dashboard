@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
 import logging
 import json
+import asyncio
 
 from app.db.session import get_db
 from app.services.chart_service import ChartService
@@ -234,40 +235,90 @@ async def execute_chart_query(
 async def execute_batch_chart_query(
     requests: List[dict],  # [{chart_id: 1, filter_params: {...}}, ...]
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
+    concurrency: int = Query(4, ge=1, le=16, description="并发执行的图表数量上限")
 ):
-    """批量执行多个图表查询，一次请求返回所有图表数据"""
+    """批量执行多个图表查询，一次请求返回所有图表数据（支持并发）"""
     try:
         service = ChartService(db)
-        results = []
-        
+
+        # ========== 阶段 A：串行查询 chart 元数据（必须用 AsyncSession）==========
+        chart_tasks = []
         for req in requests:
             chart_id = req.get("chart_id")
             filter_params = req.get("filter_params", {})
-            
             if not chart_id:
-                results.append({"chart_id": chart_id, "error": "chart_id is required", "data": []})
-                continue
-            
-            try:
-                chart = await service.get_chart(chart_id, user_id)
-                if not chart:
-                    results.append({"chart_id": chart_id, "error": "图表不存在", "data": []})
-                    continue
-                
-                query_result = await service.execute_chart_query(chart, filter_params if filter_params else {})
-                results.append({
+                chart_tasks.append({
                     "chart_id": chart_id,
-                    "data": query_result,
-                    "columns": list(query_result[0].keys()) if query_result else [],
-                    "row_count": len(query_result)
+                    "error": "chart_id is required",
+                    "filter_params": filter_params,
+                    "chart": None,
+                    "status": "error"
                 })
+                continue
+            chart_tasks.append({
+                "chart_id": chart_id,
+                "filter_params": filter_params,
+                "chart": None,
+                "status": "pending"
+            })
+
+        # 串行把所有 chart 对象查出来（复用 AsyncSession）
+        for task in chart_tasks:
+            if task["status"] == "error":
+                continue
+            try:
+                chart = await service.get_chart(task["chart_id"], user_id)
+                if not chart:
+                    task["error"] = "图表不存在"
+                    task["status"] = "error"
+                    continue
+                task["chart"] = chart
             except Exception as e:
-                logger.error(f"批量查询中图表 {chart_id} 出错: {str(e)}")
-                results.append({"chart_id": chart_id, "error": str(e), "data": []})
-        
-        return {"results": results}
-        
+                logger.error(f"查询图表 {task['chart_id']} 元数据失败: {str(e)}")
+                task["error"] = str(e)
+                task["status"] = "error"
+
+        # ========== 阶段 B：并发执行 SQL 查询（每个用独立 DB 连接）==========
+        # Semaphore 限制并发数，避免 DB 连接池耗尽
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def execute_single_chart(task: dict):
+            async with semaphore:
+                if task["status"] == "error":
+                    return task
+
+                chart = task["chart"]
+                filter_params = task.get("filter_params") or {}
+                try:
+                    query_result = await service.execute_chart_query(chart, filter_params)
+                    task["data"] = query_result
+                    task["columns"] = list(query_result[0].keys()) if query_result else []
+                    task["row_count"] = len(query_result)
+                    task["status"] = "done"
+                except Exception as e:
+                    logger.error(f"图表 {task['chart_id']} SQL 执行失败: {str(e)}")
+                    task["error"] = str(e)
+                    task["data"] = []
+                    task["status"] = "error"
+                return task
+
+        # 并发执行所有图表的 SQL
+        results = await asyncio.gather(*[execute_single_chart(t) for t in chart_tasks])
+
+        # 转换为 API 响应格式
+        final_results = []
+        for r in results:
+            final_results.append({
+                "chart_id": r["chart_id"],
+                "data": r.get("data", []),
+                "columns": r.get("columns", []),
+                "row_count": r.get("row_count", 0),
+                "error": r.get("error")
+            })
+
+        return {"results": final_results}
+
     except Exception as e:
         logger.error(f"批量图表查询API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
