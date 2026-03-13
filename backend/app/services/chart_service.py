@@ -481,8 +481,6 @@ class ChartService:
         try:
             filter_params = filter_params or {}
 
-            logger.info(f"execute_chart_query 接收到的 filter_params: {filter_params}")
-
             # 解析dataset_query获取SQL
             dataset_query = chart.dataset_query
             if isinstance(dataset_query, str):
@@ -509,7 +507,6 @@ class ChartService:
                     parts = param_name.split('_', 1)
                     if parts[0].isdigit() and len(parts) == 2:
                         actual_field_name = parts[1]
-                        logger.info(f"解析筛选器参数: {param_name} -> {actual_field_name}")
 
                 # 相对时间（如 last_month）转为日期范围后再按日期处理
                 if isinstance(param_value, str):
@@ -586,7 +583,6 @@ class ChartService:
                         # 没有找到任何关键字，直接在末尾添加（但要在;之前）
                         sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
             
-            logger.info(f"执行SQL查询（自动生成WHERE后）: {sql_query[:200]}...")
             # ========== 方案2 结束 ==========
 
             # 兜底保护：没有 LIMIT 的情况下，默认最多返回 10000 行，避免大数据量把后端/前端拖死
@@ -724,7 +720,6 @@ class ChartService:
                                     else:
                                         sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
 
-                                logger.info(f"重试SQL查询: {sql_query[:200]}...")
                                 sql_query = _apply_default_limit(sql_query, 10000)
                                 async with temp_engine.connect() as conn:
                                     result = await conn.execute(text(sql_query))

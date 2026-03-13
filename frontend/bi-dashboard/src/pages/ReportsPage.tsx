@@ -768,10 +768,22 @@ export const ReportsPage: React.FC = () => {
   // 批量加载所有图表数据
   const loadBatchChartData = useCallback(async (cards: DashboardCard[], filters: DashboardFilter[], currentFilterValues: Record<number, any>) => {
     if (!cards || cards.length === 0) return;
-    
+
+    // 构建请求唯一标识，用于去重
+    const requestKey = JSON.stringify({
+      cardIds: cards.map(c => c.chart?.id).filter(Boolean).sort(),
+      filterValues: currentFilterValues,
+    });
+
+    // 防止同一帧内重复请求（React StrictMode 会导致双重调用）
+    if ((loadBatchChartData as any).lastRequestKey === requestKey) {
+      return;
+    }
+    (loadBatchChartData as any).lastRequestKey = requestKey;
+
     // 收集所有图表请求
     const requests: { chartId: number; filterParams: Record<string, any> }[] = [];
-    
+
     cards.forEach(card => {
       if (!card.chart?.id) return;
       

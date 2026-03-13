@@ -633,25 +633,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         ? `${((gridCenterPosition / containerWidth) * 100).toFixed(3)}%`
         : 'center';
     
-    // 调试信息：输出关键参数以便排查问题
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[ChartFactory] Grid layout:', {
-        containerWidth,
-        gridLeft: gridOption.left,
-        gridRight: gridOption.right,
-        yAxisLabelWidthEstimate,
-        yAxisLabelSpace,
-        gridCenterPosition,
-        titleLeft,
-        containLabel: gridOption.containLabel,
-        baseSidePadding,
-        // 计算实际的 grid 区域宽度和中心
-        gridAreaWidth: containerWidth - (gridOption.left as number) - (gridOption.right as number),
-        gridAreaCenter: gridCenterPosition,
-        containerCenter: containerWidth / 2
-      });
-    }
-
     const baseOption: any = {
       backgroundColor: 'transparent',
       color: colorPalette,
@@ -1426,9 +1407,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
   const applySelection = useCallback((value: any) => {
     const instance = chartRef.current?.getEchartsInstance?.();
-    if (process.env.NODE_ENV === 'development' && value == null) {
-      console.log('[ChartFactory] applySelection(null) instance=', !!instance);
-    }
     if (!instance) return;
 
     const normalized = value == null ? '' : normalizeLinkValue(value);
@@ -1439,9 +1417,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
       // 取消筛选：清除所有高亮/变暗
       if (!normalized) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[ChartFactory] applySelection(null) clear', { chartType: (opt?.series?.[0]?.type) || config.type });
-        }
         try {
           instance.dispatchAction({ type: 'hideTip' } as any);
         } catch {
@@ -1509,9 +1484,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   // 外部联动选中值变化时，更新高亮/变暗状态
   useEffect(() => {
     if (!isReady) return;
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[ChartFactory] useEffect selectedXValue', selectedXValue, 'chartType', config.type);
-    }
     // 取消筛选时同步执行并刷新，避免“要移入图表才更新”的延迟感
     if (selectedXValue == null) {
       applySelection(null);
