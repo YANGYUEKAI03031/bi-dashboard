@@ -114,8 +114,8 @@ interface ChartFactoryProps {
   style?: React.CSSProperties;
   onEvents?: Record<string, Function>;
   minHeight?: number; // 优先级高于 config.minHeight
-  /** 点击 X 轴标签时的回调，参数为选中的值 */
-  onXAxisClick?: (value: any) => void;
+  /** 点击 X 轴标签时的回调，参数为选中的值、以及该值对应的字段名（用于按同名列联动筛选） */
+  onXAxisClick?: (value: any, fieldName?: string) => void;
   /** 当前被选中的 X 轴值（用于高亮显示） */
   selectedXValue?: any;
 }
@@ -419,6 +419,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // 处理系列数据 - 使用“最终确定”的 yFields（与聚合一致）
     const yFields = effectiveYFields;
     // 联动选中值归一化，用于在 option 里按项设置透明度（取消筛选时 selectedXValue 为 null，全部恢复不透明）
+    // 若本图 x 轴与选中值无任何匹配（xlabel 不一样），则所有项 isSelected 均为 false，整图会统一变暗为 0.35
     const selectedNormalized = selectedXValue != null ? normalizeLinkValue(selectedXValue) : '';
 
     // 默认颜色调色板
@@ -800,6 +801,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             const name = item[xField];
             const isSelected = selectedNormalized && normalizeLinkValue(String(name ?? '')) === selectedNormalized;
             const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+            if (process.env.NODE_ENV === 'development' && selectedNormalized) {
+              console.log(`[ChartFactory] BAR #${i} name=${name} isSelected=${isSelected} opacity=${opacity}`);
+            }
             return typeof val === 'object' && val !== null && !Array.isArray(val)
               ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
               : opacity != null ? { value: val, itemStyle: { opacity } } : val;
@@ -922,6 +926,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               const name = item[xField] || `数据${index + 1}`;
               const isSelected = selectedNormalized && (normalizeLinkValue(String(name)) === selectedNormalized || normalizeLinkValue(String(String(name).split(':')[0]?.trim() || '')) === selectedNormalized);
               const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+              if (process.env.NODE_ENV === 'development' && selectedNormalized) {
+                console.log(`[ChartFactory] PIE #${index} name=${name} isSelected=${isSelected} opacity=${opacity}`);
+              }
               return {
                 name,
                 value: item[fieldValue] || 0,
@@ -1457,12 +1464,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       // category charts (bar/line/area/stacked_bar etc.)
       const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
       const xAxisData = (xAxis?.data || []) as any[];
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ChartFactory] applySelection - xAxisData:', xAxisData, 'searching normalized:', normalized);
+      }
       const selectedDataIndex = xAxisData.findIndex((x: any) => {
         const v = normalizeLinkValue(x);
         if (v === normalized) return true;
         const sx = String(x ?? '').trim();
         return sx === normalized || sx.startsWith(normalized) || normalized.startsWith(sx);
       });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ChartFactory] applySelection - matched index:', selectedDataIndex);
+      }
       if (selectedDataIndex < 0) return;
 
       const seriesArr = (opt.series || []) as any[];
@@ -1531,11 +1544,39 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     }
 
     let value: any = null;
+    let clickSource = '';
     if (params.componentType === 'axisLabel') {
       value = params.value;
+      clickSource = 'axisLabel';
     } else if (params.componentType === 'series') {
-      // 点击柱子、饼图扇区等，用 name 作为联动值（如 "刘雨茹"）
-      value = params.name;
+      const chartType = (config.type || '').toLowerCase();
+      clickSource = `series:${chartType}`;
+      // 折线图/面积图：series.name 是 Y 字段名（如「星级」），需用 dataIndex 从 x 轴取类目作为联动值
+      if ((chartType === 'line' || chartType === 'area') && typeof params.dataIndex === 'number') {
+        const opt = optionRef.current;
+        const xAxis = Array.isArray(opt?.xAxis) ? opt.xAxis[0] : opt?.xAxis;
+        const xAxisData = (xAxis?.data || []) as any[];
+        if (params.dataIndex >= 0 && params.dataIndex < xAxisData.length) {
+          value = xAxisData[params.dataIndex];
+          clickSource += ` -> xAxis[dataIndex=${params.dataIndex}]`;
+        }
+      }
+      if (value == null) {
+        value = params.name; // 柱状图、饼图等：name 即为类目/扇区名
+        clickSource += ` -> name`;
+      }
+    }
+    // 打印点击信息
+    if (process.env.NODE_ENV === 'development' && value != null) {
+      console.log('[ChartFactory] 点击事件:', {
+        chartType: config.type,
+        chartName: config.title,
+        clickSource,
+        rawValue: value,
+        normalized: normalizeLinkValue(value),
+        paramsDataIndex: params.dataIndex,
+        paramsName: params.name,
+      });
     }
     if (value != null) {
       const normalized = normalizeLinkValue(value);
@@ -1544,7 +1585,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       // 点击相同 value 时取消筛选（切换）
       if (normalized && currentNormalized && normalized === currentNormalized) {
         applySelection(null);
-        onXAxisClick(null);
+        onXAxisClick(null, undefined);
         return;
       }
 
@@ -1556,9 +1597,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       }
       lastClickRef.current = { at: now, value: normalized };
 
-      // 先在当前图上做“高亮/变暗”，再通知外部做联动
+      // 先在当前图上做“高亮/变暗”，再通知外部做联动（带上 xField，便于按同名列筛选）
       applySelection(value);
-      onXAxisClick(value);
+      onXAxisClick(value, config.xField);
     }
   };
 
