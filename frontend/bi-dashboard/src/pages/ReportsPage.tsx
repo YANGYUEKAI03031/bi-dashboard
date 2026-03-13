@@ -741,7 +741,7 @@ export const ReportsPage: React.FC = () => {
       const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
         ? { field: chartLinkField, value: String(chartLinkValue) }
         : null;
-      loadBatchChartData(currentDashboard.cards, currentDashboard.filters || [], newValues, linkFilter);
+      loadBatchChartData(currentDashboard.cards, currentDashboard.filters || [], newValues, linkFilter, activeDashboardId ?? null);
     }
   };
 
@@ -795,31 +795,18 @@ export const ReportsPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
   }, [chartLinkValue]);
 
-  // 图表联动变化时按「同名列」重新请求后端数据（与筛选器一致，在 SQL 中加 WHERE）
-  const currentDashboardForLink = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
-  useEffect(() => {
-    if (!currentDashboardForLink?.cards?.length) return;
-    const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
-      ? { field: chartLinkField, value: String(chartLinkValue) }
-      : null;
-    loadBatchChartData(
-      currentDashboardForLink.cards,
-      currentDashboardForLink.filters || [],
-      filterValues,
-      linkFilter
-    );
-  }, [chartLinkValue, chartLinkField]);
-
   // 批量加载所有图表数据（linkFilter 与筛选器一致：按同名字段在 SQL 中加 WHERE 条件）
   const loadBatchChartData = useCallback(async (
     cards: DashboardCard[],
     filters: DashboardFilter[],
     currentFilterValues: Record<number, any>,
-    linkFilter?: { field: string; value: string } | null
+    linkFilter?: { field: string; value: string } | null,
+    dashboardId?: number | null,
   ) => {
     if (!cards || cards.length === 0) return;
 
     const requestKey = JSON.stringify({
+      dashboardId: dashboardId ?? null,
       cardIds: cards.map(c => c.chart?.id).filter(Boolean).sort(),
       filterValues: currentFilterValues,
       linkFilter: linkFilter ?? null,
@@ -885,6 +872,23 @@ export const ReportsPage: React.FC = () => {
       setBatchChartData(errorMap);
     }
   }, []);  // 移除 batchChartData 依赖，避免无限循环
+
+  // 图表联动变化时按「同名列」重新请求后端数据（与筛选器一致，在 SQL 中加 WHERE）
+  const currentDashboardForLink = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
+  useEffect(() => {
+    if (!currentDashboardForLink?.cards?.length) return;
+    const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
+      ? { field: chartLinkField, value: String(chartLinkValue) }
+      : null;
+    loadBatchChartData(
+      currentDashboardForLink.cards,
+      currentDashboardForLink.filters || [],
+      filterValues,
+      linkFilter,
+      activeDashboardId ?? null,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartLinkValue, chartLinkField]);
 
   useEffect(() => {
     if (!user) return;
@@ -982,7 +986,7 @@ export const ReportsPage: React.FC = () => {
         const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
           ? { field: chartLinkField, value: String(chartLinkValue) }
           : null;
-        loadBatchChartData(hydratedDashboard.cards, hydratedDashboard.filters || [], filterValues, linkFilter);
+        loadBatchChartData(hydratedDashboard.cards, hydratedDashboard.filters || [], filterValues, linkFilter, dashboardId);
       }
     } catch (error: any) {
       message.error(`加载仪表盘详情失败: ${error?.message || '未知错误'}`);
@@ -999,10 +1003,21 @@ export const ReportsPage: React.FC = () => {
     const id = Number(dashboardId);
     setActiveDashboardId(id);
     setFilterValues({}); // 切换仪表盘时重置筛选状态
+    setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致“暂无数据”
 
     // 如果还没有加载过这个仪表盘的详情，则加载
     if (!dashboardDetails.has(id)) {
       await loadDashboardDetails(id, charts);
+      return;
+    }
+
+    // 已加载过也需要重新拉取该 tab 的数据（筛选已被重置为 {}）
+    const dash = dashboardDetails.get(id);
+    if (dash?.cards?.length) {
+      const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
+        ? { field: chartLinkField, value: String(chartLinkValue) }
+        : null;
+      loadBatchChartData(dash.cards, dash.filters || [], {}, linkFilter, id);
     }
   };
 
