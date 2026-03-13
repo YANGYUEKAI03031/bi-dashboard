@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
 import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
@@ -584,19 +585,6 @@ const DashboardView: React.FC<{
               );
             })}
           </div>
-          {/* 清除图表联动筛选按钮 */}
-          {chartLinkValue != null && (
-            <div style={{ marginTop: 8 }}>
-              <Button
-                size="small"
-                type="link"
-                danger
-                onClick={onClearChartLink}
-              >
-                清除图表筛选 ({String(chartLinkValue)})
-              </Button>
-            </div>
-          )}
         </div>
       )}
 
@@ -747,7 +735,14 @@ export const ReportsPage: React.FC = () => {
   // 取消筛选通过：点击页面空白处 / 点击清除按钮
   const handleChartLinkClick = (chartId: number | null, value: any) => {
     const nextVal = value == null ? null : normalizeLinkValue(value);
-    if (nextVal == null) return;
+    if (nextVal == null) {
+      if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (click same or null)');
+      flushSync(() => {
+        setChartLinkValue(null);
+        setChartLinkSourceChartId(null);
+      });
+      return;
+    }
     setChartLinkValue(nextVal);
     setChartLinkSourceChartId(chartId ?? null);
   };
@@ -759,8 +754,11 @@ export const ReportsPage: React.FC = () => {
       const target = ev.target as HTMLElement | null;
       const inChart = !!target?.closest?.('[data-chart-container="true"]');
       if (!inChart) {
-        setChartLinkValue(null);
-        setChartLinkSourceChartId(null);
+        if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (click outside)');
+        flushSync(() => {
+          setChartLinkValue(null);
+          setChartLinkSourceChartId(null);
+        });
       }
     };
     document.addEventListener('mousedown', onDocMouseDown, true);
@@ -1268,8 +1266,11 @@ export const ReportsPage: React.FC = () => {
                   onChartXAxisClick={handleChartLinkClick}
                   chartLinkSourceChartId={chartLinkSourceChartId}
                   onClearChartLink={() => {
-                    setChartLinkValue(null);
-                    setChartLinkSourceChartId(null);
+                    if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (onClearChartLink)');
+                    flushSync(() => {
+                      setChartLinkValue(null);
+                      setChartLinkSourceChartId(null);
+                    });
                   }}
                 />
               </Card>

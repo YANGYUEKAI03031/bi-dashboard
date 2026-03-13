@@ -232,6 +232,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const [isReady, setIsReady] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const rafRef = useRef<number | null>(null);
+  // 用 ref 存当前选中值，避免 globalout 时闭包拿到旧值导致清除后又被重新高亮
+  const selectedXValueRef = useRef<any>(selectedXValue);
+  selectedXValueRef.current = selectedXValue;
 
   const normalizeLinkValue = (v: any) => {
     if (v == null) return '';
@@ -415,7 +418,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
     // 处理系列数据 - 使用“最终确定”的 yFields（与聚合一致）
     const yFields = effectiveYFields;
-    
+    // 联动选中值归一化，用于在 option 里按项设置透明度（取消筛选时 selectedXValue 为 null，全部恢复不透明）
+    const selectedNormalized = selectedXValue != null ? normalizeLinkValue(selectedXValue) : '';
+
     // 默认颜色调色板
     const colorPalette = [
       '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
@@ -809,7 +814,15 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item, i) => {
+            const val = item[field] || 0;
+            const name = item[xField];
+            const isSelected = selectedNormalized && normalizeLinkValue(String(name ?? '')) === selectedNormalized;
+            const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+            return typeof val === 'object' && val !== null && !Array.isArray(val)
+              ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
+              : opacity != null ? { value: val, itemStyle: { opacity } } : val;
+          }),
           // 当有多个 Y 轴字段（多系列）时，不固定百分比宽度，只限制最大像素宽度并设置合理的间距，
           // 避免一组类目下柱子总宽度超过可用带宽而出现“折叠/重叠”。
           ...(isMultiBarSeries
@@ -836,17 +849,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               ]
             }
           },
-          // 保留 hover 阴影 + 支持高亮/变暗
           emphasis: {
             focus: 'self',
             itemStyle: {
               shadowBlur: 10,
               shadowOffsetX: 0,
               shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+              shadowColor: 'rgba(0, 0, 0, 0.3)',
+              borderColor: '#fff',
+              borderWidth: 2,
+              opacity: 1
             }
           },
-          blur: { itemStyle: { opacity: 0.18 } },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -867,7 +881,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             color: colorPalette[index % colorPalette.length]
           },
           emphasis: { focus: 'self' },
-          blur: { lineStyle: { opacity: 0.18 }, itemStyle: { opacity: 0.18 } },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -924,15 +937,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             type: 'pie',
             radius: ['40%', '70%'],
             center: ['50%', '50%'],
-            data: sortedData.map((item, index) => ({
-              name: item[xField] || `数据${index + 1}`,
-              value: item[fieldValue] || 0,
-              itemStyle: {
-                borderRadius: 6,
-                borderColor: '#fff',
-                borderWidth: 2
-              }
-            })),
+            data: sortedData.map((item, index) => {
+              const name = item[xField] || `数据${index + 1}`;
+              const isSelected = selectedNormalized && (normalizeLinkValue(String(name)) === selectedNormalized || normalizeLinkValue(String(String(name).split(':')[0]?.trim() || '')) === selectedNormalized);
+              const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+              return {
+                name,
+                value: item[fieldValue] || 0,
+                itemStyle: {
+                  borderRadius: 6,
+                  borderColor: '#fff',
+                  borderWidth: 2,
+                  ...(opacity != null ? { opacity } : {})
+                }
+              };
+            }),
             label: {
               show: true,
               formatter: '{b}: {c} ({d}%)',
@@ -958,7 +977,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                 fontWeight: 'bold'
               }
             },
-            blur: { itemStyle: { opacity: 0.18 } },
             animationType: 'scale',
             animationEasing: 'elasticOut',
             animationDelay: function (idx: number) {
@@ -1400,22 +1418,46 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     }
 
     return baseOption;
-  }, [config, data, containerSize.height, containerSize.width]);
+  }, [config, data, containerSize.height, containerSize.width, selectedXValue]);
+
+  // 用 ref 保存最新 option，取消筛选时强制 setOption 用
+  const optionRef = useRef<any>(null);
+  optionRef.current = option;
 
   const applySelection = useCallback((value: any) => {
     const instance = chartRef.current?.getEchartsInstance?.();
+    if (process.env.NODE_ENV === 'development' && value == null) {
+      console.log('[ChartFactory] applySelection(null) instance=', !!instance);
+    }
     if (!instance) return;
 
     const normalized = value == null ? '' : normalizeLinkValue(value);
 
     try {
-      // 先把所有元素变暗（清除之前的高亮）
-      instance.dispatchAction({ type: 'downplay' } as any);
-
-      if (!normalized) return;
-
       const opt: any = instance.getOption?.() || {};
       const chartType = (config.type || '').toLowerCase();
+
+      // 取消筛选：清除所有高亮/变暗
+      if (!normalized) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[ChartFactory] applySelection(null) clear', { chartType: (opt?.series?.[0]?.type) || config.type });
+        }
+        try {
+          instance.dispatchAction({ type: 'hideTip' } as any);
+        } catch {
+          // ignore
+        }
+        // 清除所有高亮/变暗
+        instance.dispatchAction({ type: 'downplay' } as any);
+        // 用最新 option 强制同步 setOption，立即恢复所有项的不透明度
+        // 先 clear 再 setOption，彻底清除旧的 opacity 状态
+        const newOption = optionRef.current;
+        if (newOption) {
+          instance.clear();
+          instance.setOption(newOption, { notMerge: true, lazyUpdate: false });
+        }
+        return;
+      }
 
       if (chartType === 'pie') {
         const series0 = opt.series?.[0];
@@ -1430,6 +1472,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           return normalizeLinkValue(beforeColon) === normalized || s.startsWith(normalized);
         });
         if (idx >= 0) {
+          // 先downplay全部，再highlight选中的
+          instance.dispatchAction({ type: 'downplay', seriesIndex: 0 } as any);
           instance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx } as any);
         }
         return;
@@ -1438,27 +1482,41 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       // category charts (bar/line/area/stacked_bar etc.)
       const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
       const xAxisData = (xAxis?.data || []) as any[];
-      const dataIndex = xAxisData.findIndex((x: any) => {
+      const selectedDataIndex = xAxisData.findIndex((x: any) => {
         const v = normalizeLinkValue(x);
         if (v === normalized) return true;
-        // 兼容：轴标签可能是富文本或带格式，用包含或前缀匹配
         const sx = String(x ?? '').trim();
         return sx === normalized || sx.startsWith(normalized) || normalized.startsWith(sx);
       });
-      if (dataIndex < 0) return;
+      if (selectedDataIndex < 0) return;
 
       const seriesArr = (opt.series || []) as any[];
+      const dataLen = xAxisData.length;
+      // 先对所有数据项 downplay（柱子变暗），再只对选中的 highlight（柱子高亮）
       seriesArr.forEach((_: any, seriesIndex: number) => {
-        instance.dispatchAction({ type: 'highlight', seriesIndex, dataIndex } as any);
+        for (let i = 0; i < dataLen; i++) {
+          instance.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: i } as any);
+        }
+      });
+      seriesArr.forEach((_: any, seriesIndex: number) => {
+        instance.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: selectedDataIndex } as any);
       });
     } catch {
       // ignore highlight failures
     }
   }, [config.type]);
 
-  // 外部联动选中值变化时，更新高亮/变暗状态（延迟一帧确保图表已渲染完成再派发 highlight）
+  // 外部联动选中值变化时，更新高亮/变暗状态
   useEffect(() => {
     if (!isReady) return;
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ChartFactory] useEffect selectedXValue', selectedXValue, 'chartType', config.type);
+    }
+    // 取消筛选时同步执行并刷新，避免“要移入图表才更新”的延迟感
+    if (selectedXValue == null) {
+      applySelection(null);
+      return;
+    }
     const id = requestAnimationFrame(() => {
       applySelection(selectedXValue);
     });
@@ -1508,9 +1566,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       value = params.name;
     }
     if (value != null) {
+      const normalized = normalizeLinkValue(value);
+      const currentNormalized = selectedXValue != null ? normalizeLinkValue(selectedXValue) : '';
+
+      // 点击相同 value 时取消筛选（切换）
+      if (normalized && currentNormalized && normalized === currentNormalized) {
+        applySelection(null);
+        onXAxisClick(null);
+        return;
+      }
+
       // 去重：同一值在极短时间内重复触发，忽略第二次
       const now = Date.now();
-      const normalized = normalizeLinkValue(value);
       const last = lastClickRef.current;
       if (last && normalized && last.value === normalized && now - last.at < CLICK_DEDUP_WINDOW_MS) {
         return;
@@ -1523,9 +1590,20 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     }
   };
 
+  // 鼠标移出图表时 ECharts 会触发 globalout 并清除高亮；若有选中值则下一帧重新应用高亮（用 ref 避免清除后又被旧闭包重新高亮）
+  const handleGlobalOut = useCallback(() => {
+    const current = selectedXValueRef.current;
+    if (current == null) return;
+    requestAnimationFrame(() => {
+      if (selectedXValueRef.current == null) return;
+      applySelection(selectedXValueRef.current);
+    });
+  }, [applySelection]);
+
   const mergedEvents = {
     ...(onEvents || {}),
-    click: handleChartClick
+    click: handleChartClick,
+    globalout: handleGlobalOut
   };
 
   // 绑定 ZRender mousedown/mouseup：记录并清理按下位置（同一坐标系）
