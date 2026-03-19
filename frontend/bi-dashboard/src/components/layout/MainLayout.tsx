@@ -306,16 +306,18 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                             key={page.id}
                             className={`nav-popover-item ${isReportPageActive(page.id) ? 'active' : ''}`}
                           >
-                            <Link
-                              to={`/reports/${page.id}`}
-                              className="nav-popover-item-link"
+                            <span
+                              className={`nav-popover-item-link ${isReportPageActive(page.id) ? 'active' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (!isReportPageActive(page.id)) {
+                                  navigate(`/reports/${page.id}`, { state: { reportRefresh: Date.now() } });
+                                }
                               }}
                             >
                               <span className="nav-popover-item-icon">{page.icon || '📄'}</span>
                               <span className="nav-popover-item-text">{page.name}</span>
-                            </Link>
+                            </span>
                             <Popconfirm
                               title={`确定要删除报表页"${page.name}"吗？`}
                               description="此操作不可恢复"
@@ -379,16 +381,20 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                         key={page.id}
                         className={`nav-subitem-wrapper ${isReportPageActive(page.id) ? 'active' : ''}`}
                       >
-                        <Link
-                          to={`/reports/${page.id}`}
+                        <span
+                          role="link"
+                          tabIndex={0}
                           className={`nav-subitem ${isReportPageActive(page.id) ? 'active' : ''}`}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (!isReportPageActive(page.id)) {
+                              navigate(`/reports/${page.id}`, { state: { reportRefresh: Date.now() } });
+                            }
                           }}
                         >
                           <span className="nav-subitem-icon">{page.icon || '📄'}</span>
                           <span className="nav-subitem-text">{page.name}</span>
-                        </Link>
+                        </span>
                         <Popconfirm
                           title={`确定要删除报表页"${page.name}"吗？`}
                           description="此操作不可恢复"

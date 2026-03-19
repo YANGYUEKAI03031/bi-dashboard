@@ -899,6 +899,12 @@ export const ReportsPage: React.FC = () => {
         // 如果 URL 中有 pageId，加载对应的报表页
         if (pageId) {
           setLoadingReportPage(true);
+          // 切换报表页时清空图表数据与仪表盘缓存，避免沿用上一报表的数据导致「暂无数据」
+          setBatchChartData(new Map());
+          setDashboardDetails(new Map());
+          // 清除批量请求去重 key，否则同一仪表盘在不同报表下会被误判为重复请求而不拉数
+          (loadBatchChartData as any).lastRequestKey = undefined;
+
           try {
             const page = await ReportPageService.getReportPage(Number(pageId));
             setReportPage(page);
@@ -919,11 +925,11 @@ export const ReportsPage: React.FC = () => {
             const convertedCharts = userCharts.map(convertChartResponseToChart);
             setCharts(convertedCharts);
             
-            // 如果有仪表盘，默认选中第一个
+            // 如果有仪表盘，默认选中第一个并强制拉取其图表数据（切换报表页后必须重新拉数）
             if (pageDashboards.length > 0) {
               const firstDashboardId = pageDashboards[0].id;
               setActiveDashboardId(firstDashboardId);
-              await loadDashboardDetails(firstDashboardId, convertedCharts);
+              await loadDashboardDetails(firstDashboardId, convertedCharts, true);
             }
           } catch (error: any) {
             message.error(error?.message || '加载报表页失败');
@@ -964,24 +970,21 @@ export const ReportsPage: React.FC = () => {
     loadData();
   }, [user, pageId]);
 
-  const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[]) => {
-    // 如果已经加载过，直接返回
-    if (dashboardDetails.has(dashboardId)) {
+  const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[], forceRefreshCharts?: boolean) => {
+    // 若已加载过且非强制刷新图表，直接返回（切换报表页时上层会先清空缓存再调用，此处 forceRefreshCharts 可不用传）
+    if (dashboardDetails.has(dashboardId) && !forceRefreshCharts) {
       return;
     }
 
-    // 标记为正在加载
     setLoadingDashboard(prev => new Set(prev).add(dashboardId));
 
     try {
       const dashboard = await DashboardService.getDashboard(dashboardId);
       const hydratedDashboard = hydrateDashboardCards(dashboard, availableCharts);
-      // 加载筛选器
       const filters = await DashboardService.getDashboardFilters(dashboardId);
       hydratedDashboard.filters = filters;
       setDashboardDetails(prev => new Map(prev).set(dashboardId, hydratedDashboard));
-      
-      // 批量加载图表数据（含当前图表联动条件，与筛选器一致走后端 WHERE）
+
       if (hydratedDashboard.cards && hydratedDashboard.cards.length > 0) {
         const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
           ? { field: chartLinkField, value: String(chartLinkValue) }
@@ -1005,19 +1008,17 @@ export const ReportsPage: React.FC = () => {
     setFilterValues({}); // 切换仪表盘时重置筛选状态
     setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致“暂无数据”
 
-    // 如果还没有加载过这个仪表盘的详情，则加载
-    if (!dashboardDetails.has(id)) {
-      await loadDashboardDetails(id, charts);
-      return;
-    }
-
-    // 已加载过也需要重新拉取该 tab 的数据（筛选已被重置为 {}）
+    (loadBatchChartData as any).lastRequestKey = undefined;
     const dash = dashboardDetails.get(id);
+    // 无论是否已加载，每次切换 tab 都重新拉图表数据（避免沿用旧数据）
     if (dash?.cards?.length) {
       const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
         ? { field: chartLinkField, value: String(chartLinkValue) }
         : null;
       loadBatchChartData(dash.cards, dash.filters || [], {}, linkFilter, id);
+    } else {
+      // 该仪表盘详情尚未加载，先加载再拉图表数据
+      await loadDashboardDetails(id, charts);
     }
   };
 
@@ -1272,8 +1273,13 @@ export const ReportsPage: React.FC = () => {
                     return (
                       <div key={dashboard.id} className="dashboard-nav-tag-wrapper">
                         <button
+                          type="button"
                           className={`dashboard-nav-tag ${activeDashboardId === dashboard.id ? 'active' : ''}`}
-                          onClick={() => handleTabChange(dashboard.id.toString())}
+                          onClick={() => {
+                            if (activeDashboardId === dashboard.id) return;
+                            handleTabChange(dashboard.id.toString());
+                          }}
+                          disabled={activeDashboardId === dashboard.id}
                         >
                           {dashboard.name}
                         </button>

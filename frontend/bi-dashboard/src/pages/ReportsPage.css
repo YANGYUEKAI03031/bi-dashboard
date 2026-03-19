@@ -126,6 +126,13 @@
   border-bottom-color: #1890ff;
 }
 
+/* 当前激活的 tab 禁用点击，保持激活样式、不灰显 */
+.dashboard-nav-tag.active:disabled {
+  opacity: 1;
+  cursor: default;
+  color: #1890ff;
+}
+
 /* 三个点操作按钮 */
 .dashboard-nav-tag-more-btn {
   display: inline-flex;
