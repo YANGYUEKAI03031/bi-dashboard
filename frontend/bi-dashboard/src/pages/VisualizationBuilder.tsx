@@ -1,13 +1,18 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider } from 'antd';
-import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider, InputNumber } from 'antd';
+import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined, RiseOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import { DataSourceService } from '../services/dataSourceService';
 import { AuthService } from '../services/authService';
+import {
+  METRIC_FILTER_OP_OPTIONS,
+  normalizeMetricFilterRules,
+  type MetricFilterRule,
+} from '../utils/chartMetric';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
@@ -47,6 +52,7 @@ const CHART_TYPES = [
   { value: 'stacked_bar', label: '堆积柱形图', icon: <ClusterOutlined /> },
   { value: 'waterfall', label: '瀑布图', icon: <FallOutlined /> },
   { value: 'funnel', label: '漏斗图', icon: <FilterOutlined /> },
+  { value: 'metric', label: '指标卡', icon: <RiseOutlined /> },
 ];
 
 export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }) => {
@@ -79,7 +85,15 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       sort_by: 'x', // 'x' 或 'y'
       sort_order: 'asc', // 'asc' 或 'desc'
       line_y_fields: [] as string[],
-      y_axis_right_title: ''
+      y_axis_right_title: '',
+      // 指标卡：构建器内固定筛选（多条件 AND），不随仪表盘筛选器变化
+      metric_mode: 'aggregate' as 'aggregate' | 'cell',
+      metric_filter_field: '',
+      metric_filter_value: '',
+      metric_filters: [] as MetricFilterRule[],
+      metric_unit: '',
+      metric_decimals: 2,
+      metric_label: '',
     },
     database_id: 1
   });
@@ -121,7 +135,27 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                 sort_by: vs.sort_by || 'x',
                 sort_order: vs.sort_order || 'asc',
                 line_y_fields: Array.isArray(vs.line_y_fields) ? vs.line_y_fields : [],
-                y_axis_right_title: vs.y_axis_right_title || ''
+                y_axis_right_title: vs.y_axis_right_title || '',
+                metric_mode: vs.metric_mode === 'cell' ? 'cell' : 'aggregate',
+                metric_filter_field: vs.metric_filter_field != null ? String(vs.metric_filter_field) : '',
+                metric_filter_value: vs.metric_filter_value != null ? String(vs.metric_filter_value) : '',
+                metric_filters: (() => {
+                  const parsed = normalizeMetricFilterRules(vs.metric_filters);
+                  if (parsed.some((r) => r.field)) return parsed;
+                  if (vs.metric_mode === 'cell' && String(vs.metric_filter_field || '').trim()) {
+                    return [
+                      {
+                        field: String(vs.metric_filter_field).trim(),
+                        op: 'eq' as const,
+                        value: vs.metric_filter_value != null ? String(vs.metric_filter_value) : '',
+                      },
+                    ];
+                  }
+                  return [];
+                })(),
+                metric_unit: vs.metric_unit != null ? String(vs.metric_unit) : '',
+                metric_decimals: typeof vs.metric_decimals === 'number' ? vs.metric_decimals : 2,
+                metric_label: vs.metric_label != null ? String(vs.metric_label) : '',
               };
             })(),
             database_id: chart.database_id || 1,
@@ -260,6 +294,18 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           title: '堆积柱形图',
           description: '需要1个分类字段和多个数值字段进行堆积',
           defaultXGroupBy: true
+        };
+      case 'metric':
+        return {
+          xFieldRequired: false,
+          yFieldsRequired: 1,
+          yFieldsMax: 1,
+          showColorField: false,
+          showMultipleY: false,
+          title: '指标卡',
+          description:
+            '选择数值列与聚合方式；下方可配置固定筛选条件（单条或多条，AND），保存后不随仪表盘筛选器变化。',
+          defaultXGroupBy: false
         };
       default:
         return {
@@ -591,8 +637,48 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   const handleChartTypeChange = (value: string) => {
     setChartData(prev => ({
       ...prev,
-      chart_type: value
+      chart_type: value,
+      visualization_settings:
+        value === 'metric'
+          ? {
+              ...prev.visualization_settings,
+              x_group_by_enabled: false,
+              metric_mode: 'aggregate',
+              metric_filters:
+                Array.isArray(prev.visualization_settings.metric_filters) &&
+                prev.visualization_settings.metric_filters.length > 0
+                  ? prev.visualization_settings.metric_filters
+                  : [{ field: '', op: 'eq' as const, value: '' }],
+            }
+          : prev.visualization_settings,
     }));
+  };
+
+  const getMetricFilterRowsForUi = (): MetricFilterRule[] => {
+    const mf = chartData.visualization_settings.metric_filters;
+    if (Array.isArray(mf) && mf.length > 0) {
+      return normalizeMetricFilterRules(mf);
+    }
+    return [{ field: '', op: 'eq', value: '' }];
+  };
+
+  const commitMetricFilters = (rows: MetricFilterRule[]) => {
+    handleFieldMappingChange('metric_filters', rows);
+  };
+
+  const patchMetricFilter = (index: number, patch: Partial<MetricFilterRule>) => {
+    const rows = [...getMetricFilterRowsForUi()];
+    rows[index] = { ...rows[index], ...patch };
+    commitMetricFilters(rows);
+  };
+
+  const addMetricFilterRow = () => {
+    commitMetricFilters([...getMetricFilterRowsForUi(), { field: '', op: 'eq', value: '' }]);
+  };
+
+  const removeMetricFilterRow = (index: number) => {
+    const rows = getMetricFilterRowsForUi().filter((_, i) => i !== index);
+    commitMetricFilters(rows.length ? rows : []);
   };
 
   const handleFieldMappingChange = (fieldType: string, value: any) => {
@@ -715,9 +801,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       // 确保聚合配置存在（容错处理）
       const currentSettings = chartData.visualization_settings || {};
       const yAggMethod = currentSettings.y_agg_method || 'sum';
-      const xGroupByEnabled = typeof currentSettings.x_group_by_enabled === 'boolean'
-        ? currentSettings.x_group_by_enabled
-        : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false;
+      const xGroupByEnabled =
+        chartData.chart_type === 'metric'
+          ? false
+          : typeof currentSettings.x_group_by_enabled === 'boolean'
+            ? currentSettings.x_group_by_enabled
+            : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false;
 
       console.log('=== 保存图表调试信息 ===');
       console.log('当前 y_agg_method:', yAggMethod);
@@ -732,11 +821,29 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         finalQuery = chartData.dataset_query.native.query;
       } else {
         // 自动生成基于选中表的查询
-        const selectFields = [
-          chartData.visualization_settings.x_field,
-          ...chartData.visualization_settings.y_fields
-        ].filter(Boolean);
-        
+        let selectFields: string[];
+        if (chartData.chart_type === 'metric') {
+          const vs = chartData.visualization_settings;
+          const yf = vs.y_fields?.[0];
+          const cleaned = normalizeMetricFilterRules(vs.metric_filters).filter((r) =>
+            (r.field || '').trim(),
+          );
+          const set = new Set<string>();
+          if (yf) set.add(yf);
+          cleaned.forEach((r) => set.add(r.field.trim()));
+          selectFields = [...set];
+          if (selectFields.length === 0) {
+            message.error('请选择指标数值字段');
+            setLoading(false);
+            return;
+          }
+        } else {
+          selectFields = [
+            chartData.visualization_settings.x_field,
+            ...chartData.visualization_settings.y_fields
+          ].filter(Boolean);
+        }
+
         finalQuery = `SELECT ${selectFields.join(', ')} FROM ${selectedTable}`;
         
         // 注意：不添加LIMIT，让用户自己决定是否需要限制
@@ -769,7 +876,20 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           sort_order: chartData.visualization_settings.sort_order || 'asc',
           // 保留原有的前端字段以便本地使用
           x_field: chartData.visualization_settings.x_field,
-          y_fields: chartData.visualization_settings.y_fields
+          y_fields: chartData.visualization_settings.y_fields,
+          // 指标卡
+          metric_mode: chartData.visualization_settings.metric_mode || 'aggregate',
+          metric_filter_field: chartData.visualization_settings.metric_filter_field || '',
+          metric_filter_value: chartData.visualization_settings.metric_filter_value || '',
+          metric_filters: normalizeMetricFilterRules(chartData.visualization_settings.metric_filters).filter(
+            (r) => (r.field || '').trim(),
+          ),
+          metric_unit: chartData.visualization_settings.metric_unit || '',
+          metric_decimals:
+            typeof chartData.visualization_settings.metric_decimals === 'number'
+              ? chartData.visualization_settings.metric_decimals
+              : 2,
+          metric_label: chartData.visualization_settings.metric_label || '',
         },
         database_id: chartData.database_id,
         creator_id: user.id,
@@ -1019,224 +1139,356 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
 
                     <Divider style={{ margin: '16px 0' }} />
 
-                    {/* ── 二、字段映射 ──────────────────────────────── */}
+                    {/* ── 二、字段映射 / 指标配置 ───────────────────── */}
                     <div style={{ marginBottom: 20 }}>
-                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>字段映射</p>
-                      <Row gutter={12}>
-                        <Col span={12}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴字段</label>
-                            {getChartFieldConfig(chartData.chart_type).xFieldRequired ? (
-                              <Select
-                                value={chartData.visualization_settings.x_field}
-                                onChange={(value) => handleFieldMappingChange('x_field', value)}
-                                style={{ width: '100%' }}
-                                placeholder="选择X轴字段"
-                                disabled={availableFields.length === 0}
-                              >
-                                {availableFields.map(field => (
-                                  <Option key={field} value={field}>{field}</Option>
-                                ))}
-                              </Select>
-                            ) : (
-                              <div style={{ color: '#999', fontStyle: 'italic', fontSize: 13 }}>无需X轴字段</div>
-                            )}
-                          </div>
-                        </Col>
-                        <Col span={12}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴字段</label>
-                            {getChartFieldConfig(chartData.chart_type).showMultipleY ? (
-                              <Select
-                                mode="multiple"
-                                value={chartData.visualization_settings.y_fields}
-                                onChange={(values) => {
-                                  const limitedValues = values.slice(0, getChartFieldConfig(chartData.chart_type).yFieldsMax);
-                                  handleFieldMappingChange('y_fields', limitedValues);
-                                }}
-                                style={{ width: '100%' }}
-                                placeholder={`选择${getChartFieldConfig(chartData.chart_type).yFieldsRequired}个以上字段`}
-                                disabled={availableFields.length === 0}
-                                maxTagCount={3}
-                              >
-                                {availableFields.map(field => (
-                                  <Option key={field} value={field}>{field}</Option>
-                                ))}
-                              </Select>
-                            ) : (
+                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>
+                        {chartData.chart_type === 'metric' ? '指标配置' : '字段映射'}
+                      </p>
+
+                      {chartData.chart_type === 'metric' ? (
+                        <>
+                          <Row gutter={12}>
+                            <Col span={12}>
+                              <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>数值字段</label>
                               <Select
                                 value={chartData.visualization_settings.y_fields?.[0] || undefined}
                                 onChange={(value) => handleFieldMappingChange('y_fields', value ? [value] : [])}
                                 style={{ width: '100%' }}
-                                placeholder="选择1个字段"
+                                placeholder="选择要聚合的数值列"
                                 disabled={availableFields.length === 0}
                               >
                                 {availableFields.map(field => (
                                   <Option key={field} value={field}>{field}</Option>
                                 ))}
                               </Select>
-                            )}
-                            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-                              {getChartFieldConfig(chartData.chart_type).description}
-                            </div>
-                          </div>
-                        </Col>
-                      </Row>
+                            </Col>
+                            <Col span={12}>
+                              <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>聚合方式</label>
+                              <Select
+                                value={chartData.visualization_settings.y_agg_method || 'sum'}
+                                onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
+                                style={{ width: '100%' }}
+                              >
+                                <Option value="count">计数（行数）</Option>
+                                <Option value="sum">求和</Option>
+                                <Option value="avg">平均</Option>
+                                <Option value="max">最大</Option>
+                                <Option value="min">最小</Option>
+                                <Option value="first">首行取值</Option>
+                              </Select>
+                            </Col>
+                          </Row>
 
-                      {/* bar_line 双Y轴特殊配置 */}
-                      {chartData.chart_type === 'bar_line' && (
-                        <Row gutter={12} style={{ marginTop: 12 }}>
-                          <Col span={12}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>
-                              折线指标（走右侧Y轴）
-                            </label>
-                            <Select
-                              mode="multiple"
-                              allowClear
-                              value={chartData.visualization_settings.line_y_fields || []}
-                              onChange={(vals) => {
-                                const yf = chartData.visualization_settings.y_fields || [];
-                                const ok = (vals || []).filter((v: string) => yf.includes(v));
-                                handleFieldMappingChange('line_y_fields', ok);
-                              }}
-                              style={{ width: '100%' }}
-                              placeholder="不选则默认最后2个Y字段为折线"
-                              disabled={(chartData.visualization_settings.y_fields || []).length === 0}
-                            >
-                              {(chartData.visualization_settings.y_fields || []).map((field: string) => (
-                                <Option key={field} value={field}>{field}</Option>
-                              ))}
-                            </Select>
-                          </Col>
-                          <Col span={12}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>右侧Y轴名称</label>
-                            <Input
-                              value={chartData.visualization_settings.y_axis_right_title || ''}
-                              onChange={(e) => handleFieldMappingChange('y_axis_right_title', e.target.value)}
-                              placeholder="例如：转化率、占比"
-                            />
-                          </Col>
-                        </Row>
+                          <div style={{ margin: '16px 0 8px', borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>数据筛选（固定条件）</span>
+                          </div>
+                          <p style={{ fontSize: 12, color: '#999', marginBottom: 10 }}>
+                            以下多条条件为「且」关系；保存后指标值不随仪表盘筛选器变化。未选择字段的行在保存时会被忽略。
+                          </p>
+                          {getMetricFilterRowsForUi().map((rule, idx) => (
+                            <Row key={idx} gutter={8} style={{ marginBottom: 8 }} wrap={false}>
+                              <Col flex="140px">
+                                <Select
+                                  value={rule.field || undefined}
+                                  placeholder="字段"
+                                  allowClear
+                                  style={{ width: '100%' }}
+                                  disabled={availableFields.length === 0}
+                                  onChange={(v) => patchMetricFilter(idx, { field: v || '' })}
+                                  options={availableFields.map((f) => ({ label: f, value: f }))}
+                                />
+                              </Col>
+                              <Col flex="120px">
+                                <Select
+                                  value={rule.op}
+                                  style={{ width: '100%' }}
+                                  onChange={(v) => patchMetricFilter(idx, { op: v as MetricFilterRule['op'] })}
+                                  options={METRIC_FILTER_OP_OPTIONS.map((o) => ({
+                                    label: o.label,
+                                    value: o.value,
+                                  }))}
+                                />
+                              </Col>
+                              <Col flex="auto">
+                                {rule.op === 'is_null' || rule.op === 'is_not_null' ? (
+                                  <Input disabled placeholder="无需填写" />
+                                ) : (
+                                  <Input
+                                    value={rule.value}
+                                    placeholder="比较值（与数据一致）"
+                                    onChange={(e) => patchMetricFilter(idx, { value: e.target.value })}
+                                  />
+                                )}
+                              </Col>
+                              <Col flex="none">
+                                <Button
+                                  type="text"
+                                  danger
+                                  icon={<MinusCircleOutlined />}
+                                  onClick={() => removeMetricFilterRow(idx)}
+                                  aria-label="删除条件"
+                                />
+                              </Col>
+                            </Row>
+                          ))}
+                          <Button type="dashed" block icon={<PlusOutlined />} onClick={addMetricFilterRow} style={{ marginTop: 4 }}>
+                            添加筛选条件
+                          </Button>
+
+                          <Row gutter={12} style={{ marginTop: 16 }}>
+                            <Col span={8}>
+                              <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>单位（可选）</label>
+                              <Input
+                                value={chartData.visualization_settings.metric_unit || ''}
+                                onChange={(e) => handleFieldMappingChange('metric_unit', e.target.value)}
+                                placeholder="如：万、元"
+                              />
+                            </Col>
+                            <Col span={8}>
+                              <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>小数位数</label>
+                              <InputNumber
+                                min={0}
+                                max={10}
+                                style={{ width: '100%' }}
+                                value={chartData.visualization_settings.metric_decimals ?? 2}
+                                onChange={(v) => handleFieldMappingChange('metric_decimals', typeof v === 'number' ? v : 2)}
+                              />
+                            </Col>
+                            <Col span={8}>
+                              <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>指标说明</label>
+                              <Input
+                                value={chartData.visualization_settings.metric_label || ''}
+                                onChange={(e) => handleFieldMappingChange('metric_label', e.target.value)}
+                                placeholder="显示在数字下方"
+                              />
+                            </Col>
+                          </Row>
+                          <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                            {getChartFieldConfig('metric').description}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Row gutter={12}>
+                            <Col span={12}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴字段</label>
+                                {getChartFieldConfig(chartData.chart_type).xFieldRequired ? (
+                                  <Select
+                                    value={chartData.visualization_settings.x_field}
+                                    onChange={(value) => handleFieldMappingChange('x_field', value)}
+                                    style={{ width: '100%' }}
+                                    placeholder="选择X轴字段"
+                                    disabled={availableFields.length === 0}
+                                  >
+                                    {availableFields.map(field => (
+                                      <Option key={field} value={field}>{field}</Option>
+                                    ))}
+                                  </Select>
+                                ) : (
+                                  <div style={{ color: '#999', fontStyle: 'italic', fontSize: 13 }}>无需X轴字段</div>
+                                )}
+                              </div>
+                            </Col>
+                            <Col span={12}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴字段</label>
+                                {getChartFieldConfig(chartData.chart_type).showMultipleY ? (
+                                  <Select
+                                    mode="multiple"
+                                    value={chartData.visualization_settings.y_fields}
+                                    onChange={(values) => {
+                                      const limitedValues = values.slice(0, getChartFieldConfig(chartData.chart_type).yFieldsMax);
+                                      handleFieldMappingChange('y_fields', limitedValues);
+                                    }}
+                                    style={{ width: '100%' }}
+                                    placeholder={`选择${getChartFieldConfig(chartData.chart_type).yFieldsRequired}个以上字段`}
+                                    disabled={availableFields.length === 0}
+                                    maxTagCount={3}
+                                  >
+                                    {availableFields.map(field => (
+                                      <Option key={field} value={field}>{field}</Option>
+                                    ))}
+                                  </Select>
+                                ) : (
+                                  <Select
+                                    value={chartData.visualization_settings.y_fields?.[0] || undefined}
+                                    onChange={(value) => handleFieldMappingChange('y_fields', value ? [value] : [])}
+                                    style={{ width: '100%' }}
+                                    placeholder="选择1个字段"
+                                    disabled={availableFields.length === 0}
+                                  >
+                                    {availableFields.map(field => (
+                                      <Option key={field} value={field}>{field}</Option>
+                                    ))}
+                                  </Select>
+                                )}
+                                <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+                                  {getChartFieldConfig(chartData.chart_type).description}
+                                </div>
+                              </div>
+                            </Col>
+                          </Row>
+
+                          {chartData.chart_type === 'bar_line' && (
+                            <Row gutter={12} style={{ marginTop: 12 }}>
+                              <Col span={12}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>
+                                  折线指标（走右侧Y轴）
+                                </label>
+                                <Select
+                                  mode="multiple"
+                                  allowClear
+                                  value={chartData.visualization_settings.line_y_fields || []}
+                                  onChange={(vals) => {
+                                    const yf = chartData.visualization_settings.y_fields || [];
+                                    const ok = (vals || []).filter((v: string) => yf.includes(v));
+                                    handleFieldMappingChange('line_y_fields', ok);
+                                  }}
+                                  style={{ width: '100%' }}
+                                  placeholder="不选则默认最后2个Y字段为折线"
+                                  disabled={(chartData.visualization_settings.y_fields || []).length === 0}
+                                >
+                                  {(chartData.visualization_settings.y_fields || []).map((field: string) => (
+                                    <Option key={field} value={field}>{field}</Option>
+                                  ))}
+                                </Select>
+                              </Col>
+                              <Col span={12}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>右侧Y轴名称</label>
+                                <Input
+                                  value={chartData.visualization_settings.y_axis_right_title || ''}
+                                  onChange={(e) => handleFieldMappingChange('y_axis_right_title', e.target.value)}
+                                  placeholder="例如：转化率、占比"
+                                />
+                              </Col>
+                            </Row>
+                          )}
+                        </>
                       )}
                     </div>
 
                     <Divider style={{ margin: '16px 0' }} />
 
-                    {/* ── 三、数据处理 & 样式 ────────────────────────── */}
-                    <div style={{ marginBottom: 20 }}>
-                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>数据处理</p>
-                      <Row gutter={12}>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴统计方式</label>
-                            <Select
-                              value={chartData.visualization_settings.y_agg_method || 'sum'}
-                              onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
-                              disabled={
-                                (() => {
-                                  const vs = chartData.visualization_settings || {};
-                                  return typeof vs.x_group_by_enabled === 'boolean'
-                                    ? !vs.x_group_by_enabled
-                                    : getChartFieldConfig(chartData.chart_type).defaultXGroupBy === false;
-                                })()
-                              }
-                              style={{ width: '100%' }}
-                            >
-                              <Option value="count">计数</Option>
-                              <Option value="sum">求和</Option>
-                              <Option value="avg">平均数</Option>
-                              <Option value="mode">众数</Option>
-                              <Option value="median">中位数</Option>
-                            </Select>
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序方式</label>
-                            <Select
-                              value={chartData.visualization_settings.sort_by}
-                              onChange={(value) => handleFieldMappingChange('sort_by', value)}
-                              style={{ width: '100%' }}
-                              placeholder="选择排序方式"
-                            >
-                              <Option value="x">按X轴排序</Option>
-                              <Option value="y">按Y轴排序</Option>
-                            </Select>
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序顺序</label>
-                            <Select
-                              value={chartData.visualization_settings.sort_order}
-                              onChange={(value) => handleFieldMappingChange('sort_order', value)}
-                              style={{ width: '100%' }}
-                            >
-                              <Option value="asc">升序</Option>
-                              <Option value="desc">降序</Option>
-                            </Select>
-                          </div>
-                        </Col>
-                      </Row>
-                      <Row gutter={12} style={{ marginTop: 8 }}>
-                        <Col span={8}>
-                          <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
-                            <span style={{ color: '#666', fontSize: 13 }}>按X轴聚合</span>
-                            <Switch
-                              checked={
-                                typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
-                                  ? chartData.visualization_settings.x_group_by_enabled
-                                  : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false
-                              }
-                              onChange={(checked) => handleFieldMappingChange('x_group_by_enabled', checked)}
-                              style={{ marginLeft: 8 }}
-                            />
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
+                    {chartData.chart_type !== 'metric' ? (
+                      <>
+                        {/* ── 三、数据处理 ────────────────────────── */}
+                        <div style={{ marginBottom: 20 }}>
+                          <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>数据处理</p>
+                          <Row gutter={12}>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴统计方式</label>
+                                <Select
+                                  value={chartData.visualization_settings.y_agg_method || 'sum'}
+                                  onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
+                                  disabled={
+                                    (() => {
+                                      const vs = chartData.visualization_settings || {};
+                                      return typeof vs.x_group_by_enabled === 'boolean'
+                                        ? !vs.x_group_by_enabled
+                                        : getChartFieldConfig(chartData.chart_type).defaultXGroupBy === false;
+                                    })()
+                                  }
+                                  style={{ width: '100%' }}
+                                >
+                                  <Option value="count">计数</Option>
+                                  <Option value="sum">求和</Option>
+                                  <Option value="avg">平均数</Option>
+                                  <Option value="mode">众数</Option>
+                                  <Option value="median">中位数</Option>
+                                </Select>
+                              </div>
+                            </Col>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序方式</label>
+                                <Select
+                                  value={chartData.visualization_settings.sort_by}
+                                  onChange={(value) => handleFieldMappingChange('sort_by', value)}
+                                  style={{ width: '100%' }}
+                                  placeholder="选择排序方式"
+                                >
+                                  <Option value="x">按X轴排序</Option>
+                                  <Option value="y">按Y轴排序</Option>
+                                </Select>
+                              </div>
+                            </Col>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序顺序</label>
+                                <Select
+                                  value={chartData.visualization_settings.sort_order}
+                                  onChange={(value) => handleFieldMappingChange('sort_order', value)}
+                                  style={{ width: '100%' }}
+                                >
+                                  <Option value="asc">升序</Option>
+                                  <Option value="desc">降序</Option>
+                                </Select>
+                              </div>
+                            </Col>
+                          </Row>
+                          <Row gutter={12} style={{ marginTop: 8 }}>
+                            <Col span={8}>
+                              <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
+                                <span style={{ color: '#666', fontSize: 13 }}>按X轴聚合</span>
+                                <Switch
+                                  checked={
+                                    typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
+                                      ? chartData.visualization_settings.x_group_by_enabled
+                                      : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false
+                                  }
+                                  onChange={(checked) => handleFieldMappingChange('x_group_by_enabled', checked)}
+                                  style={{ marginLeft: 8 }}
+                                />
+                              </div>
+                            </Col>
+                          </Row>
+                        </div>
 
-                    <Divider style={{ margin: '16px 0' }} />
+                        <Divider style={{ margin: '16px 0' }} />
 
-                    {/* ── 四、轴标题 & 图例 ─────────────────────────── */}
-                    <div style={{ marginBottom: 20 }}>
-                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>显示样式</p>
-                      <Row gutter={12}>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴标题</label>
-                            <Input
-                              value={chartData.visualization_settings.x_axis_title}
-                              onChange={(e) => handleFieldMappingChange('x_axis_title', e.target.value)}
-                              placeholder="X轴标题"
-                            />
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴标题</label>
-                            <Input
-                              value={chartData.visualization_settings.y_axis_title}
-                              onChange={(e) => handleFieldMappingChange('y_axis_title', e.target.value)}
-                              placeholder="Y轴标题"
-                            />
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div style={{ marginBottom: 8 }}>
-                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>显示图例</label>
-                            <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
-                              <Switch
-                                checked={chartData.visualization_settings.show_legend !== false}
-                                onChange={(checked) => handleFieldMappingChange('show_legend', checked)}
-                              />
-                            </div>
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
+                        {/* ── 四、轴标题 & 图例 ─────────────────────────── */}
+                        <div style={{ marginBottom: 20 }}>
+                          <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>显示样式</p>
+                          <Row gutter={12}>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴标题</label>
+                                <Input
+                                  value={chartData.visualization_settings.x_axis_title}
+                                  onChange={(e) => handleFieldMappingChange('x_axis_title', e.target.value)}
+                                  placeholder="X轴标题"
+                                />
+                              </div>
+                            </Col>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴标题</label>
+                                <Input
+                                  value={chartData.visualization_settings.y_axis_title}
+                                  onChange={(e) => handleFieldMappingChange('y_axis_title', e.target.value)}
+                                  placeholder="Y轴标题"
+                                />
+                              </div>
+                            </Col>
+                            <Col span={8}>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>显示图例</label>
+                                <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
+                                  <Switch
+                                    checked={chartData.visualization_settings.show_legend !== false}
+                                    onChange={(checked) => handleFieldMappingChange('show_legend', checked)}
+                                  />
+                                </div>
+                              </div>
+                            </Col>
+                          </Row>
+                        </div>
 
-                    <Divider style={{ margin: '16px 0' }} />
+                        <Divider style={{ margin: '16px 0' }} />
+                      </>
+                    ) : null}
 
                     {/* ── 五、图表预览 ──────────────────────────────── */}
                     <div>
@@ -1257,9 +1509,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                         padding: 16,
                         background: '#fff'
                       }}>
-                        {previewData.length > 0 &&
-                         chartData.visualization_settings.x_field &&
-                         chartData.visualization_settings.y_fields?.length > 0 ? (
+                        {(chartData.chart_type === 'metric'
+                          ? queryResult.length > 0
+                          : previewData.length > 0) &&
+                         chartData.visualization_settings.y_fields?.length > 0 &&
+                         (chartData.chart_type === 'metric' ||
+                          !!chartData.visualization_settings.x_field) ? (
                           <div style={{ height: 380 }}>
                             <ChartFactory
                               config={{
@@ -1276,6 +1531,15 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                                     : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false,
                                 sort_by: chartData.visualization_settings.sort_by,
                                 sort_order: chartData.visualization_settings.sort_order,
+                                metric_mode: chartData.visualization_settings.metric_mode,
+                                metric_filter_field: chartData.visualization_settings.metric_filter_field,
+                                metric_filter_value: chartData.visualization_settings.metric_filter_value,
+                                metric_filters: normalizeMetricFilterRules(
+                                  chartData.visualization_settings.metric_filters,
+                                ),
+                                metric_unit: chartData.visualization_settings.metric_unit,
+                                metric_decimals: chartData.visualization_settings.metric_decimals,
+                                metric_label: chartData.visualization_settings.metric_label,
                                 series: [],
                                 xAxis: {
                                   name: chartData.visualization_settings.x_axis_title || 'X轴'
@@ -1292,7 +1556,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                                   axisPointer: { type: 'cross' }
                                 },
                               }}
-                              data={previewData}
+                              data={chartData.chart_type === 'metric' ? queryResult : previewData}
                               style={{ height: '380px', width: '100%' }}
                             />
                           </div>
@@ -1308,7 +1572,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                           }}>
                             <div style={{ textAlign: 'center' }}>
                               <p style={{ color: '#bbb', fontSize: 14 }}>
-                                {previewData.length > 0 ? '配置完成后点击"刷新预览"' : '请先执行查询加载数据'}
+                                {(chartData.chart_type === 'metric' ? queryResult.length > 0 : previewData.length > 0)
+                                  ? '配置完成后点击「刷新预览」'
+                                  : '请先加载表数据（左侧选择表后自动加载）'}
                               </p>
                             </div>
                           </div>

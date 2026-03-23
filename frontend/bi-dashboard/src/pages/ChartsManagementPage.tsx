@@ -876,6 +876,33 @@ export const ChartsManagementPage: React.FC = () => {
                           sort_order: (editingChart.visualization_settings as any)?.sort_order,
                           line_y_fields: (editingChart.visualization_settings as any)?.line_y_fields,
                           y_axis_right_title: (editingChart.visualization_settings as any)?.y_axis_right_title,
+                          metric_mode:
+                            (editingChart.visualization_settings as any)?.metric_mode === 'cell'
+                              ? 'cell'
+                              : 'aggregate',
+                          metric_filter_field:
+                            (editingChart.visualization_settings as any)?.metric_filter_field != null
+                              ? String((editingChart.visualization_settings as any).metric_filter_field)
+                              : '',
+                          metric_filter_value:
+                            (editingChart.visualization_settings as any)?.metric_filter_value != null
+                              ? String((editingChart.visualization_settings as any).metric_filter_value)
+                              : '',
+                          metric_unit:
+                            (editingChart.visualization_settings as any)?.metric_unit != null
+                              ? String((editingChart.visualization_settings as any).metric_unit)
+                              : '',
+                          metric_decimals:
+                            typeof (editingChart.visualization_settings as any)?.metric_decimals === 'number'
+                              ? (editingChart.visualization_settings as any).metric_decimals
+                              : 2,
+                          metric_label:
+                            (editingChart.visualization_settings as any)?.metric_label != null
+                              ? String((editingChart.visualization_settings as any).metric_label)
+                              : '',
+                          metric_filters: Array.isArray((editingChart.visualization_settings as any)?.metric_filters)
+                            ? (editingChart.visualization_settings as any).metric_filters
+                            : [],
                           xAxis: {
                             name: editingChart.visualization_settings?.x_axis_title || 'X轴'
                           },

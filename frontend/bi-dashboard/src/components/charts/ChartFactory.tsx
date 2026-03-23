@@ -40,6 +40,13 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import ReactECharts from 'echarts-for-react';
+import {
+  applyMetricFilters,
+  computeMetricValue,
+  formatMetricNumber,
+  getEffectiveMetricFilterRules,
+  type MetricFilterRule,
+} from '../../utils/chartMetric';
 
 // 注册必需的组件
 echarts.use([
@@ -110,6 +117,15 @@ interface ChartConfig {
   line_y_fields?: string[];
   /** 柱线组合图：右侧 Y 轴名称 */
   y_axis_right_title?: string;
+  /** @deprecated 旧版 cell 模式，见 getEffectiveMetricFilterRules */
+  metric_mode?: 'aggregate' | 'cell';
+  metric_filter_field?: string;
+  metric_filter_value?: string;
+  /** 指标卡：构建器内固定筛选条件（AND），不随仪表盘筛选器变化 */
+  metric_filters?: MetricFilterRule[];
+  metric_unit?: string;
+  metric_decimals?: number;
+  metric_label?: string;
 }
 
 interface ChartFactoryProps {
@@ -240,6 +256,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const selectedXValueRef = useRef<any>(selectedXValue);
   selectedXValueRef.current = selectedXValue;
 
+  const isMetricChart = (config.type || '').toLowerCase() === 'metric';
+
   const normalizeLinkValue = (v: any) => {
     if (v == null) return '';
     const s = String(v);
@@ -307,6 +325,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
     // 按图表类型判断是否“明细型图表”（默认不按 X 聚合）
     const chartType = (config.type || '').toLowerCase();
+    if (chartType === 'metric') {
+      return { animation: false };
+    }
     const isDetailChartType = chartType === 'scatter';
 
     // 统一确定本次是否启用按 X 聚合：
@@ -1520,6 +1541,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   optionRef.current = option;
 
   const applySelection = useCallback((value: any) => {
+    if ((config.type || '').toLowerCase() === 'metric') return;
     const instance = chartRef.current?.getEchartsInstance?.();
     if (!instance) return;
 
@@ -1635,6 +1657,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
   // 处理点击：X 轴标签 或 柱子/饼图扇区 都触发联动
   const handleChartClick = (params: any, e: any) => {
+    if ((config.type || '').toLowerCase() === 'metric') return;
     if (!onXAxisClick) return;
 
     // 只有“按下与抬起位置接近”才视为有效点击，避免移动中划过其他柱子时误触
@@ -1762,6 +1785,115 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       }
     };
   }, [isReady, chartKey]);
+
+  const metricDisplay = useMemo(() => {
+    if (!isMetricChart) return null;
+    const rows = Array.isArray(data) ? data : [];
+    const valueField = (config.yFields && config.yFields[0]) || '';
+    const decimals =
+      typeof config.metric_decimals === 'number' ? config.metric_decimals : 2;
+    const rules = getEffectiveMetricFilterRules({
+      metric_filters: config.metric_filters,
+      metric_mode: config.metric_mode,
+      metric_filter_field: config.metric_filter_field,
+      metric_filter_value: config.metric_filter_value,
+    });
+    const filtered =
+      rules.length > 0 ? applyMetricFilters(rows as Record<string, unknown>[], rules) : rows;
+    const raw = computeMetricValue(filtered, valueField, (config.y_agg_method as string) || 'sum');
+    return {
+      text: formatMetricNumber(raw, decimals),
+      unit: (config.metric_unit || '').trim(),
+      label: (config.metric_label || '').trim() || (config.title || '').trim(),
+    };
+  }, [
+    isMetricChart,
+    data,
+    config.yFields,
+    config.y_agg_method,
+    config.metric_filters,
+    config.metric_mode,
+    config.metric_filter_field,
+    config.metric_filter_value,
+    config.metric_unit,
+    config.metric_decimals,
+    config.metric_label,
+    config.title,
+  ]);
+
+  if (isMetricChart) {
+    return (
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: resolvedMinHeight,
+          ...style,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxSizing: 'border-box',
+        }}
+        data-chart-container="true"
+      >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '100%',
+            border: '1px solid #e8e8e8',
+            borderRadius: 8,
+            background: '#fff',
+            padding: 'clamp(12px, 4%, 24px)',
+            boxSizing: 'border-box',
+          }}
+        >
+          {metricDisplay ? (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'baseline',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 'clamp(22px, 5vw, 32px)',
+                    fontWeight: 700,
+                    color: '#2f54eb',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {metricDisplay.text}
+                </span>
+                {metricDisplay.unit ? (
+                  <span style={{ fontSize: 14, color: '#2f54eb', fontWeight: 500 }}>
+                    {metricDisplay.unit}
+                  </span>
+                ) : null}
+              </div>
+              {metricDisplay.label ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13,
+                    color: '#597ef7',
+                    textAlign: 'center',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {metricDisplay.label}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

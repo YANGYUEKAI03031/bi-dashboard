@@ -133,6 +133,75 @@ def _parse_chart_viz_settings(chart: VisualizationCard) -> Dict[str, Any]:
     return {}
 
 
+def _sql_escape_sql_string(value: str) -> str:
+    return (value or "").replace("\\", "\\\\").replace("'", "''")
+
+
+def _quote_sql_identifier(name: str) -> str:
+    col = (name or "").strip().replace("`", "``")
+    if not col:
+        return "`"
+    return f"`{col}`"
+
+
+def _metric_filter_sql_clauses(viz: Dict[str, Any]) -> List[str]:
+    """
+    指标图在 visualization_settings.metric_filters 中配置的固定条件（AND），拼入 WHERE。
+    每项: { "field": "列名", "op": "eq|neq|...|is_null|is_not_null", "value": "..." }
+    """
+    raw = viz.get("metric_filters")
+    if not isinstance(raw, list):
+        return []
+    clauses: List[str] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        field = str(item.get("field") or "").strip()
+        if not field:
+            continue
+        op = str(item.get("op") or "eq").strip().lower()
+        val = item.get("value")
+        val_str = "" if val is None else str(val)
+        qf = _quote_sql_identifier(field)
+
+        if op in ("is_null", "isnull"):
+            clauses.append(f"({qf} IS NULL OR CAST({qf} AS CHAR) = '')")
+            continue
+        if op in ("is_not_null", "isnotnull"):
+            clauses.append(f"({qf} IS NOT NULL AND CAST({qf} AS CHAR) <> '')")
+            continue
+
+        esc = _sql_escape_sql_string(val_str)
+
+        if op == "eq":
+            clauses.append(f"{qf} = '{esc}'")
+        elif op == "neq":
+            clauses.append(f"{qf} <> '{esc}'")
+        elif op == "gt":
+            clauses.append(f"{qf} > '{esc}'")
+        elif op == "gte":
+            clauses.append(f"{qf} >= '{esc}'")
+        elif op == "lt":
+            clauses.append(f"{qf} < '{esc}'")
+        elif op == "lte":
+            clauses.append(f"{qf} <= '{esc}'")
+        elif op == "contains":
+            clauses.append(f"LOCATE('{esc}', CAST({qf} AS CHAR)) > 0")
+        elif op == "not_contains":
+            clauses.append(f"(LOCATE('{esc}', CAST({qf} AS CHAR)) = 0 OR {qf} IS NULL)")
+        elif op == "starts_with":
+            clauses.append(
+                f"(CHAR_LENGTH('{esc}') = 0 OR LEFT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
+            )
+        elif op == "ends_with":
+            clauses.append(
+                f"(CHAR_LENGTH('{esc}') = 0 OR RIGHT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
+            )
+        else:
+            clauses.append(f"{qf} = '{esc}'")
+    return clauses
+
+
 def _quote_result_column(name: str) -> str:
     """
     Quote a column name in the *result set* (subquery output).
@@ -480,6 +549,9 @@ class ChartService:
         """执行图表的SQL查询（支持筛选器参数 - 自动生成WHERE条件）"""
         try:
             filter_params = filter_params or {}
+            viz = _parse_chart_viz_settings(chart)
+            chart_type_raw = getattr(chart, "chart_type", None)
+            is_metric_chart = isinstance(chart_type_raw, str) and chart_type_raw.lower() == "metric"
 
             # 解析dataset_query获取SQL
             dataset_query = chart.dataset_query
@@ -491,54 +563,57 @@ class ChartService:
                 return []
             
             # ========== 方案2: 自动生成 WHERE 条件 ==========
-            # 构建WHERE子句
-            # 所有筛选器都应用，数据库会自动处理不存在的字段
+            # 非指标图：应用仪表盘/报表筛选器参数；指标图：忽略筛选器，仅使用 visualization_settings.metric_filters
             where_conditions = []
 
-            for param_name, param_value in filter_params.items():
-                if param_value is None or param_value == '':
-                    continue
+            if not is_metric_chart:
+                for param_name, param_value in filter_params.items():
+                    if param_value is None or param_value == '':
+                        continue
 
-                # 处理 filterId_fieldName 格式的key，提取真正的字段名
-                # 例如: "1_支付日期" -> "支付日期"
-                actual_field_name = param_name
-                if '_' in param_name:
-                    # 检查是否是数字开头（filterId）
-                    parts = param_name.split('_', 1)
-                    if parts[0].isdigit() and len(parts) == 2:
-                        actual_field_name = parts[1]
+                    # 处理 filterId_fieldName 格式的key，提取真正的字段名
+                    # 例如: "1_支付日期" -> "支付日期"
+                    actual_field_name = param_name
+                    if '_' in param_name:
+                        # 检查是否是数字开头（filterId）
+                        parts = param_name.split('_', 1)
+                        if parts[0].isdigit() and len(parts) == 2:
+                            actual_field_name = parts[1]
 
-                # 相对时间（如 last_month）转为日期范围后再按日期处理
-                if isinstance(param_value, str):
-                    resolved = _resolve_relative_date(param_value)
-                    if resolved:
-                        param_value = resolved
+                    # 相对时间（如 last_month）转为日期范围后再按日期处理
+                    if isinstance(param_value, str):
+                        resolved = _resolve_relative_date(param_value)
+                        if resolved:
+                            param_value = resolved
 
-                # 处理日期范围 {start: '...', end: '...'}
-                if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
-                    start_value = param_value.get('start')
-                    end_value = param_value.get('end')
-                    if start_value and end_value:
-                        # 日期范围: BETWEEN
-                        condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                    # 处理日期范围 {start: '...', end: '...'}
+                    if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
+                        start_value = param_value.get('start')
+                        end_value = param_value.get('end')
+                        if start_value and end_value:
+                            # 日期范围: BETWEEN
+                            condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                            where_conditions.append(condition)
+                        elif start_value:
+                            # 只有开始日期: >=
+                            condition = f"`{actual_field_name}` >= '{start_value}'"
+                            where_conditions.append(condition)
+                        elif end_value:
+                            # 只有结束日期: <=
+                            condition = f"`{actual_field_name}` <= '{end_value}'"
+                            where_conditions.append(condition)
+                    # 处理多值列表 ['广东', '浙江']
+                    elif isinstance(param_value, list) and len(param_value) > 0:
+                        values_str = "', '".join(str(v) for v in param_value)
+                        condition = f"`{actual_field_name}` IN ('{values_str}')"
                         where_conditions.append(condition)
-                    elif start_value:
-                        # 只有开始日期: >=
-                        condition = f"`{actual_field_name}` >= '{start_value}'"
+                    # 处理单值 '广东' 或无法解析的字符串
+                    else:
+                        condition = f"`{actual_field_name}` = '{param_value}'"
                         where_conditions.append(condition)
-                    elif end_value:
-                        # 只有结束日期: <=
-                        condition = f"`{actual_field_name}` <= '{end_value}'"
-                        where_conditions.append(condition)
-                # 处理多值列表 ['广东', '浙江']
-                elif isinstance(param_value, list) and len(param_value) > 0:
-                    values_str = "', '".join(str(v) for v in param_value)
-                    condition = f"`{actual_field_name}` IN ('{values_str}')"
-                    where_conditions.append(condition)
-                # 处理单值 '广东' 或无法解析的字符串
-                else:
-                    condition = f"`{actual_field_name}` = '{param_value}'"
-                    where_conditions.append(condition)
+
+            if is_metric_chart:
+                where_conditions.extend(_metric_filter_sql_clauses(viz))
             
             # 将生成的WHERE条件拼接到SQL中
             if where_conditions:
@@ -588,7 +663,7 @@ class ChartService:
             # 兜底保护：没有 LIMIT 的情况下，默认最多返回 10000 行，避免大数据量把后端/前端拖死
             # 注意：如果前端“按 X 聚合”是在前端做的，那么原 SQL 可能是明细查询，会导致 fetchall 拉爆内存。
             # 这里优先尝试把聚合前移到数据库层（wrap subquery + GROUP BY），从根源减少返回行数。
-            viz = _parse_chart_viz_settings(chart)
+            # 指标图在前端做聚合，不在 SQL 层 GROUP BY。
             x_field = viz.get("graph_dimensions")
             if isinstance(x_field, list) and x_field:
                 x_field = x_field[0]
@@ -597,7 +672,14 @@ class ChartService:
                 y_fields = []
             y_agg_method = viz.get("y_agg_method") or viz.get("graph.y_agg_method")
             x_group_by_enabled = viz.get("x_group_by_enabled")
-            if isinstance(x_field, str) and x_field and y_fields and y_agg_method and x_group_by_enabled is not False:
+            if (
+                not is_metric_chart
+                and isinstance(x_field, str)
+                and x_field
+                and y_fields
+                and y_agg_method
+                and x_group_by_enabled is not False
+            ):
                 # 仅对 count/sum/avg 做 SQL 聚合，其它方法保持原样（仍会受默认 LIMIT 保护）
                 sql_query = _build_group_by_sql(sql_query, x_field, y_fields, str(y_agg_method))
 

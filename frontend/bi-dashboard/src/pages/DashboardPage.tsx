@@ -802,6 +802,16 @@ export const DashboardPage: React.FC = () => {
                       yFields,
                       colorField: viz.color_field,
                       y_agg_method: yAggMethod,
+                      metric_mode: viz.metric_mode === 'cell' ? 'cell' : 'aggregate',
+                      metric_filter_field:
+                        viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
+                      metric_filter_value:
+                        viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
+                      metric_unit: viz.metric_unit != null ? String(viz.metric_unit) : '',
+                      metric_decimals:
+                        typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
+                      metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
+                      metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
                       // 排序配置（如果没有配置则交给 ChartFactory 自己跳过排序）
                       sort_by: sortBy,
                       sort_order: sortOrder,

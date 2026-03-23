@@ -152,19 +152,20 @@ const ChartCardComponent: React.FC<{
       setDataLoading(true);
       setError(null);
       try {
-        // 所有筛选器都传给后端，让后端自动判断字段是否存在
-        // key 格式: filterId_fieldName，与 DashboardEditorPage 完全一致
+        const isMetricChart = (card.chart?.chart_type || '').toLowerCase() === 'metric';
         const filteredFilterValues: Record<string, any> = {};
 
-        allFilters.forEach(filter => {
-          const filterValue = filterValues[filter.id];
-          if (filterValue === undefined || filterValue === null) return;
-          if (filterValue === '') return;
-          if (Array.isArray(filterValue) && filterValue.length === 0) return;
+        if (!isMetricChart) {
+          allFilters.forEach(filter => {
+            const filterValue = filterValues[filter.id];
+            if (filterValue === undefined || filterValue === null) return;
+            if (filterValue === '') return;
+            if (Array.isArray(filterValue) && filterValue.length === 0) return;
 
-          const paramKey = `${filter.id}_${filter.field_name}`;
-          filteredFilterValues[paramKey] = filterValue;
-        });
+            const paramKey = `${filter.id}_${filter.field_name}`;
+            filteredFilterValues[paramKey] = filterValue;
+          });
+        }
 
         const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
@@ -318,6 +319,16 @@ const ChartCardComponent: React.FC<{
             sort_order: sortOrder,
             line_y_fields: viz.line_y_fields,
             y_axis_right_title: viz.y_axis_right_title,
+            metric_mode: viz.metric_mode === 'cell' ? 'cell' : 'aggregate',
+            metric_filter_field:
+              viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
+            metric_filter_value:
+              viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
+            metric_unit: viz.metric_unit != null ? String(viz.metric_unit) : '',
+            metric_decimals:
+              typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
+            metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
+            metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
             legend: {
               show: viz.show_legend !== false,
               bottom: 10,
@@ -824,18 +835,21 @@ export const ReportsPage: React.FC = () => {
     cards.forEach(card => {
       if (!card.chart?.id) return;
 
+      const isMetricChart = (card.chart?.chart_type || '').toLowerCase() === 'metric';
       const filteredFilterValues: Record<string, any> = {};
-      filters.forEach(filter => {
-        const filterValue = currentFilterValues[filter.id];
-        if (filterValue === undefined || filterValue === null) return;
-        if (filterValue === '') return;
-        if (Array.isArray(filterValue) && filterValue.length === 0) return;
-        const paramKey = `${filter.id}_${filter.field_name}`;
-        filteredFilterValues[paramKey] = filterValue;
-      });
-      // 图表联动：按同名列在 SQL 中筛选（后端会加 WHERE field = value，表无该列时会忽略）
-      if (linkFilter?.field && linkFilter?.value != null && linkFilter.value !== '') {
-        filteredFilterValues[linkFilter.field] = linkFilter.value;
+      if (!isMetricChart) {
+        filters.forEach(filter => {
+          const filterValue = currentFilterValues[filter.id];
+          if (filterValue === undefined || filterValue === null) return;
+          if (filterValue === '') return;
+          if (Array.isArray(filterValue) && filterValue.length === 0) return;
+          const paramKey = `${filter.id}_${filter.field_name}`;
+          filteredFilterValues[paramKey] = filterValue;
+        });
+        // 图表联动：按同名列在 SQL 中筛选（指标图不参与）
+        if (linkFilter?.field && linkFilter?.value != null && linkFilter.value !== '') {
+          filteredFilterValues[linkFilter.field] = linkFilter.value;
+        }
       }
 
       requests.push({ chartId: card.chart.id, filterParams: filteredFilterValues });

@@ -1005,22 +1005,24 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         setDataLoading(true);
         setError(null);
         try {
-          // 根据卡片获取需要应用的筛选条件
-          // 所有筛选器都应用到所有图表，让数据库自然处理不存在的字段
+          // 指标图：仅使用图表内固定 metric_filters，不应用仪表盘筛选器
+          const isMetricChart = (card.chart?.chart_type || '').toLowerCase() === 'metric';
           const filteredFilterValues: Record<string, any> = {};
 
-          allFilters.forEach(filter => {
-            const filterValue = filterValues[filter.id];
+          if (!isMetricChart) {
+            allFilters.forEach(filter => {
+              const filterValue = filterValues[filter.id];
 
-            // 跳过未设置的筛选器
-            if (filterValue === undefined || filterValue === null) return;
-            if (filterValue === '') return;
-            if (Array.isArray(filterValue) && filterValue.length === 0) return;
+              // 跳过未设置的筛选器
+              if (filterValue === undefined || filterValue === null) return;
+              if (filterValue === '') return;
+              if (Array.isArray(filterValue) && filterValue.length === 0) return;
 
-            // 使用 filterId_fieldName 格式作为key，避免相同字段名的筛选器互相覆盖
-            const paramKey = `${filter.id}_${filter.field_name}`;
-            filteredFilterValues[paramKey] = filterValue;
-          });
+              // 使用 filterId_fieldName 格式作为key，避免相同字段名的筛选器互相覆盖
+              const paramKey = `${filter.id}_${filter.field_name}`;
+              filteredFilterValues[paramKey] = filterValue;
+            });
+          }
 
           console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'allFilters:', allFilters.map(f => ({ id: f.id, field_name: f.field_name })));
           console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filterValues);
@@ -1208,6 +1210,16 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               sort_order: sortOrder,
               line_y_fields: viz.line_y_fields,
               y_axis_right_title: viz.y_axis_right_title,
+              metric_mode: viz.metric_mode === 'cell' ? 'cell' : 'aggregate',
+              metric_filter_field:
+                viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
+              metric_filter_value:
+                viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
+              metric_unit: viz.metric_unit != null ? String(viz.metric_unit) : '',
+              metric_decimals:
+                typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
+              metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
+              metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
               legend: {
                 show: viz.show_legend !== false,
                 bottom: 10,
