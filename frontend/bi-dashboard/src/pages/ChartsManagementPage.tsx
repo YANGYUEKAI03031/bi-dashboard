@@ -611,6 +611,9 @@ export const ChartsManagementPage: React.FC = () => {
               <Option value="area">面积图</Option>
               <Option value="pie">饼图</Option>
               <Option value="scatter">散点图</Option>
+              <Option value="bar_line">柱线组合（双Y轴）</Option>
+              <Option value="boxplot">箱线图</Option>
+              <Option value="stacked_bar">堆积柱形图</Option>
             </Select>
           </div>
           
@@ -871,6 +874,8 @@ export const ChartsManagementPage: React.FC = () => {
                               : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
                           sort_by: (editingChart.visualization_settings as any)?.sort_by,
                           sort_order: (editingChart.visualization_settings as any)?.sort_order,
+                          line_y_fields: (editingChart.visualization_settings as any)?.line_y_fields,
+                          y_axis_right_title: (editingChart.visualization_settings as any)?.y_axis_right_title,
                           xAxis: {
                             name: editingChart.visualization_settings?.x_axis_title || 'X轴'
                           },

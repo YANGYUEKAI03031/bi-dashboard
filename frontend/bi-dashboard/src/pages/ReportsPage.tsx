@@ -316,6 +316,8 @@ const ChartCardComponent: React.FC<{
                 : (card.chart!.chart_type || '').toLowerCase() !== 'scatter',
             sort_by: sortBy,
             sort_order: sortOrder,
+            line_y_fields: viz.line_y_fields,
+            y_axis_right_title: viz.y_axis_right_title,
             legend: {
               show: viz.show_legend !== false,
               bottom: 10,

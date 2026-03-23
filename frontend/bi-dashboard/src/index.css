@@ -38,6 +38,59 @@
   --chart-color-7: #9a60b4;
   --chart-color-8: #ea7ccc;
   --chart-color-9: #ff9f7f;
+
+  /* 全局滚动条（与仪表盘「添加图表」列表一致：不激活时隐藏，悬停时显示） */
+  --scrollbar-size: 8px;
+  --scrollbar-radius: 4px;
+  --scrollbar-track: #f0f0f0;
+  --scrollbar-thumb: #bfbfbf;
+  --scrollbar-thumb-hover: #999;
+}
+
+/* Firefox：不激活时隐藏，悬停时显示 */
+* {
+  scrollbar-width: none;          /* 隐藏原生滚动条 */
+}
+
+*:hover,
+*:focus-within,
+*:active {
+  scrollbar-width: thin;         /* 悬停/聚焦/拖动时恢复滚动条 */
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Chromium / Safari / Edge：默认透明，悬停时显示 */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  opacity: 0;                    /* 默认隐藏 */
+  transition: opacity 0.2s ease;
+}
+
+*:hover::-webkit-scrollbar,
+*:focus-within::-webkit-scrollbar,
+*:active::-webkit-scrollbar,
+*::-webkit-scrollbar:hover {
+  opacity: 1;                    /* 悬停时显示 */
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--scrollbar-radius);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+  transition: background 0.15s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
 }
 
 body {

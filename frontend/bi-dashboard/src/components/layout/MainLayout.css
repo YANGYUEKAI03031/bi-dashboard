@@ -451,90 +451,9 @@
   flex: 1;
   padding: 24px;
   overflow-y: auto;
-  /* Firefox 滚动条样式 */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
 }
 
-/* 主内容区域滚动条样式 - 现代化设计 */
-.content-wrapper::-webkit-scrollbar {
-  width: 8px;
-}
-
-.content-wrapper::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-}
-
-.content-wrapper::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.content-wrapper::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.35);
-  background-clip: padding-box;
-}
-
-.content-wrapper::-webkit-scrollbar-thumb:active {
-  background: rgba(0, 0, 0, 0.45);
-  background-clip: padding-box;
-}
-
-
-/* 侧边栏滚动条样式 - 现代化设计 */
-.sidebar .nav-menu::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar .nav-menu::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-}
-
-.sidebar .nav-menu::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  border: 1px solid transparent;
-  background-clip: padding-box;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebar .nav-menu::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
-  background-clip: padding-box;
-}
-
-.sidebar .nav-menu::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.45);
-  background-clip: padding-box;
-}
-
-/* 折叠状态下的滚动条样式 */
-.sidebar.collapsed .nav-menu::-webkit-scrollbar {
-  width: 4px;
-}
-
-.sidebar.collapsed .nav-menu::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.sidebar.collapsed .nav-menu::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-/* Firefox 滚动条样式 */
-.sidebar .nav-menu {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-}
-
-.sidebar.collapsed .nav-menu {
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-}
+/* 滚动条样式由全局 index.css 统一（与仪表盘「添加图表」一致） */
 
 /* 子导航样式 */
 .nav-item-group {
@@ -802,30 +721,4 @@
   padding-right: 32px;
 }
 
-/* Popover 滚动条样式 */
-.nav-popover-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.nav-popover-list::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 10px;
-}
-
-.nav-popover-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  border: 1px solid transparent;
-  background-clip: padding-box;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.nav-popover-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.35);
-  background-clip: padding-box;
-}
-
-.nav-popover-list {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
-}
+/* 滚动条由全局 index.css 统一 */

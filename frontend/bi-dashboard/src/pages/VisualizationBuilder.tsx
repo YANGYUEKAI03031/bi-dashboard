@@ -43,6 +43,7 @@ const CHART_TYPES = [
   { value: 'scatter', label: '散点图', icon: <DotChartOutlined /> },
   { value: 'radar', label: '雷达图', icon: <RadarChartOutlined /> },
   { value: 'boxplot', label: '箱线图', icon: <FundViewOutlined /> },
+  { value: 'bar_line', label: '柱线组合（双Y轴）', icon: <LineChartOutlined /> },
   { value: 'stacked_bar', label: '堆积柱形图', icon: <ClusterOutlined /> },
   { value: 'waterfall', label: '瀑布图', icon: <FallOutlined /> },
   { value: 'funnel', label: '漏斗图', icon: <FilterOutlined /> },
@@ -76,7 +77,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       // grid_padding 交给 ChartFactory 统一处理，不再在配置里写死 3% / 4% 等老的默认值
       // 排序配置
       sort_by: 'x', // 'x' 或 'y'
-      sort_order: 'asc' // 'asc' 或 'desc'
+      sort_order: 'asc', // 'asc' 或 'desc'
+      line_y_fields: [] as string[],
+      y_axis_right_title: ''
     },
     database_id: 1
   });
@@ -116,7 +119,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                 x_group_by_enabled: vs.x_group_by_enabled ?? (chart.chart_type || '').toLowerCase() !== 'scatter',
                 // 排序配置
                 sort_by: vs.sort_by || 'x',
-                sort_order: vs.sort_order || 'asc'
+                sort_order: vs.sort_order || 'asc',
+                line_y_fields: Array.isArray(vs.line_y_fields) ? vs.line_y_fields : [],
+                y_axis_right_title: vs.y_axis_right_title || ''
               };
             })(),
             database_id: chart.database_id || 1,
@@ -210,6 +215,17 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showMultipleY: true,
           title: '箱线图',
           description: '需要数值字段用于箱体计算',
+          defaultXGroupBy: true
+        };
+      case 'bar_line':
+        return {
+          xFieldRequired: true,
+          yFieldsRequired: 2,
+          yFieldsMax: 10,
+          showColorField: false,
+          showMultipleY: true,
+          title: '柱线组合图',
+          description: '分组柱状 + 折线 + 双Y轴；默认最后2个指标为折线，可在下方指定',
           defaultXGroupBy: true
         };
       case 'funnel':
@@ -1021,6 +1037,42 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                       </Col>
                     </Row>
 
+                    {chartData.chart_type === 'bar_line' && (
+                      <Row gutter={16} style={{ marginTop: 16 }}>
+                        <Col span={12}>
+                          <label>折线指标（走右侧 Y 轴，其余为柱状）:</label>
+                          <Select
+                            mode="multiple"
+                            allowClear
+                            value={chartData.visualization_settings.line_y_fields || []}
+                            onChange={(vals) => {
+                              const yf = chartData.visualization_settings.y_fields || [];
+                              const ok = (vals || []).filter((v: string) => yf.includes(v));
+                              handleFieldMappingChange('line_y_fields', ok);
+                            }}
+                            style={{ width: '100%', marginTop: 8 }}
+                            placeholder="不选则默认最后 2 个 Y 字段为折线"
+                            disabled={(chartData.visualization_settings.y_fields || []).length === 0}
+                          >
+                            {(chartData.visualization_settings.y_fields || []).map((field: string) => (
+                              <Option key={field} value={field}>
+                                {field}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Col>
+                        <Col span={12}>
+                          <label>右侧 Y 轴名称:</label>
+                          <Input
+                            value={chartData.visualization_settings.y_axis_right_title || ''}
+                            onChange={(e) => handleFieldMappingChange('y_axis_right_title', e.target.value)}
+                            style={{ marginTop: 8 }}
+                            placeholder="例如：转化率、占比"
+                          />
+                        </Col>
+                      </Row>
+                    )}
+
                     <Row gutter={16} style={{ marginTop: '16px' }}>
                       <Col span={8}>
                         <div>
@@ -1217,6 +1269,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                               title: '',
                               xField: chartData.visualization_settings.x_field,
                               yFields: chartData.visualization_settings.y_fields || [],
+                              line_y_fields: chartData.visualization_settings.line_y_fields,
+                              y_axis_right_title: chartData.visualization_settings.y_axis_right_title,
                               // 按所选统计方式对 Y 轴做聚合
                               y_agg_method: chartData.visualization_settings.y_agg_method,
                               x_group_by_enabled:

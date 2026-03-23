@@ -15,6 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 
 .dashboard-editor-chart-search-hint {
@@ -63,11 +64,18 @@
   white-space: nowrap;
 }
 
+/* 图表列表：限制高度并内部滚动，避免侧栏其它区块占满后底部图表被裁切且无法操作 */
 .dashboard-editor-chart-list {
-  max-height: 420px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(320px, 42vh);
   overflow-y: auto;
-  padding-right: 6px;
+  overflow-x: hidden;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* 滚动条样式由全局 index.css 统一提供 */
 
 .dashboard-editor-grid {
   height: 100%;

@@ -1206,6 +1206,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   : (card.chart!.chart_type || '').toLowerCase() !== 'scatter',
               sort_by: sortBy,
               sort_order: sortOrder,
+              line_y_fields: viz.line_y_fields,
+              y_axis_right_title: viz.y_axis_right_title,
               legend: {
                 show: viz.show_legend !== false,
                 bottom: 10,
@@ -1245,7 +1247,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           background: '#fff',
           borderRight: '1px solid #f0f0f0',
           padding: collapsed ? 0 : '16px',
-          overflow: 'hidden',
+          overflowX: 'hidden',
+          overflowY: 'auto',
         }}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>

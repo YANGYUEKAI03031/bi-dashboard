@@ -114,23 +114,7 @@
   margin-bottom: 8px;
 }
 
-.chart-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chart-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.chart-list::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.chart-list::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
+/* 滚动条由全局 index.css 统一 */
 
 .draggable-chart-item {
   margin-bottom: 16px;

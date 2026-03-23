@@ -106,6 +106,10 @@ interface ChartConfig {
    */
   x_group_by_enabled?: boolean;
   minHeight?: number; // 图表容器最小高度（px）
+  /** 柱线组合图：指定哪些 Y 指标用折线 + 右侧 Y 轴；未配置时默认最后 2 个为折线 */
+  line_y_fields?: string[];
+  /** 柱线组合图：右侧 Y 轴名称 */
+  y_axis_right_title?: string;
 }
 
 interface ChartFactoryProps {
@@ -1145,6 +1149,109 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           }
         }));
         break;
+
+      case 'bar_line': {
+        // 分组柱 + 折线 + 双 Y 轴（与常见 BI「柱线组合」一致，非统计箱须图）
+        const yList = yFields || [];
+        const configuredLines = (config.line_y_fields || []).filter(f => yList.includes(f));
+        let lineFieldSet: Set<string>;
+        if (configuredLines.length > 0) {
+          lineFieldSet = new Set(configuredLines);
+        } else if (yList.length >= 3) {
+          lineFieldSet = new Set(yList.slice(-2));
+        } else if (yList.length === 2) {
+          lineFieldSet = new Set([yList[1]]);
+        } else {
+          lineFieldSet = new Set();
+        }
+        const barFields = yList.filter(f => !lineFieldSet.has(f));
+        const lineFields = yList.filter(f => lineFieldSet.has(f));
+        const effectiveBarFields = barFields.length > 0 ? barFields : yList.length ? [yList[0]] : [];
+        const lineCandidates = lineFields.length > 0 ? lineFields : yList.slice(effectiveBarFields.length);
+        const effectiveLineFields = lineCandidates.filter(f => !effectiveBarFields.includes(f));
+
+        const isMultiBarSeries = effectiveBarFields.length > 1;
+        baseOption.yAxis = [
+          {
+            type: 'value',
+            name: config.yAxis?.name || (compact ? '' : 'Y轴(左)'),
+            position: 'left',
+            nameTextStyle: { fontSize: 12, color: '#4a5568', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#e2e8f0', width: 1 } },
+            axisTick: { show: true, lineStyle: { color: '#e2e8f0' } },
+            splitLine: { show: true, lineStyle: { color: '#f1f5f9', type: 'dashed', width: 1 } },
+            axisLabel: { fontSize: 11, color: '#4a5568' }
+          },
+          {
+            type: 'value',
+            name: config.y_axis_right_title || (compact ? '' : 'Y轴(右)'),
+            position: 'right',
+            nameTextStyle: { fontSize: 12, color: '#4a5568', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#e2e8f0', width: 1 } },
+            axisTick: { show: true, lineStyle: { color: '#e2e8f0' } },
+            splitLine: { show: false },
+            axisLabel: { fontSize: 11, color: '#4a5568' }
+          }
+        ];
+        baseOption.grid = {
+          ...gridOption,
+          right:
+            (typeof gridOption.right === 'number' ? gridOption.right : 0) +
+            (effectiveLineFields.length > 0 ? 48 : 0)
+        };
+
+        const barSeries = effectiveBarFields.map((field, index) => ({
+          name: field,
+          type: 'bar' as const,
+          yAxisIndex: 0,
+          data: sortedData.map((item, i) => {
+            const val = item[field] || 0;
+            const name = item[xField];
+            const isSelected = selectedNormalized && normalizeLinkValue(String(name ?? '')) === selectedNormalized;
+            const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+            return typeof val === 'object' && val !== null && !Array.isArray(val)
+              ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
+              : opacity != null ? { value: val, itemStyle: { opacity } } : val;
+          }),
+          ...(isMultiBarSeries
+            ? { barMaxWidth: 24, barGap: '30%', barCategoryGap: '45%' }
+            : { barWidth: '60%', barMaxWidth: 40 }),
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: {
+              type: 'linear' as const,
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: colorPalette[index % colorPalette.length] },
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' }
+              ]
+            }
+          },
+          emphasis: { focus: 'self' as const }
+        }));
+
+        const lineSeries = effectiveLineFields.map((field, index) => ({
+          name: field,
+          type: 'line' as const,
+          yAxisIndex: 1,
+          data: sortedData.map(item => item[field] || 0),
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          showSymbol: true,
+          lineStyle: {
+            width: 2.5,
+            color: colorPalette[(effectiveBarFields.length + index) % colorPalette.length]
+          },
+          emphasis: { focus: 'self' as const }
+        }));
+
+        baseOption.series = [...barSeries, ...lineSeries];
+        break;
+      }
         
       case 'waterfall':
         // 瀑布图 - 需要计算累积值
@@ -1552,7 +1659,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       const chartType = (config.type || '').toLowerCase();
       clickSource = `series:${chartType}`;
       // 折线图/面积图：series.name 是 Y 字段名（如「星级」），需用 dataIndex 从 x 轴取类目作为联动值
-      if ((chartType === 'line' || chartType === 'area') && typeof params.dataIndex === 'number') {
+      if (
+        (chartType === 'line' || chartType === 'area' || (chartType === 'bar_line' && params.seriesType === 'line')) &&
+        typeof params.dataIndex === 'number'
+      ) {
         const opt = optionRef.current;
         const xAxis = Array.isArray(opt?.xAxis) ? opt.xAxis[0] : opt?.xAxis;
         const xAxisData = (xAxis?.data || []) as any[];
