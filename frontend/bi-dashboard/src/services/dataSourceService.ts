@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/services/dataSourceService.ts
 import { AuthService } from './authService';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+import { API_BASE_URL } from '../config/apiBaseUrl';
 
 interface DataSource {
   id: string;   // 对应后端 Database.id（字符串形式）

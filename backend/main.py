@@ -16,10 +16,10 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# 添加CORS中间件
+# 添加CORS中间件 - 允许所有来源（内网部署使用）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

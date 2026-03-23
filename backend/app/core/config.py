@@ -40,8 +40,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # CORS settings
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    # CORS settings - 生产环境建议限制来源
+    BACKEND_CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://192.168.*.*:3000",  # 局域网
+        "http://*",  # 允许所有来源（开发环境）
+    ]
     
     # Application settings
     PROJECT_NAME: str = "BI Dashboard API"
