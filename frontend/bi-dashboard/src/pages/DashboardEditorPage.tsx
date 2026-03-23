@@ -258,6 +258,8 @@ interface DashboardTitleWidget {
   level: 1 | 2 | 3;
   size_x: number;
   size_y: number;
+  card_row: number;
+  card_col: number;
 }
 
 export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }) => {
@@ -314,7 +316,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   // 用于防抖保存布局变化
   const layoutUpdateTimerRef = useRef<number | null>(null);
   const pendingLayoutRef = useRef<any[] | null>(null);
+  const widgetLayoutRef = useRef<Map<string, { card_row: number; card_col: number; size_x: number; size_y: number }>>(new Map());
   const dashboardRef = useRef<Dashboard | null>(null);
+  const widgetsRef = useRef<DashboardTitleWidget[]>([]);
+  useEffect(() => {
+    widgetsRef.current = widgets;
+  }, [widgets]);
 
   const isEditMode = mode === 'edit';
 
@@ -484,8 +491,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   level: (w.level === 2 || w.level === 3) ? w.level : 1,
                   size_x: Number.isFinite(w.size_x) ? w.size_x : 12,
                   size_y: Number.isFinite(w.size_y) ? w.size_y : 2,
+                  card_row: Number.isFinite(w.card_row) ? w.card_row : 0,
+                  card_col: Number.isFinite(w.card_col) ? w.card_col : 0,
                 }))
             );
+            widgetLayoutRef.current.clear();
           } else {
             setWidgets([]);
           }
@@ -770,6 +780,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         );
       } else {
         const id = `title_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        // 新标题组件放在所有现有内容的最下方
+        const maxRow = widgets.reduce((m, w) => Math.max(m, w.card_row + w.size_y), 0);
         nextWidgets = [
           ...widgets,
           {
@@ -781,6 +793,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             level,
             size_x: 12,
             size_y: subtitle ? 3 : 2,
+            card_row: maxRow,
+            card_col: 0,
           },
         ];
       }
@@ -803,6 +817,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   const handleRemoveWidget = async (widgetId: string) => {
     if (!dashboard) return;
     try {
+      widgetLayoutRef.current.delete(widgetId);
       const nextWidgets = widgets.filter(w => w.id !== widgetId);
       setWidgets(nextWidgets);
       const updated = await persistWidgets(nextWidgets);
@@ -1024,9 +1039,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             });
           }
 
-          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'allFilters:', allFilters.map(f => ({ id: f.id, field_name: f.field_name })));
-          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filterValues:', filterValues);
-          console.log('[DashboardEditor] 执行图表查询, chartId:', card.chart!.id, 'filteredFilterValues:', filteredFilterValues);
           const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
 
           if (cancelled) return;
@@ -1646,51 +1658,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 </div>
               )}
 
-              {/* 标题组件（从 dashboard.settings.widgets 渲染） */}
-              {widgets.map(w => (
-                <div
-                  key={w.id}
-                  style={{
-                    marginBottom: 16,
-                  }}
-                >
-                  <Card
-                    size="small"
-                    style={{ height: '100%' }}
-                    bodyStyle={{ height: '100%' }}
-                    extra={
-                      <Space>
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => openEditTitleWidget(w)}
-                        />
-                        <Popconfirm
-                          title="移除这个标题组件？"
-                          okText="移除"
-                          okButtonProps={{ danger: true }}
-                          cancelText="取消"
-                          onConfirm={() => handleRemoveWidget(w.id)}
-                        >
-                          <Button type="text" size="small" icon={<DeleteOutlined />} danger />
-                        </Popconfirm>
-                      </Space>
-                    }
-                  >
-                    <div style={{ textAlign: w.align }}>
-                      <Typography.Title level={w.level} style={{ margin: 0 }}>
-                        {w.title}
-                      </Typography.Title>
-                      {w.subtitle ? (
-                        <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
-                          {w.subtitle}
-                        </Typography.Paragraph>
-                      ) : null}
-                    </div>
-                  </Card>
-                </div>
-              ))}
 
               <AutoWidthGridLayout
                 cols={12}
@@ -1700,18 +1667,30 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 droppingItem={{ i: '__dropping-elem__', w: MIN_CARD_COLS, h: MIN_CARD_ROWS }}
                 isDraggable={true}
                 isResizable={true}
-                layout={(dashboard.cards || []).map(card => ({
-                  i: card.id.toString(),
-                  x: Number.isFinite(card.card_col) ? card.card_col : 0,
-                  y: Number.isFinite(card.card_row) ? card.card_row : 0,
-                  // 强制保证已有卡片在布局层面的宽高不会小于我们期望的最小值
-                  w: Math.max(Number.isFinite(card.size_x) ? card.size_x : MIN_CARD_COLS, MIN_CARD_COLS),
-                  h: Math.max(Number.isFinite(card.size_y) ? card.size_y : MIN_CARD_ROWS, MIN_CARD_ROWS),
-                  minW: MIN_CARD_COLS,
-                  minH: MIN_CARD_ROWS,
-                }))}
+                layout={[
+                  ...(dashboard.cards || []).map(card => ({
+                    i: card.id.toString(),
+                    x: Number.isFinite(card.card_col) ? card.card_col : 0,
+                    y: Number.isFinite(card.card_row) ? card.card_row : 0,
+                    w: Math.max(Number.isFinite(card.size_x) ? card.size_x : MIN_CARD_COLS, MIN_CARD_COLS),
+                    h: Math.max(Number.isFinite(card.size_y) ? card.size_y : MIN_CARD_ROWS, MIN_CARD_ROWS),
+                    minW: MIN_CARD_COLS,
+                    minH: MIN_CARD_ROWS,
+                  })),
+                  ...widgets.map(w => {
+                    const refEntry = widgetLayoutRef.current.get(w.id);
+                    return {
+                      i: w.id,
+                      x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
+                      y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
+                      w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
+                      h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
+                      minW: 2,
+                      minH: 1,
+                    };
+                  }),
+                ]}
                 onLayoutChange={(layout: any[]) => {
-                  // 防抖保存：只在用户停止操作一小段时间后再提交更新
                   pendingLayoutRef.current = layout;
                   if (layoutUpdateTimerRef.current) {
                     window.clearTimeout(layoutUpdateTimerRef.current);
@@ -1722,52 +1701,82 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     const latestLayout = pendingLayoutRef.current;
                     if (!latestDashboard || !latestLayout) return;
 
-                    const cardMap = new Map(
-                      latestDashboard.cards.map(card => [card.id.toString(), card])
-                    );
+                    const cardMap = new Map(latestDashboard.cards.map(card => [card.id.toString(), card]));
+                    const cardChanges: Array<{ cardId: number; updates: any }> = [];
+                    const latestWidgets = widgetsRef.current;
+                    let widgetLayoutDirty = false;
 
-                    const changes: Array<{ cardId: number; updates: any }> = [];
-                    latestLayout.forEach(item => {
-                      const card = cardMap.get(item.i);
-                      if (!card) return;
+                    latestLayout.forEach((item: any) => {
+                      const idStr = String(item.i);
+                      if (idStr === '__dropping-elem__') return;
 
-                      const updates: any = {};
-                      if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
-                      if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
-                      if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
-                      if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
-
-                      if (Object.keys(updates).length > 0) {
-                        changes.push({ cardId: card.id, updates });
+                      // 标题组件 id 形如 title_xxx；图表卡片 id 为纯数字（与 react-grid-layout 传入的 layout 一致，不依赖自定义字段 t）
+                      if (idStr.startsWith('title_')) {
+                        const nx = Math.round(item.x);
+                        const ny = Math.round(item.y);
+                        const nw = Math.round(item.w);
+                        const nh = Math.round(item.h);
+                        widgetLayoutRef.current.set(idStr, {
+                          card_row: ny,
+                          card_col: nx,
+                          size_x: nw,
+                          size_y: nh,
+                        });
+                        const w = latestWidgets.find(ww => ww.id === idStr);
+                        if (
+                          w &&
+                          (w.card_row !== ny || w.card_col !== nx || w.size_x !== nw || w.size_y !== nh)
+                        ) {
+                          widgetLayoutDirty = true;
+                        }
+                      } else if (/^\d+$/.test(idStr)) {
+                        const card = cardMap.get(idStr);
+                        if (!card) return;
+                        const updates: any = {};
+                        if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
+                        if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
+                        if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
+                        if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
+                        if (Object.keys(updates).length > 0) {
+                          cardChanges.push({ cardId: card.id, updates });
+                        }
                       }
                     });
 
-                    if (changes.length === 0) return;
-
                     try {
-                      // 并行提交所有更新到后端
-                      const results = await Promise.allSettled(
-                        changes.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
-                      );
-
-                      const hasRejected = results.some(r => r.status === 'rejected');
-                      if (hasRejected) {
-                        message.error('部分卡片更新失败，请稍后重试');
+                      if (cardChanges.length > 0) {
+                        const results = await Promise.allSettled(
+                          cardChanges.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
+                        );
+                        const hasRejected = results.some(r => r.status === 'rejected');
+                        if (hasRejected) {
+                          message.error('部分卡片更新失败，请稍后重试');
+                        }
+                        const updatedCards = latestDashboard.cards.map(card => {
+                          const change = cardChanges.find(c => c.cardId === card.id);
+                          return change ? { ...card, ...change.updates } : card;
+                        });
+                        const updatedDashboard = { ...latestDashboard, cards: updatedCards };
+                        setDashboard(updatedDashboard);
+                        dashboardRef.current = updatedDashboard;
                       }
 
-                      // 本地更新状态，避免多次 setState 导致额外的 onLayoutChange 循环
-                      const updatedCards = latestDashboard.cards.map(card => {
-                        const change = changes.find(c => c.cardId === card.id);
-                        return change ? { ...card, ...change.updates } : card;
-                      });
-
-                      const updatedDashboard = {
-                        ...latestDashboard,
-                        cards: updatedCards
-                      };
-
-                      setDashboard(updatedDashboard);
-                      dashboardRef.current = updatedDashboard;
+                      // 仅在实际移动/缩放标题组件时持久化，避免每次 onLayoutChange 都 updateDashboard 导致整页重渲染死循环
+                      if (widgetLayoutDirty && latestWidgets.length > 0) {
+                        const updatedWidgets = latestWidgets.map(w => {
+                          const ref = widgetLayoutRef.current.get(w.id);
+                          if (!ref) return w;
+                          return {
+                            ...w,
+                            card_row: ref.card_row,
+                            card_col: ref.card_col,
+                            size_x: ref.size_x,
+                            size_y: ref.size_y,
+                          };
+                        });
+                        await persistWidgets(updatedWidgets);
+                        setWidgets(updatedWidgets);
+                      }
                     } catch (e: any) {
                       console.error('保存布局失败:', e);
                       message.error(e?.message || '保存布局失败');
@@ -1781,7 +1790,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       console.warn('[DashboardEditor] No dataTransfer in drop event');
                       return;
                     }
-                    // 尝试多种方式获取数据
                     let raw = '';
                     try {
                       raw = e.dataTransfer.getData('chartId') || e.dataTransfer.getData('text/plain') || '';
@@ -1833,7 +1841,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           />
                         </Popconfirm>
                       }
-                      // 让卡片本身充满网格单元，并使用 flex 布局让图表区域垂直拉满
                       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                       bodyStyle={{
                         flex: 1,
@@ -1842,24 +1849,49 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         alignItems: 'stretch',
                       }}
                     >
-                      {/* ChartCardComponent 会占满 body，高度 100%，从而让图表垂直填充整个卡片 */}
                       <ChartCardComponent card={card} filterValues={filterValues} allFilters={filters} />
+                    </Card>
+                  </div>
+                ))}
+                {widgets.map(w => (
+                  <div key={w.id}>
+                    <Card
+                      size="small"
+                      style={{ height: '100%' }}
+                      bodyStyle={{ height: '100%' }}
+                      extra={
+                        <Space>
+                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditTitleWidget(w)} />
+                          <Popconfirm
+                            title="移除这个标题组件？"
+                            okText="移除"
+                            okButtonProps={{ danger: true }}
+                            cancelText="取消"
+                            onConfirm={() => handleRemoveWidget(w.id)}
+                          >
+                            <Button type="text" size="small" icon={<DeleteOutlined />} danger />
+                          </Popconfirm>
+                        </Space>
+                      }
+                    >
+                      <div style={{ textAlign: w.align }}>
+                        <Typography.Title level={w.level} style={{ margin: 0 }}>
+                          {w.title}
+                        </Typography.Title>
+                        {w.subtitle ? (
+                          <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                            {w.subtitle}
+                          </Typography.Paragraph>
+                        ) : null}
+                      </div>
                     </Card>
                   </div>
                 ))}
               </AutoWidthGridLayout>
 
-              {(!dashboard.cards || dashboard.cards.length === 0) && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    color: '#999',
-                    fontSize: 12,
-                    textAlign: 'center',
-                  }}
-                >
-                  当前仪表盘还没有任何图表：请从左侧拖拽图表到上方画布区域。
+              {!dashboard.cards?.length && !widgets.length && (
+                <div style={{ marginTop: 12, padding: 12, color: '#999', fontSize: 12, textAlign: 'center' }}>
+                  当前仪表盘还没有任何组件：请从左侧拖拽图表或添加标题组件到画布区域。
                 </div>
               )}
             </div>
