@@ -868,9 +868,19 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           </div>
           <Tabs defaultActiveKey="1">
             <TabPane tab="数据配置" key="1">
-              <Row gutter={24}>
-                <Col span={8}>
-                  <Card title="数据源配置" size="small">
+              <Row gutter={24} align="stretch">
+                {/* 左侧：数据源 + 数据预览（与右侧并排，避免上方留空） */}
+                <Col xs={24} xl={11}>
+                  <Card
+                    title="数据源配置"
+                    size="small"
+                    style={{ height: '100%' }}
+                    bodyStyle={{
+                      maxHeight: 'calc(100vh - 220px)',
+                      overflowY: 'auto',
+                      overflowX: 'hidden',
+                    }}
+                  >
                     <Space direction="vertical" style={{ width: '100%' }} size="middle">
                       <div>
                         <label>数据源:</label>
@@ -946,380 +956,364 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                   </Card>
                 </Col>
 
-                <Col span={16}>
-                  <Card title="字段映射配置" size="small">
-                    <Row gutter={16}>
-                      <Col span={8}>
-                        <div>
-                          <label>图表类型:</label>
-                          <Select
-                            value={chartData.chart_type}
-                            onChange={handleChartTypeChange}
-                            style={{ width: '100%' }}
-                            placeholder="选择图表类型"
-                          >
-                            {CHART_TYPES.map(type => (
-                              <Option key={type.value} value={type.value}>
-                                {type.icon} {type.label}
-                              </Option>
-                            ))}
-                          </Select>
-                        </div>
-                      </Col>
-                      
-                      {/* 动态字段配置 - 根据图表类型显示不同的表单元素 */}
-                      <Col span={8}>
-                        <div>
-                          <label>X轴字段:</label>
-                          {getChartFieldConfig(chartData.chart_type).xFieldRequired && (
-                            <Select
-                              value={chartData.visualization_settings.x_field}
-                              onChange={(value) => handleFieldMappingChange('x_field', value)}
-                              style={{ width: '100%' }}
-                              placeholder="选择X轴字段"
-                              disabled={availableFields.length === 0}
-                            >
-                              {availableFields.map(field => (
-                                <Option key={field} value={field}>
-                                  {field}
-                                </Option>
-                              ))}
-                            </Select>
-                          )}
-                          {!getChartFieldConfig(chartData.chart_type).xFieldRequired && (
-                            <div style={{ color: '#999', fontStyle: 'italic' }}>无需X轴字段</div>
-                          )}
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>Y轴字段:</label>
-                          {getChartFieldConfig(chartData.chart_type).showMultipleY ? (
-                            <Select
-                              mode="multiple"
-                              value={chartData.visualization_settings.y_fields}
-                              onChange={(values) => {
-                                // 限制最大选择数量
-                                const limitedValues = values.slice(0, getChartFieldConfig(chartData.chart_type).yFieldsMax);
-                                handleFieldMappingChange('y_fields', limitedValues);
-                              }}
-                              style={{ width: '100%' }}
-                              placeholder={`选择${getChartFieldConfig(chartData.chart_type).yFieldsRequired}个以上字段`}
-                              disabled={availableFields.length === 0}
-                              maxTagCount={3}
-                            >
-                              {availableFields.map(field => (
-                                <Option key={field} value={field}>
-                                  {field}
-                                </Option>
-                              ))}
-                            </Select>
-                          ) : (
-                            <Select
-                              value={chartData.visualization_settings.y_fields?.[0] || undefined}
-                              onChange={(value) => handleFieldMappingChange('y_fields', value ? [value] : [])}
-                              style={{ width: '100%' }}
-                              placeholder={`选择1个字段`}
-                              disabled={availableFields.length === 0}
-                            >
-                              {availableFields.map(field => (
-                                <Option key={field} value={field}>
-                                  {field}
-                                </Option>
-                              ))}
-                            </Select>
-                          )}
-                          <div style={{ marginTop: '4px', fontSize: '12px', color: '#999' }}>
-                            {getChartFieldConfig(chartData.chart_type).description}
-                          </div>
-                        </div>
-                      </Col>
-                    </Row>
-
-                    {chartData.chart_type === 'bar_line' && (
-                      <Row gutter={16} style={{ marginTop: 16 }}>
-                        <Col span={12}>
-                          <label>折线指标（走右侧 Y 轴，其余为柱状）:</label>
-                          <Select
-                            mode="multiple"
-                            allowClear
-                            value={chartData.visualization_settings.line_y_fields || []}
-                            onChange={(vals) => {
-                              const yf = chartData.visualization_settings.y_fields || [];
-                              const ok = (vals || []).filter((v: string) => yf.includes(v));
-                              handleFieldMappingChange('line_y_fields', ok);
+                {/* 右侧：字段映射 + 图表预览 */}
+                <Col xs={24} xl={13}>
+                  <Card
+                    title="图表配置"
+                    size="small"
+                    style={{ height: '100%' }}
+                    bodyStyle={{
+                      maxHeight: 'calc(100vh - 220px)',
+                      overflowY: 'auto',
+                      overflowX: 'hidden',
+                    }}
+                  >
+                    {/* ── 一、图表类型（横向按钮组）────────────────────── */}
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        padding: 12,
+                        background: '#f8f9fb',
+                        borderRadius: 8
+                      }}>
+                        {CHART_TYPES.map(type => (
+                          <button
+                            key={type.value}
+                            onClick={() => handleChartTypeChange(type.value)}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 4,
+                              padding: '10px 14px',
+                              minWidth: 72,
+                              border: chartData.chart_type === type.value ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                              borderRadius: 8,
+                              background: chartData.chart_type === type.value ? '#e6f7ff' : '#fff',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              fontSize: 12
                             }}
-                            style={{ width: '100%', marginTop: 8 }}
-                            placeholder="不选则默认最后 2 个 Y 字段为折线"
-                            disabled={(chartData.visualization_settings.y_fields || []).length === 0}
+                            onMouseEnter={(e) => {
+                              if (chartData.chart_type !== type.value) {
+                                e.currentTarget.style.borderColor = '#1890ff';
+                                e.currentTarget.style.background = '#f0f5ff';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (chartData.chart_type !== type.value) {
+                                e.currentTarget.style.borderColor = '#d9d9d9';
+                                e.currentTarget.style.background = '#fff';
+                              }
+                            }}
                           >
-                            {(chartData.visualization_settings.y_fields || []).map((field: string) => (
-                              <Option key={field} value={field}>
-                                {field}
-                              </Option>
-                            ))}
-                          </Select>
-                        </Col>
-                        <Col span={12}>
-                          <label>右侧 Y 轴名称:</label>
-                          <Input
-                            value={chartData.visualization_settings.y_axis_right_title || ''}
-                            onChange={(e) => handleFieldMappingChange('y_axis_right_title', e.target.value)}
-                            style={{ marginTop: 8 }}
-                            placeholder="例如：转化率、占比"
-                          />
-                        </Col>
-                      </Row>
-                    )}
-
-                    <Row gutter={16} style={{ marginTop: '16px' }}>
-                      <Col span={8}>
-                        <div>
-                          <label>Y轴统计方式:</label>
-                          <Select
-                            value={chartData.visualization_settings.y_agg_method || 'sum'}
-                            onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
-                            disabled={
-                              (() => {
-                                const vs = chartData.visualization_settings || {};
-                                const enabled =
-                                  typeof vs.x_group_by_enabled === 'boolean'
-                                    ? vs.x_group_by_enabled
-                                    : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false;
-                                return !enabled;
-                              })()
-                            }
-                            style={{ width: '100%' }}
-                            placeholder="选择Y轴统计方式"
-                          >
-                            <Option value="count">计数</Option>
-                            <Option value="sum">求和</Option>
-                            <Option value="avg">平均数</Option>
-                            <Option value="mode">众数</Option>
-                            <Option value="median">中位数</Option>
-                          </Select>
-                        </div>
-                      </Col>
-
-                      <Col span={8}>
-                        <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                          <span>按X轴聚合（group by）:</span>
-                          <Switch
-                            checked={
-                              typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
-                                ? chartData.visualization_settings.x_group_by_enabled
-                                : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false
-                            }
-                            onChange={(checked) => handleFieldMappingChange('x_group_by_enabled', checked)}
-                            style={{ marginLeft: 8 }}
-                          />
-                        </div>
-                      </Col>
-                    </Row>
-                    
-                    <Row gutter={16} style={{ marginTop: '16px' }}>
-                      <Col span={8}>
-                        <div>
-                          <label>排序方式:</label>
-                          <Select
-                            value={chartData.visualization_settings.sort_by}
-                            onChange={(value) => handleFieldMappingChange('sort_by', value)}
-                            style={{ width: '100%' }}
-                            placeholder="选择排序方式"
-                          >
-                            <Option value="x">按X轴排序</Option>
-                            <Option value="y">按Y轴排序</Option>
-                          </Select>
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>排序顺序:</label>
-                          <Select
-                            value={chartData.visualization_settings.sort_order}
-                            onChange={(value) => handleFieldMappingChange('sort_order', value)}
-                            style={{ width: '100%' }}
-                            placeholder="选择排序顺序"
-                          >
-                            <Option value="asc">升序</Option>
-                            <Option value="desc">降序</Option>
-                          </Select>
-                        </div>
-                      </Col>
-                      
-
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>X轴标题:</label>
-                          <Input
-                            value={chartData.visualization_settings.x_axis_title}
-                            onChange={(e) => handleFieldMappingChange('x_axis_title', e.target.value)}
-                            placeholder="X轴标题"
-                          />
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>Y轴标题:</label>
-                          <Input
-                            value={chartData.visualization_settings.y_axis_title}
-                            onChange={(e) => handleFieldMappingChange('y_axis_title', e.target.value)}
-                            placeholder="Y轴标题"
-                          />
-                        </div>
-                      </Col>
-                    </Row>
-                    
-                    {/* 图表样式设置 */}
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>图表样式设置</div>
-                    <Row gutter={16} style={{ marginTop: '8px' }}>
-                      <Col span={8}>
-                        <div>
-                          <label>显示图例:</label>
-                          <Switch 
-                            checked={chartData.visualization_settings.show_legend !== false}
-                            onChange={(checked) => handleFieldMappingChange('show_legend', checked)}
-                            style={{ marginLeft: '8px' }}
-                          />
-                        </div>
-                      </Col>
-                      
-                      {/* <Col span={8}>
-                        <div>
-                          <label>启用动画:</label>
-                          <Switch 
-                            checked={chartData.visualization_settings.animation !== false}
-                            onChange={(checked) => handleFieldMappingChange('animation', checked)}
-                            style={{ marginLeft: '8px' }}
-                          />
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>图例位置:</label>
-                          <Select
-                            value={chartData.visualization_settings.legend_position || 'right'}
-                            onChange={(value) => handleFieldMappingChange('legend_position', value)}
-                            style={{ width: '100%' }}
-                          >
-                            <Option value="top">顶部</Option>
-                            <Option value="bottom">底部</Option>
-                            <Option value="left">左侧</Option>
-                            <Option value="right">右侧</Option>
-                          </Select>
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>旋转标签:</label>
-                          <Switch 
-                            checked={chartData.visualization_settings.rotate_labels !== false}
-                            onChange={(checked) => handleFieldMappingChange('rotate_labels', checked)}
-                            style={{ marginLeft: '8px' }}
-                          />
-                        </div>
-                      </Col>
-                      
-                      <Col span={8}>
-                        <div>
-                          <label>显示网格线:</label>
-                          <Switch 
-                            checked={chartData.visualization_settings.show_grid !== false}
-                            onChange={(checked) => handleFieldMappingChange('show_grid', checked)}
-                            defaultChecked
-                            style={{ marginLeft: '8px' }}
-                          />
-                        </div>
-                      </Col> */}
-                    </Row>
-                    
-                    {/* 添加刷新预览按钮 */}
-                    <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button 
-                        type="primary" 
-                        onClick={() => {
-                          // 强制触发状态更新以重新渲染图表
-                          setPreviewData(prev => [...prev]); // 触发重新渲染（新引用）
-                        }}
-                        icon={<PlayCircleOutlined />}
-                      >
-                        刷新预览
-                      </Button>
+                            <span style={{ fontSize: 20 }}>{type.icon}</span>
+                            <span style={{ color: chartData.chart_type === type.value ? '#1890ff' : '#333' }}>{type.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    
-                    {/* 图表预览区域 - 标题显示当前图表名称并居中 */}
-                    <div style={{ marginTop: '24px', border: '1px solid #d9d9d9', borderRadius: '8px', padding: '16px' }}>
-                      <h3 style={{ marginBottom: '16px', color: '#1890ff', textAlign: 'center' }}>
-                        {chartData.name || '图表预览'}
-                      </h3>
-                      {previewData.length > 0 && 
-                       chartData.visualization_settings.x_field && 
-                       chartData.visualization_settings.y_fields?.length > 0 ? (
-                        <div style={{ height: '400px' }}>
-                          <ChartFactory
-                            config={{
-                              type: chartData.chart_type,
-                              // 预览区域顶部已经展示图表名称，这里不再在图表内部重复标题
-                              title: '',
-                              xField: chartData.visualization_settings.x_field,
-                              yFields: chartData.visualization_settings.y_fields || [],
-                              line_y_fields: chartData.visualization_settings.line_y_fields,
-                              y_axis_right_title: chartData.visualization_settings.y_axis_right_title,
-                              // 按所选统计方式对 Y 轴做聚合
-                              y_agg_method: chartData.visualization_settings.y_agg_method,
-                              x_group_by_enabled:
-                                typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
-                                  ? chartData.visualization_settings.x_group_by_enabled
-                                  : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false,
-                              sort_by: chartData.visualization_settings.sort_by,
-                              sort_order: chartData.visualization_settings.sort_order,
-                              
-                              series: [],
-                              xAxis: {
-                                name: chartData.visualization_settings.x_axis_title || 'X轴'
-                              },
-                              yAxis: {
-                                name: chartData.visualization_settings.y_axis_title || 'Y轴'
-                              },
-                              legend: {
-                                show: chartData.visualization_settings.show_legend !== false,
-                                bottom: 10
-                              },
-                              tooltip: {
-                                trigger: 'axis',
-                                axisPointer: { type: 'cross' }
-                              },
-                              // 预览区域同样不再手写 grid，保持与 ChartFactory 一致的居中和留白策略
-                            }}
-                            data={previewData}
-                            style={{ height: '400px', width: '100%' }}
-                          />
-                        </div>
-                      ) : (
-                        <div style={{ 
-                          height: '400px', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          backgroundColor: '#f5f5f5',
-                          border: '2px dashed #d9d9d9',
-                          borderRadius: '8px'
-                        }}>
-                          <div style={{ textAlign: 'center', padding: '20px' }}>
-                            {previewData.length > 0 ? (
-                              <p style={{ color: '#999' }}>配置完成后点击"刷新预览"按钮</p>
+
+                    <Divider style={{ margin: '16px 0' }} />
+
+                    {/* ── 二、字段映射 ──────────────────────────────── */}
+                    <div style={{ marginBottom: 20 }}>
+                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>字段映射</p>
+                      <Row gutter={12}>
+                        <Col span={12}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴字段</label>
+                            {getChartFieldConfig(chartData.chart_type).xFieldRequired ? (
+                              <Select
+                                value={chartData.visualization_settings.x_field}
+                                onChange={(value) => handleFieldMappingChange('x_field', value)}
+                                style={{ width: '100%' }}
+                                placeholder="选择X轴字段"
+                                disabled={availableFields.length === 0}
+                              >
+                                {availableFields.map(field => (
+                                  <Option key={field} value={field}>{field}</Option>
+                                ))}
+                              </Select>
                             ) : (
-                              <p style={{ color: '#999' }}>请先执行查询加载数据</p>
+                              <div style={{ color: '#999', fontStyle: 'italic', fontSize: 13 }}>无需X轴字段</div>
                             )}
                           </div>
-                        </div>
+                        </Col>
+                        <Col span={12}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴字段</label>
+                            {getChartFieldConfig(chartData.chart_type).showMultipleY ? (
+                              <Select
+                                mode="multiple"
+                                value={chartData.visualization_settings.y_fields}
+                                onChange={(values) => {
+                                  const limitedValues = values.slice(0, getChartFieldConfig(chartData.chart_type).yFieldsMax);
+                                  handleFieldMappingChange('y_fields', limitedValues);
+                                }}
+                                style={{ width: '100%' }}
+                                placeholder={`选择${getChartFieldConfig(chartData.chart_type).yFieldsRequired}个以上字段`}
+                                disabled={availableFields.length === 0}
+                                maxTagCount={3}
+                              >
+                                {availableFields.map(field => (
+                                  <Option key={field} value={field}>{field}</Option>
+                                ))}
+                              </Select>
+                            ) : (
+                              <Select
+                                value={chartData.visualization_settings.y_fields?.[0] || undefined}
+                                onChange={(value) => handleFieldMappingChange('y_fields', value ? [value] : [])}
+                                style={{ width: '100%' }}
+                                placeholder="选择1个字段"
+                                disabled={availableFields.length === 0}
+                              >
+                                {availableFields.map(field => (
+                                  <Option key={field} value={field}>{field}</Option>
+                                ))}
+                              </Select>
+                            )}
+                            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+                              {getChartFieldConfig(chartData.chart_type).description}
+                            </div>
+                          </div>
+                        </Col>
+                      </Row>
+
+                      {/* bar_line 双Y轴特殊配置 */}
+                      {chartData.chart_type === 'bar_line' && (
+                        <Row gutter={12} style={{ marginTop: 12 }}>
+                          <Col span={12}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>
+                              折线指标（走右侧Y轴）
+                            </label>
+                            <Select
+                              mode="multiple"
+                              allowClear
+                              value={chartData.visualization_settings.line_y_fields || []}
+                              onChange={(vals) => {
+                                const yf = chartData.visualization_settings.y_fields || [];
+                                const ok = (vals || []).filter((v: string) => yf.includes(v));
+                                handleFieldMappingChange('line_y_fields', ok);
+                              }}
+                              style={{ width: '100%' }}
+                              placeholder="不选则默认最后2个Y字段为折线"
+                              disabled={(chartData.visualization_settings.y_fields || []).length === 0}
+                            >
+                              {(chartData.visualization_settings.y_fields || []).map((field: string) => (
+                                <Option key={field} value={field}>{field}</Option>
+                              ))}
+                            </Select>
+                          </Col>
+                          <Col span={12}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>右侧Y轴名称</label>
+                            <Input
+                              value={chartData.visualization_settings.y_axis_right_title || ''}
+                              onChange={(e) => handleFieldMappingChange('y_axis_right_title', e.target.value)}
+                              placeholder="例如：转化率、占比"
+                            />
+                          </Col>
+                        </Row>
                       )}
+                    </div>
+
+                    <Divider style={{ margin: '16px 0' }} />
+
+                    {/* ── 三、数据处理 & 样式 ────────────────────────── */}
+                    <div style={{ marginBottom: 20 }}>
+                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>数据处理</p>
+                      <Row gutter={12}>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴统计方式</label>
+                            <Select
+                              value={chartData.visualization_settings.y_agg_method || 'sum'}
+                              onChange={(value) => handleFieldMappingChange('y_agg_method', value)}
+                              disabled={
+                                (() => {
+                                  const vs = chartData.visualization_settings || {};
+                                  return typeof vs.x_group_by_enabled === 'boolean'
+                                    ? !vs.x_group_by_enabled
+                                    : getChartFieldConfig(chartData.chart_type).defaultXGroupBy === false;
+                                })()
+                              }
+                              style={{ width: '100%' }}
+                            >
+                              <Option value="count">计数</Option>
+                              <Option value="sum">求和</Option>
+                              <Option value="avg">平均数</Option>
+                              <Option value="mode">众数</Option>
+                              <Option value="median">中位数</Option>
+                            </Select>
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序方式</label>
+                            <Select
+                              value={chartData.visualization_settings.sort_by}
+                              onChange={(value) => handleFieldMappingChange('sort_by', value)}
+                              style={{ width: '100%' }}
+                              placeholder="选择排序方式"
+                            >
+                              <Option value="x">按X轴排序</Option>
+                              <Option value="y">按Y轴排序</Option>
+                            </Select>
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>排序顺序</label>
+                            <Select
+                              value={chartData.visualization_settings.sort_order}
+                              onChange={(value) => handleFieldMappingChange('sort_order', value)}
+                              style={{ width: '100%' }}
+                            >
+                              <Option value="asc">升序</Option>
+                              <Option value="desc">降序</Option>
+                            </Select>
+                          </div>
+                        </Col>
+                      </Row>
+                      <Row gutter={12} style={{ marginTop: 8 }}>
+                        <Col span={8}>
+                          <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
+                            <span style={{ color: '#666', fontSize: 13 }}>按X轴聚合</span>
+                            <Switch
+                              checked={
+                                typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
+                                  ? chartData.visualization_settings.x_group_by_enabled
+                                  : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false
+                              }
+                              onChange={(checked) => handleFieldMappingChange('x_group_by_enabled', checked)}
+                              style={{ marginLeft: 8 }}
+                            />
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+
+                    <Divider style={{ margin: '16px 0' }} />
+
+                    {/* ── 四、轴标题 & 图例 ─────────────────────────── */}
+                    <div style={{ marginBottom: 20 }}>
+                      <p style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>显示样式</p>
+                      <Row gutter={12}>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>X轴标题</label>
+                            <Input
+                              value={chartData.visualization_settings.x_axis_title}
+                              onChange={(e) => handleFieldMappingChange('x_axis_title', e.target.value)}
+                              placeholder="X轴标题"
+                            />
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>Y轴标题</label>
+                            <Input
+                              value={chartData.visualization_settings.y_axis_title}
+                              onChange={(e) => handleFieldMappingChange('y_axis_title', e.target.value)}
+                              placeholder="Y轴标题"
+                            />
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={{ display: 'block', marginBottom: 4, color: '#666', fontSize: 13 }}>显示图例</label>
+                            <div style={{ display: 'flex', alignItems: 'center', height: 32 }}>
+                              <Switch
+                                checked={chartData.visualization_settings.show_legend !== false}
+                                onChange={(checked) => handleFieldMappingChange('show_legend', checked)}
+                              />
+                            </div>
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+
+                    <Divider style={{ margin: '16px 0' }} />
+
+                    {/* ── 五、图表预览 ──────────────────────────────── */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <p style={{ fontWeight: 600, margin: 0, color: '#333' }}>图表预览</p>
+                        <Button
+                          type="primary"
+                          size="small"
+                          onClick={() => setPreviewData(prev => [...prev])}
+                          icon={<PlayCircleOutlined />}
+                        >
+                          刷新预览
+                        </Button>
+                      </div>
+                      <div style={{
+                        border: '1px solid #e8e8e8',
+                        borderRadius: 8,
+                        padding: 16,
+                        background: '#fff'
+                      }}>
+                        {previewData.length > 0 &&
+                         chartData.visualization_settings.x_field &&
+                         chartData.visualization_settings.y_fields?.length > 0 ? (
+                          <div style={{ height: 380 }}>
+                            <ChartFactory
+                              config={{
+                                type: chartData.chart_type,
+                                title: '',
+                                xField: chartData.visualization_settings.x_field,
+                                yFields: chartData.visualization_settings.y_fields || [],
+                                line_y_fields: chartData.visualization_settings.line_y_fields,
+                                y_axis_right_title: chartData.visualization_settings.y_axis_right_title,
+                                y_agg_method: chartData.visualization_settings.y_agg_method,
+                                x_group_by_enabled:
+                                  typeof chartData.visualization_settings.x_group_by_enabled === 'boolean'
+                                    ? chartData.visualization_settings.x_group_by_enabled
+                                    : getChartFieldConfig(chartData.chart_type).defaultXGroupBy !== false,
+                                sort_by: chartData.visualization_settings.sort_by,
+                                sort_order: chartData.visualization_settings.sort_order,
+                                series: [],
+                                xAxis: {
+                                  name: chartData.visualization_settings.x_axis_title || 'X轴'
+                                },
+                                yAxis: {
+                                  name: chartData.visualization_settings.y_axis_title || 'Y轴'
+                                },
+                                legend: {
+                                  show: chartData.visualization_settings.show_legend !== false,
+                                  bottom: 10
+                                },
+                                tooltip: {
+                                  trigger: 'axis',
+                                  axisPointer: { type: 'cross' }
+                                },
+                              }}
+                              data={previewData}
+                              style={{ height: '380px', width: '100%' }}
+                            />
+                          </div>
+                        ) : (
+                          <div style={{
+                            height: 380,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#fafafa',
+                            border: '2px dashed #d9d9d9',
+                            borderRadius: 8
+                          }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <p style={{ color: '#bbb', fontSize: 14 }}>
+                                {previewData.length > 0 ? '配置完成后点击"刷新预览"' : '请先执行查询加载数据'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 </Col>
