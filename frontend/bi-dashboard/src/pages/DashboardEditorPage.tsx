@@ -1,5 +1,5 @@
 // src/pages/DashboardEditorPage.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import dayjs from 'dayjs';
 import {
   Layout,
@@ -313,15 +313,112 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   // 筛选器下拉选项（按筛选器ID索引）
   const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
 
-  // 用于防抖保存布局变化
+  // 用于清理拖拽/缩放中途可能残留的定时器
   const layoutUpdateTimerRef = useRef<number | null>(null);
-  const pendingLayoutRef = useRef<any[] | null>(null);
   const widgetLayoutRef = useRef<Map<string, { card_row: number; card_col: number; size_x: number; size_y: number }>>(new Map());
   const dashboardRef = useRef<Dashboard | null>(null);
   const widgetsRef = useRef<DashboardTitleWidget[]>([]);
   useEffect(() => {
     widgetsRef.current = widgets;
   }, [widgets]);
+
+  // 用 useMemo 稳定 layout 数组引用，避免父组件重渲染触发 react-grid-layout 的 onLayoutChange
+  const mergedLayout = useMemo(() => {
+    const cards = dashboard?.cards || [];
+    const widgetList = widgets;
+    return [
+      ...cards.map(card => ({
+        i: card.id.toString(),
+        x: Number.isFinite(card.card_col) ? card.card_col : 0,
+        y: Number.isFinite(card.card_row) ? card.card_row : 0,
+        w: Math.max(Number.isFinite(card.size_x) ? card.size_x : MIN_CARD_COLS, MIN_CARD_COLS),
+        h: Math.max(Number.isFinite(card.size_y) ? card.size_y : MIN_CARD_ROWS, MIN_CARD_ROWS),
+        minW: MIN_CARD_COLS,
+        minH: MIN_CARD_ROWS,
+      })),
+      ...widgetList.map(w => {
+        const refEntry = widgetLayoutRef.current.get(w.id);
+        return {
+          i: w.id,
+          x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
+          y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
+          w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
+          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
+          minW: 2,
+          minH: 1,
+        };
+      }),
+    ];
+  }, [dashboard?.cards, widgets]);
+
+  // 提交布局变化到后端（只由 onDragStop / onResizeStop 调用，onLayoutChange 只做内部同步）
+  const commitLayoutChanges = React.useCallback(async (layoutItems: any[]) => {
+    const latestDashboard = dashboardRef.current;
+    if (!latestDashboard) return;
+
+    const cardMap = new Map(latestDashboard.cards.map(card => [card.id.toString(), card]));
+    const cardChanges: Array<{ cardId: number; updates: any }> = [];
+    const latestWidgets = widgetsRef.current;
+    let widgetLayoutDirty = false;
+
+    layoutItems.forEach((item: any) => {
+      const idStr = String(item.i);
+      if (idStr === '__dropping-elem__') return;
+
+      if (idStr.startsWith('title_')) {
+        const nx = Math.round(item.x);
+        const ny = Math.round(item.y);
+        const nw = Math.round(item.w);
+        const nh = Math.round(item.h);
+        widgetLayoutRef.current.set(idStr, { card_row: ny, card_col: nx, size_x: nw, size_y: nh });
+        const w = latestWidgets.find(ww => ww.id === idStr);
+        if (w && (w.card_row !== ny || w.card_col !== nx || w.size_x !== nw || w.size_y !== nh)) {
+          widgetLayoutDirty = true;
+        }
+      } else if (/^\d+$/.test(idStr)) {
+        const card = cardMap.get(idStr);
+        if (!card) return;
+        const updates: any = {};
+        if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
+        if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
+        if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
+        if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
+        if (Object.keys(updates).length > 0) {
+          cardChanges.push({ cardId: card.id, updates });
+        }
+      }
+    });
+
+    try {
+      if (cardChanges.length > 0) {
+        const results = await Promise.allSettled(
+          cardChanges.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
+        );
+        const hasRejected = results.some(r => r.status === 'rejected');
+        if (hasRejected) message.error('部分卡片更新失败，请稍后重试');
+        const updatedCards = latestDashboard.cards.map(card => {
+          const change = cardChanges.find(c => c.cardId === card.id);
+          return change ? { ...card, ...change.updates } : card;
+        });
+        const updatedDashboard = { ...latestDashboard, cards: updatedCards };
+        setDashboard(updatedDashboard);
+        dashboardRef.current = updatedDashboard;
+      }
+
+      if (widgetLayoutDirty && latestWidgets.length > 0) {
+        const updatedWidgets = latestWidgets.map(w => {
+          const ref = widgetLayoutRef.current.get(w.id);
+          if (!ref) return w;
+          return { ...w, card_row: ref.card_row, card_col: ref.card_col, size_x: ref.size_x, size_y: ref.size_y };
+        });
+        await persistWidgets(updatedWidgets);
+        setWidgets(updatedWidgets);
+      }
+    } catch (e: any) {
+      console.error('保存布局失败:', e);
+      message.error(e?.message || '保存布局失败');
+    }
+  }, []); // 依赖为空，闭包捕获的 ref 都是稳定的
 
   const isEditMode = mode === 'edit';
 
@@ -1008,13 +1105,26 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const [error, setError] = useState<string | null>(null);
     const loggedRef = useRef<string | null>(null);
 
+    // 用 ref 追踪请求取消标记（不受 effect 重跑影响）
+    const cancelledRef = useRef(false);
+    // 用 ref 追踪当前正在请求的 chartId，避免图表切换时旧数据覆盖新数据
+    const activeChartIdRef = useRef<number | null>(null);
+    // 用 ref 存储最新筛选值（只读，不触发 effect）
+    const filterValuesRef = useRef<Record<string, any>>(filterValues);
+    const allFiltersRef = useRef<DashboardFilter[]>(allFilters);
+    filterValuesRef.current = filterValues;
+    allFiltersRef.current = allFilters;
+
     useEffect(() => {
-      if (!card.chart?.id) {
+      const chartId = card.chart?.id;
+      if (!chartId) {
         setError('图表数据缺失');
+        setChartData([]);
         return;
       }
 
-      let cancelled = false;
+      cancelledRef.current = false;
+      activeChartIdRef.current = chartId;
 
       const loadData = async () => {
         setDataLoading(true);
@@ -1025,23 +1135,20 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           const filteredFilterValues: Record<string, any> = {};
 
           if (!isMetricChart) {
-            allFilters.forEach(filter => {
-              const filterValue = filterValues[filter.id];
-
-              // 跳过未设置的筛选器
+            allFiltersRef.current.forEach(filter => {
+              const filterValue = filterValuesRef.current[filter.id];
               if (filterValue === undefined || filterValue === null) return;
               if (filterValue === '') return;
               if (Array.isArray(filterValue) && filterValue.length === 0) return;
-
-              // 使用 filterId_fieldName 格式作为key，避免相同字段名的筛选器互相覆盖
               const paramKey = `${filter.id}_${filter.field_name}`;
               filteredFilterValues[paramKey] = filterValue;
             });
           }
 
-          const data = await ChartService.executeChartQuery(card.chart!.id, filteredFilterValues);
+          const data = await ChartService.executeChartQuery(chartId, filteredFilterValues);
 
-          if (cancelled) return;
+          if (cancelledRef.current) return;
+          if (activeChartIdRef.current !== chartId) return;
 
           if (!Array.isArray(data)) {
             throw new Error('返回的数据格式不正确');
@@ -1053,28 +1160,26 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             return;
           }
 
-          // 验证X轴字段是否存在
-          const xField = card.chart!.visualization_settings?.x_field || '';
-          if (xField && data.length > 0 && !Object.keys(data[0] || {}).includes(xField)) {
-            console.warn(`X轴字段 '${xField}' 在数据中不存在，使用第一个字段`);
-          }
-
           setChartData(data);
         } catch (err: any) {
-          if (cancelled) return;
+          if (cancelledRef.current) return;
+          if (activeChartIdRef.current !== chartId) return;
           console.error(`加载图表数据失败:`, err);
           setError(err.message || '数据加载失败');
         } finally {
-          if (!cancelled) setDataLoading(false);
+          if (!cancelledRef.current && activeChartIdRef.current === chartId) {
+            setDataLoading(false);
+          }
         }
       };
 
       loadData();
 
       return () => {
-        cancelled = true;
+        cancelledRef.current = true;
       };
-    }, [card.chart?.id, filterValues, allFilters]);
+      // 关键：仅依赖 card.chart?.id，筛选值通过 ref 读取，不再触发重新请求
+    }, [card.chart?.id]);
 
     if (!card.chart) {
       return (
@@ -1667,121 +1772,23 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 droppingItem={{ i: '__dropping-elem__', w: MIN_CARD_COLS, h: MIN_CARD_ROWS }}
                 isDraggable={true}
                 isResizable={true}
-                layout={[
-                  ...(dashboard.cards || []).map(card => ({
-                    i: card.id.toString(),
-                    x: Number.isFinite(card.card_col) ? card.card_col : 0,
-                    y: Number.isFinite(card.card_row) ? card.card_row : 0,
-                    w: Math.max(Number.isFinite(card.size_x) ? card.size_x : MIN_CARD_COLS, MIN_CARD_COLS),
-                    h: Math.max(Number.isFinite(card.size_y) ? card.size_y : MIN_CARD_ROWS, MIN_CARD_ROWS),
-                    minW: MIN_CARD_COLS,
-                    minH: MIN_CARD_ROWS,
-                  })),
-                  ...widgets.map(w => {
-                    const refEntry = widgetLayoutRef.current.get(w.id);
-                    return {
-                      i: w.id,
-                      x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
-                      y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
-                      w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
-                      h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
-                      minW: 2,
-                      minH: 1,
-                    };
-                  }),
-                ]}
-                onLayoutChange={(layout: any[]) => {
-                  pendingLayoutRef.current = layout;
+                layout={mergedLayout}
+                // onLayoutChange 只做内部同步，不触发任何状态更新，避免拖拽期间图表组件重新请求
+                onLayoutChange={() => {}}
+                // 拖拽/缩放结束时一次性提交变化到后端并更新本地状态
+                onDragStop={(layout: GridLayoutItem[]) => {
                   if (layoutUpdateTimerRef.current) {
                     window.clearTimeout(layoutUpdateTimerRef.current);
+                    layoutUpdateTimerRef.current = null;
                   }
-
-                  layoutUpdateTimerRef.current = window.setTimeout(async () => {
-                    const latestDashboard = dashboardRef.current;
-                    const latestLayout = pendingLayoutRef.current;
-                    if (!latestDashboard || !latestLayout) return;
-
-                    const cardMap = new Map(latestDashboard.cards.map(card => [card.id.toString(), card]));
-                    const cardChanges: Array<{ cardId: number; updates: any }> = [];
-                    const latestWidgets = widgetsRef.current;
-                    let widgetLayoutDirty = false;
-
-                    latestLayout.forEach((item: any) => {
-                      const idStr = String(item.i);
-                      if (idStr === '__dropping-elem__') return;
-
-                      // 标题组件 id 形如 title_xxx；图表卡片 id 为纯数字（与 react-grid-layout 传入的 layout 一致，不依赖自定义字段 t）
-                      if (idStr.startsWith('title_')) {
-                        const nx = Math.round(item.x);
-                        const ny = Math.round(item.y);
-                        const nw = Math.round(item.w);
-                        const nh = Math.round(item.h);
-                        widgetLayoutRef.current.set(idStr, {
-                          card_row: ny,
-                          card_col: nx,
-                          size_x: nw,
-                          size_y: nh,
-                        });
-                        const w = latestWidgets.find(ww => ww.id === idStr);
-                        if (
-                          w &&
-                          (w.card_row !== ny || w.card_col !== nx || w.size_x !== nw || w.size_y !== nh)
-                        ) {
-                          widgetLayoutDirty = true;
-                        }
-                      } else if (/^\d+$/.test(idStr)) {
-                        const card = cardMap.get(idStr);
-                        if (!card) return;
-                        const updates: any = {};
-                        if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
-                        if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
-                        if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
-                        if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
-                        if (Object.keys(updates).length > 0) {
-                          cardChanges.push({ cardId: card.id, updates });
-                        }
-                      }
-                    });
-
-                    try {
-                      if (cardChanges.length > 0) {
-                        const results = await Promise.allSettled(
-                          cardChanges.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
-                        );
-                        const hasRejected = results.some(r => r.status === 'rejected');
-                        if (hasRejected) {
-                          message.error('部分卡片更新失败，请稍后重试');
-                        }
-                        const updatedCards = latestDashboard.cards.map(card => {
-                          const change = cardChanges.find(c => c.cardId === card.id);
-                          return change ? { ...card, ...change.updates } : card;
-                        });
-                        const updatedDashboard = { ...latestDashboard, cards: updatedCards };
-                        setDashboard(updatedDashboard);
-                        dashboardRef.current = updatedDashboard;
-                      }
-
-                      // 仅在实际移动/缩放标题组件时持久化，避免每次 onLayoutChange 都 updateDashboard 导致整页重渲染死循环
-                      if (widgetLayoutDirty && latestWidgets.length > 0) {
-                        const updatedWidgets = latestWidgets.map(w => {
-                          const ref = widgetLayoutRef.current.get(w.id);
-                          if (!ref) return w;
-                          return {
-                            ...w,
-                            card_row: ref.card_row,
-                            card_col: ref.card_col,
-                            size_x: ref.size_x,
-                            size_y: ref.size_y,
-                          };
-                        });
-                        await persistWidgets(updatedWidgets);
-                        setWidgets(updatedWidgets);
-                      }
-                    } catch (e: any) {
-                      console.error('保存布局失败:', e);
-                      message.error(e?.message || '保存布局失败');
-                    }
-                  }, 250);
+                  commitLayoutChanges(layout);
+                }}
+                onResizeStop={(layout: GridLayoutItem[]) => {
+                  if (layoutUpdateTimerRef.current) {
+                    window.clearTimeout(layoutUpdateTimerRef.current);
+                    layoutUpdateTimerRef.current = null;
+                  }
+                  commitLayoutChanges(layout);
                 }}
                 onDrop={(layout: GridLayoutItem[], item: GridLayoutItem, e: DragEvent) => {
                   try {
