@@ -1192,11 +1192,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
 
                           <div style={{ margin: '16px 0 8px', borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>数据筛选（固定条件）</span>
+                            <span style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>保存后指标值不随仪表盘筛选器变化</span>
                           </div>
-                          <p style={{ fontSize: 12, color: '#999', marginBottom: 10 }}>
-                            使用左侧竖线表示分组层级：根分组与各子分组可分别选择组内为「且」或「或」，可任意嵌套（例如 (A 或 B) 且 (C 或 D)）。
-                            保存后指标值不随仪表盘筛选器变化；未填字段的条件在计算时视为不限制。
-                          </p>
                           <MetricFilterExprEditor
                             root={getMetricFilterExprForUi()}
                             onChange={commitMetricFilterExpr}

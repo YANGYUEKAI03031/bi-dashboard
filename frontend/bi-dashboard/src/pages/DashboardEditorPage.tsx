@@ -28,6 +28,8 @@ import {
   EditOutlined,
   FilterOutlined,
   PlusOutlined,
+  CalendarOutlined,
+  DownCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardService } from '../services/dashboardService';
@@ -1669,31 +1671,81 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             <div className="dashboard-editor-grid">
               {/* 筛选器渲染区域 */}
               {filters.length > 0 && (
-                <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
-                    {filters.map(filter => {
-                      // 筛选器组件渲染
+                <div style={{
+                  marginBottom: 16,
+                  padding: '16px 20px',
+                  background: '#fff',
+                  borderRadius: 8,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
+                  border: '1px solid #f0f0f0',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>筛选条件</span>
+                    {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
+                      <a
+                        onClick={() => setFilterValues({})}
+                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        重置全部
+                      </a>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                    {filters.map((filter, index) => {
+                      const hasValue = filterValues[filter.id] !== undefined && filterValues[filter.id] !== null;
                       const handleFilterChange = (value: any) => {
-                        console.log('[FilterDebug] handleFilterChange called:', filter.id, filter.field_name, 'value:', value);
-                        console.log('[FilterDebug] filterValues before:', filterValues);
-                        setFilterValues(prev => {
-                          const newValues = {
-                            ...prev,
-                            [filter.id]: value,
-                          };
-                          console.log('[FilterDebug] filterValues after:', newValues);
-                          return newValues;
-                        });
+                        setFilterValues(prev => ({ ...prev, [filter.id]: value }));
+                      };
+
+                      const getFilterIcon = () => {
+                        switch (filter.filter_type) {
+                          case 'date_range':
+                          case 'date_relative':
+                            return <CalendarOutlined style={{ color: '#fa8c16' }} />;
+                          case 'select':
+                          case 'multi_select':
+                            return <DownCircleOutlined style={{ color: '#1890ff' }} />;
+                          case 'input':
+                            return <EditOutlined style={{ color: '#52c41a' }} />;
+                          default:
+                            return <FilterOutlined style={{ color: '#722ed1' }} />;
+                        }
+                      };
+
+                      const getControlWidth = () => {
+                        switch (filter.filter_type) {
+                          case 'date_range': return 260;
+                          case 'select':
+                          case 'multi_select':
+                          case 'input': return 160;
+                          default: return 150;
+                        }
                       };
 
                       return (
-                        <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <label style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>
+                        <div
+                          key={filter.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 12px',
+                            background: hasValue ? '#f6ffed' : '#fafafa',
+                            borderRadius: 6,
+                            border: `1px solid ${hasValue ? '#b7eb8f' : '#e8e8e8'}`,
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          {getFilterIcon()}
+                          <span style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>
                             {filter.field_label || filter.name}
-                          </label>
+                          </span>
+                          <span style={{ color: '#d9d9d9', fontSize: 12 }}>:</span>
                           {filter.filter_type === 'date_range' && (
                             <DatePicker.RangePicker
-                              style={{ width: 240 }}
+                              size="small"
+                              style={{ width: getControlWidth() }}
                               value={filterValues[filter.id] ? [
                                 filterValues[filter.id].start ? dayjs(filterValues[filter.id].start) : null,
                                 filterValues[filter.id].end ? dayjs(filterValues[filter.id].end) : null
@@ -1712,8 +1764,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           )}
                           {filter.filter_type === 'date_relative' && (
                             <Select
-                              style={{ width: 150 }}
-                              placeholder="选择时间范围"
+                              size="small"
+                              style={{ width: 140 }}
+                              placeholder="时间范围"
                               value={filterValues[filter.id]}
                               options={[
                                 { label: '今天', value: 'today' },
@@ -1728,7 +1781,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           )}
                           {filter.filter_type === 'select' && (
                             <Select
-                              style={{ width: 150 }}
+                              size="small"
+                              style={{ width: getControlWidth() }}
                               placeholder="请选择"
                               allowClear
                               options={filterSelectOptions[filter.id] || []}
@@ -1739,10 +1793,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           )}
                           {filter.filter_type === 'multi_select' && (
                             <Select
-                              style={{ width: 150 }}
+                              size="small"
+                              style={{ width: getControlWidth() }}
                               mode="multiple"
                               placeholder="请选择"
                               allowClear
+                              maxTagCount={2}
                               options={filterSelectOptions[filter.id] || []}
                               loading={filterOptionsLoading[filter.id]}
                               value={filterValues[filter.id]}
@@ -1751,7 +1807,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           )}
                           {filter.filter_type === 'input' && (
                             <Input
-                              style={{ width: 150 }}
+                              size="small"
+                              style={{ width: getControlWidth() }}
                               placeholder="请输入"
                               value={filterValues[filter.id]}
                               onChange={(e) => handleFilterChange(e.target.value)}
