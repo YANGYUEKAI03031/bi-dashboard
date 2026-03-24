@@ -245,6 +245,39 @@ export function addSubgroupToMetricExprGroup(root: MetricFilterExprNode, groupId
   };
 }
 
+/** 在指定父分组中，将新节点插到某子节点之后（用于「条件后添加分组」等） */
+export function insertMetricExprChildAfter(
+  root: MetricFilterExprNode,
+  parentGroupId: string,
+  afterChildId: string,
+  newChild: MetricFilterExprNode,
+): MetricFilterExprNode {
+  if (root.type !== 'group') return root;
+  if (root.id === parentGroupId) {
+    const idx = root.children.findIndex((c) => c.id === afterChildId);
+    if (idx < 0) return root;
+    const next = [...root.children];
+    next.splice(idx + 1, 0, newChild);
+    return { ...root, children: next };
+  }
+  return {
+    ...root,
+    children: root.children.map((c) =>
+      c.type === 'group' ? insertMetricExprChildAfter(c, parentGroupId, afterChildId, newChild) : c,
+    ),
+  };
+}
+
+/** 新建空子分组（组内默认「或」，内含一条空条件） */
+export function newEmptyMetricSubgroup(): MetricFilterExprNode {
+  return {
+    type: 'group',
+    id: newMetricExprId(),
+    logic: 'or',
+    children: [emptyMetricFilterRuleNode()],
+  };
+}
+
 export const METRIC_FILTER_OP_OPTIONS: { value: MetricFilterOp; label: string }[] = [
   { value: 'eq', label: '等于' },
   { value: 'neq', label: '不等于' },
