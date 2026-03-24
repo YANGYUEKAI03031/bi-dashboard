@@ -329,6 +329,7 @@ const ChartCardComponent: React.FC<{
               typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
             metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
             metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
+            metric_filter_expr: viz.metric_filter_expr,
             legend: {
               show: viz.show_legend !== false,
               bottom: 10,

@@ -83,6 +83,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       metric_decimals: typeof vs.metric_decimals === 'number' ? vs.metric_decimals : 2,
       metric_label: vs.metric_label != null ? String(vs.metric_label) : '',
       metric_filters: Array.isArray(vs.metric_filters) ? vs.metric_filters : [],
+      metric_filter_expr: vs.metric_filter_expr,
       // 预览不再手写 grid，交给 ChartFactory 统一控制网格与居中布局
       series: [{
         data: previewData.map(item => item.value1),

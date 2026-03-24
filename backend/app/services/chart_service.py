@@ -144,11 +144,85 @@ def _quote_sql_identifier(name: str) -> str:
     return f"`{col}`"
 
 
+def _metric_filter_rule_dict_sql(item: Dict[str, Any]) -> Optional[str]:
+    """单条指标筛选规则 -> SQL 片段；无有效字段时返回 None。"""
+    field = str(item.get("field") or "").strip()
+    if not field:
+        return None
+    op = str(item.get("op") or "eq").strip().lower()
+    val = item.get("value")
+    val_str = "" if val is None else str(val)
+    qf = _quote_sql_identifier(field)
+
+    if op in ("is_null", "isnull"):
+        return f"({qf} IS NULL OR CAST({qf} AS CHAR) = '')"
+    if op in ("is_not_null", "isnotnull"):
+        return f"({qf} IS NOT NULL AND CAST({qf} AS CHAR) <> '')"
+
+    esc = _sql_escape_sql_string(val_str)
+
+    if op == "eq":
+        return f"{qf} = '{esc}'"
+    if op == "neq":
+        return f"{qf} <> '{esc}'"
+    if op == "gt":
+        return f"{qf} > '{esc}'"
+    if op == "gte":
+        return f"{qf} >= '{esc}'"
+    if op == "lt":
+        return f"{qf} < '{esc}'"
+    if op == "lte":
+        return f"{qf} <= '{esc}'"
+    if op == "contains":
+        return f"LOCATE('{esc}', CAST({qf} AS CHAR)) > 0"
+    if op == "not_contains":
+        return f"(LOCATE('{esc}', CAST({qf} AS CHAR)) = 0 OR {qf} IS NULL)"
+    if op == "starts_with":
+        return (
+            f"(CHAR_LENGTH('{esc}') = 0 OR LEFT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
+        )
+    if op == "ends_with":
+        return (
+            f"(CHAR_LENGTH('{esc}') = 0 OR RIGHT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
+        )
+    return f"{qf} = '{esc}'"
+
+
+def _metric_filter_expr_sql(node: Any) -> Optional[str]:
+    """递归解析 metric_filter_expr（type: group | rule）。"""
+    if not isinstance(node, dict):
+        return None
+    ntype = str(node.get("type") or "").lower()
+    if ntype == "rule":
+        return _metric_filter_rule_dict_sql(node)
+    if ntype == "group":
+        logic = str(node.get("logic") or "and").lower()
+        joiner = " OR " if logic == "or" else " AND "
+        children = node.get("children")
+        if not isinstance(children, list):
+            return None
+        parts: List[str] = []
+        for ch in children:
+            frag = _metric_filter_expr_sql(ch)
+            if frag:
+                parts.append(f"({frag})")
+        if not parts:
+            return None
+        return joiner.join(parts)
+    return None
+
+
 def _metric_filter_sql_clauses(viz: Dict[str, Any]) -> List[str]:
     """
-    指标图在 visualization_settings.metric_filters 中配置的固定条件（AND），拼入 WHERE。
-    每项: { "field": "列名", "op": "eq|neq|...|is_null|is_not_null", "value": "..." }
+    指标图固定条件拼入 WHERE。
+    优先使用 visualization_settings.metric_filter_expr（嵌套 且/或）；
+    否则使用 metric_filters 平铺列表（全部 AND）。
     """
+    expr = viz.get("metric_filter_expr")
+    if isinstance(expr, dict) and str(expr.get("type") or "").lower() == "group":
+        combined = _metric_filter_expr_sql(expr)
+        return [combined] if combined else []
+
     raw = viz.get("metric_filters")
     if not isinstance(raw, list):
         return []
@@ -156,49 +230,9 @@ def _metric_filter_sql_clauses(viz: Dict[str, Any]) -> List[str]:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        field = str(item.get("field") or "").strip()
-        if not field:
-            continue
-        op = str(item.get("op") or "eq").strip().lower()
-        val = item.get("value")
-        val_str = "" if val is None else str(val)
-        qf = _quote_sql_identifier(field)
-
-        if op in ("is_null", "isnull"):
-            clauses.append(f"({qf} IS NULL OR CAST({qf} AS CHAR) = '')")
-            continue
-        if op in ("is_not_null", "isnotnull"):
-            clauses.append(f"({qf} IS NOT NULL AND CAST({qf} AS CHAR) <> '')")
-            continue
-
-        esc = _sql_escape_sql_string(val_str)
-
-        if op == "eq":
-            clauses.append(f"{qf} = '{esc}'")
-        elif op == "neq":
-            clauses.append(f"{qf} <> '{esc}'")
-        elif op == "gt":
-            clauses.append(f"{qf} > '{esc}'")
-        elif op == "gte":
-            clauses.append(f"{qf} >= '{esc}'")
-        elif op == "lt":
-            clauses.append(f"{qf} < '{esc}'")
-        elif op == "lte":
-            clauses.append(f"{qf} <= '{esc}'")
-        elif op == "contains":
-            clauses.append(f"LOCATE('{esc}', CAST({qf} AS CHAR)) > 0")
-        elif op == "not_contains":
-            clauses.append(f"(LOCATE('{esc}', CAST({qf} AS CHAR)) = 0 OR {qf} IS NULL)")
-        elif op == "starts_with":
-            clauses.append(
-                f"(CHAR_LENGTH('{esc}') = 0 OR LEFT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
-            )
-        elif op == "ends_with":
-            clauses.append(
-                f"(CHAR_LENGTH('{esc}') = 0 OR RIGHT(CAST({qf} AS CHAR), CHAR_LENGTH('{esc}')) = '{esc}')"
-            )
-        else:
-            clauses.append(f"{qf} = '{esc}'")
+        frag = _metric_filter_rule_dict_sql(item)
+        if frag:
+            clauses.append(frag)
     return clauses
 
 

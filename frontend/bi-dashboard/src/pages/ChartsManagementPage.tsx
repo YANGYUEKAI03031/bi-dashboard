@@ -903,6 +903,7 @@ export const ChartsManagementPage: React.FC = () => {
                           metric_filters: Array.isArray((editingChart.visualization_settings as any)?.metric_filters)
                             ? (editingChart.visualization_settings as any).metric_filters
                             : [],
+                          metric_filter_expr: (editingChart.visualization_settings as any)?.metric_filter_expr,
                           xAxis: {
                             name: editingChart.visualization_settings?.x_axis_title || 'X轴'
                           },

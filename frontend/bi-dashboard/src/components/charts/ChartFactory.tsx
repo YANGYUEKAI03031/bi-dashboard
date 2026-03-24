@@ -42,9 +42,11 @@ import { CanvasRenderer } from 'echarts/renderers';
 import ReactECharts from 'echarts-for-react';
 import {
   applyMetricFilters,
+  applyMetricFiltersExpr,
   computeMetricValue,
   formatMetricNumber,
   getEffectiveMetricFilterRules,
+  parseMetricFilterExpr,
   type MetricFilterRule,
 } from '../../utils/chartMetric';
 
@@ -123,6 +125,8 @@ interface ChartConfig {
   metric_filter_value?: string;
   /** 指标卡：构建器内固定筛选条件（AND），不随仪表盘筛选器变化 */
   metric_filters?: MetricFilterRule[];
+  /** 指标卡：筛选布尔表达式树（优先于 metric_filters） */
+  metric_filter_expr?: unknown;
   metric_unit?: string;
   metric_decimals?: number;
   metric_label?: string;
@@ -1792,14 +1796,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const valueField = (config.yFields && config.yFields[0]) || '';
     const decimals =
       typeof config.metric_decimals === 'number' ? config.metric_decimals : 2;
+    const expr = parseMetricFilterExpr(config.metric_filter_expr);
     const rules = getEffectiveMetricFilterRules({
       metric_filters: config.metric_filters,
       metric_mode: config.metric_mode,
       metric_filter_field: config.metric_filter_field,
       metric_filter_value: config.metric_filter_value,
     });
-    const filtered =
-      rules.length > 0 ? applyMetricFilters(rows as Record<string, unknown>[], rules) : rows;
+    const filtered = expr
+      ? applyMetricFiltersExpr(rows as Record<string, unknown>[], expr)
+      : rules.length > 0
+        ? applyMetricFilters(rows as Record<string, unknown>[], rules)
+        : rows;
     const raw = computeMetricValue(filtered, valueField, (config.y_agg_method as string) || 'sum');
     return {
       text: formatMetricNumber(raw, decimals),
@@ -1812,6 +1820,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     config.yFields,
     config.y_agg_method,
     config.metric_filters,
+    config.metric_filter_expr,
     config.metric_mode,
     config.metric_filter_field,
     config.metric_filter_value,

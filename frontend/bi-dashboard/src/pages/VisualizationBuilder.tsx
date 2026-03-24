@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider, InputNumber } from 'antd';
-import { PlusOutlined, SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined, RiseOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined, RiseOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,10 +9,16 @@ import { ChartService } from '../services/chartService';
 import { DataSourceService } from '../services/dataSourceService';
 import { AuthService } from '../services/authService';
 import {
-  METRIC_FILTER_OP_OPTIONS,
   normalizeMetricFilterRules,
   type MetricFilterRule,
+  parseMetricFilterExpr,
+  metricFilterExprFromLegacyRules,
+  defaultMetricFilterExprRoot,
+  ensureMetricFilterExprIds,
+  collectFieldsFromMetricFilterExpr,
+  type MetricFilterExprNode,
 } from '../utils/chartMetric';
+import { MetricFilterExprEditor } from '../components/charts/MetricFilterExprEditor';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
@@ -86,11 +92,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       sort_order: 'asc', // 'asc' 或 'desc'
       line_y_fields: [] as string[],
       y_axis_right_title: '',
-      // 指标卡：构建器内固定筛选（多条件 AND），不随仪表盘筛选器变化
+      // 指标卡：构建器内固定筛选（表达式树：可嵌套 且/或），不随仪表盘筛选器变化
       metric_mode: 'aggregate' as 'aggregate' | 'cell',
       metric_filter_field: '',
       metric_filter_value: '',
       metric_filters: [] as MetricFilterRule[],
+      metric_filter_expr: undefined as MetricFilterExprNode | undefined,
       metric_unit: '',
       metric_decimals: 2,
       metric_label: '',
@@ -152,6 +159,24 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                     ];
                   }
                   return [];
+                })(),
+                metric_filter_expr: (() => {
+                  const fromExpr = parseMetricFilterExpr(vs.metric_filter_expr);
+                  if (fromExpr) return fromExpr;
+                  const legacy = normalizeMetricFilterRules(vs.metric_filters);
+                  if (legacy.some((r) => r.field) || legacy.length > 0) {
+                    return metricFilterExprFromLegacyRules(legacy);
+                  }
+                  if (vs.metric_mode === 'cell' && String(vs.metric_filter_field || '').trim()) {
+                    return metricFilterExprFromLegacyRules([
+                      {
+                        field: String(vs.metric_filter_field).trim(),
+                        op: 'eq' as const,
+                        value: vs.metric_filter_value != null ? String(vs.metric_filter_value) : '',
+                      },
+                    ]);
+                  }
+                  return defaultMetricFilterExprRoot();
                 })(),
                 metric_unit: vs.metric_unit != null ? String(vs.metric_unit) : '',
                 metric_decimals: typeof vs.metric_decimals === 'number' ? vs.metric_decimals : 2,
@@ -644,41 +669,22 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
               ...prev.visualization_settings,
               x_group_by_enabled: false,
               metric_mode: 'aggregate',
-              metric_filters:
-                Array.isArray(prev.visualization_settings.metric_filters) &&
-                prev.visualization_settings.metric_filters.length > 0
-                  ? prev.visualization_settings.metric_filters
-                  : [{ field: '', op: 'eq' as const, value: '' }],
+              metric_filters: [],
+              metric_filter_expr: defaultMetricFilterExprRoot(),
             }
           : prev.visualization_settings,
     }));
   };
 
-  const getMetricFilterRowsForUi = (): MetricFilterRule[] => {
-    const mf = chartData.visualization_settings.metric_filters;
-    if (Array.isArray(mf) && mf.length > 0) {
-      return normalizeMetricFilterRules(mf);
-    }
-    return [{ field: '', op: 'eq', value: '' }];
+  const getMetricFilterExprForUi = (): MetricFilterExprNode => {
+    const vs = chartData.visualization_settings;
+    const parsed = parseMetricFilterExpr(vs.metric_filter_expr);
+    if (parsed) return parsed;
+    return metricFilterExprFromLegacyRules(normalizeMetricFilterRules(vs.metric_filters));
   };
 
-  const commitMetricFilters = (rows: MetricFilterRule[]) => {
-    handleFieldMappingChange('metric_filters', rows);
-  };
-
-  const patchMetricFilter = (index: number, patch: Partial<MetricFilterRule>) => {
-    const rows = [...getMetricFilterRowsForUi()];
-    rows[index] = { ...rows[index], ...patch };
-    commitMetricFilters(rows);
-  };
-
-  const addMetricFilterRow = () => {
-    commitMetricFilters([...getMetricFilterRowsForUi(), { field: '', op: 'eq', value: '' }]);
-  };
-
-  const removeMetricFilterRow = (index: number) => {
-    const rows = getMetricFilterRowsForUi().filter((_, i) => i !== index);
-    commitMetricFilters(rows.length ? rows : []);
+  const commitMetricFilterExpr = (root: MetricFilterExprNode) => {
+    handleFieldMappingChange('metric_filter_expr', ensureMetricFilterExprIds(root));
   };
 
   const handleFieldMappingChange = (fieldType: string, value: any) => {
@@ -825,12 +831,13 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         if (chartData.chart_type === 'metric') {
           const vs = chartData.visualization_settings;
           const yf = vs.y_fields?.[0];
-          const cleaned = normalizeMetricFilterRules(vs.metric_filters).filter((r) =>
-            (r.field || '').trim(),
-          );
+          const exprRoot =
+            parseMetricFilterExpr(vs.metric_filter_expr) ??
+            metricFilterExprFromLegacyRules(normalizeMetricFilterRules(vs.metric_filters));
+          const fromExpr = collectFieldsFromMetricFilterExpr(exprRoot);
           const set = new Set<string>();
           if (yf) set.add(yf);
-          cleaned.forEach((r) => set.add(r.field.trim()));
+          fromExpr.forEach((f) => set.add(f));
           selectFields = [...set];
           if (selectFields.length === 0) {
             message.error('请选择指标数值字段');
@@ -881,9 +888,13 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           metric_mode: chartData.visualization_settings.metric_mode || 'aggregate',
           metric_filter_field: chartData.visualization_settings.metric_filter_field || '',
           metric_filter_value: chartData.visualization_settings.metric_filter_value || '',
-          metric_filters: normalizeMetricFilterRules(chartData.visualization_settings.metric_filters).filter(
-            (r) => (r.field || '').trim(),
+          metric_filter_expr: ensureMetricFilterExprIds(
+            parseMetricFilterExpr(chartData.visualization_settings.metric_filter_expr) ??
+              metricFilterExprFromLegacyRules(
+                normalizeMetricFilterRules(chartData.visualization_settings.metric_filters),
+              ),
           ),
+          metric_filters: [],
           metric_unit: chartData.visualization_settings.metric_unit || '',
           metric_decimals:
             typeof chartData.visualization_settings.metric_decimals === 'number'
@@ -1183,57 +1194,14 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                             <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>数据筛选（固定条件）</span>
                           </div>
                           <p style={{ fontSize: 12, color: '#999', marginBottom: 10 }}>
-                            以下多条条件为「且」关系；保存后指标值不随仪表盘筛选器变化。未选择字段的行在保存时会被忽略。
+                            使用左侧竖线表示分组层级：根分组与各子分组可分别选择组内为「且」或「或」，可任意嵌套（例如 (A 或 B) 且 (C 或 D)）。
+                            保存后指标值不随仪表盘筛选器变化；未填字段的条件在计算时视为不限制。
                           </p>
-                          {getMetricFilterRowsForUi().map((rule, idx) => (
-                            <Row key={idx} gutter={8} style={{ marginBottom: 8 }} wrap={false}>
-                              <Col flex="140px">
-                                <Select
-                                  value={rule.field || undefined}
-                                  placeholder="字段"
-                                  allowClear
-                                  style={{ width: '100%' }}
-                                  disabled={availableFields.length === 0}
-                                  onChange={(v) => patchMetricFilter(idx, { field: v || '' })}
-                                  options={availableFields.map((f) => ({ label: f, value: f }))}
-                                />
-                              </Col>
-                              <Col flex="120px">
-                                <Select
-                                  value={rule.op}
-                                  style={{ width: '100%' }}
-                                  onChange={(v) => patchMetricFilter(idx, { op: v as MetricFilterRule['op'] })}
-                                  options={METRIC_FILTER_OP_OPTIONS.map((o) => ({
-                                    label: o.label,
-                                    value: o.value,
-                                  }))}
-                                />
-                              </Col>
-                              <Col flex="auto">
-                                {rule.op === 'is_null' || rule.op === 'is_not_null' ? (
-                                  <Input disabled placeholder="无需填写" />
-                                ) : (
-                                  <Input
-                                    value={rule.value}
-                                    placeholder="比较值（与数据一致）"
-                                    onChange={(e) => patchMetricFilter(idx, { value: e.target.value })}
-                                  />
-                                )}
-                              </Col>
-                              <Col flex="none">
-                                <Button
-                                  type="text"
-                                  danger
-                                  icon={<MinusCircleOutlined />}
-                                  onClick={() => removeMetricFilterRow(idx)}
-                                  aria-label="删除条件"
-                                />
-                              </Col>
-                            </Row>
-                          ))}
-                          <Button type="dashed" block icon={<PlusOutlined />} onClick={addMetricFilterRow} style={{ marginTop: 4 }}>
-                            添加筛选条件
-                          </Button>
+                          <MetricFilterExprEditor
+                            root={getMetricFilterExprForUi()}
+                            onChange={commitMetricFilterExpr}
+                            availableFields={availableFields}
+                          />
 
                           <Row gutter={12} style={{ marginTop: 16 }}>
                             <Col span={8}>
@@ -1534,9 +1502,12 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                                 metric_mode: chartData.visualization_settings.metric_mode,
                                 metric_filter_field: chartData.visualization_settings.metric_filter_field,
                                 metric_filter_value: chartData.visualization_settings.metric_filter_value,
-                                metric_filters: normalizeMetricFilterRules(
-                                  chartData.visualization_settings.metric_filters,
-                                ),
+                                metric_filters: [],
+                                metric_filter_expr:
+                                  parseMetricFilterExpr(chartData.visualization_settings.metric_filter_expr) ??
+                                  metricFilterExprFromLegacyRules(
+                                    normalizeMetricFilterRules(chartData.visualization_settings.metric_filters),
+                                  ),
                                 metric_unit: chartData.visualization_settings.metric_unit,
                                 metric_decimals: chartData.visualization_settings.metric_decimals,
                                 metric_label: chartData.visualization_settings.metric_label,
