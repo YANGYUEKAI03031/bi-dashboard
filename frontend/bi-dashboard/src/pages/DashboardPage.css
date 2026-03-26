@@ -1,17 +1,18 @@
-/* frontend/bi-dashboard/src/pages/DashboardPage.css */
-/* frontend/bi-dashboard/src/pages/DashboardPage.css */
+/* ══════════════════════════════════════════════════════════════
+   DashboardPage — 统一视觉风格
+   ══════════════════════════════════════════════════════════════ */
 
 .dashboard-page {
   height: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: var(--theme-background);
   min-height: 100vh;
 }
 
 .page-header {
-  background: white;
+  background: var(--theme-card-background);
   padding: 20px 32px;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-bottom: 1px solid var(--theme-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-content {
@@ -22,39 +23,41 @@
 }
 
 .dashboard-content {
-  padding: 32px;
+  padding: var(--space-2xl);
   height: calc(100% - 84px);
 }
 
+/* ── 图表列表面板 ── */
 .chart-list-panel {
   height: 100%;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  border: 1px solid rgba(0,0,0,0.05);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .chart-list {
   max-height: 600px;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: var(--space-sm);
 }
 
 .chart-search-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .chart-search-dropdown {
-  padding: 8px;
+  padding: var(--space-sm);
 }
 
 .chart-search-dropdown-hint {
   font-size: 12px;
-  color: #8c8c8c;
-  padding: 4px 4px 8px 4px;
+  color: var(--theme-text-secondary);
+  padding: var(--space-xs) var(--space-xs) var(--space-sm);
 }
 
 .chart-search-results {
@@ -66,15 +69,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 8px;
-  border-radius: 8px;
+  gap: var(--space-md);
+  padding: 10px var(--space-sm);
+  border-radius: var(--radius-sm);
   cursor: grab;
   user-select: none;
+  transition: background var(--transition-base);
 }
 
 .chart-search-item:hover {
-  background: rgba(24, 144, 255, 0.08);
+  background: var(--theme-primary-light);
 }
 
 .chart-search-item:active {
@@ -88,7 +92,7 @@
 
 .chart-search-item-title {
   font-weight: 600;
-  color: #262626;
+  color: var(--theme-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -97,30 +101,29 @@
 .chart-search-item-meta {
   margin-top: 2px;
   font-size: 12px;
-  color: #8c8c8c;
+  color: var(--theme-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chart-search-below {
-  border-top: 1px solid rgba(0,0,0,0.06);
-  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: var(--space-md);
 }
 
 .chart-search-below-title {
   font-size: 12px;
-  color: #8c8c8c;
-  margin-bottom: 8px;
+  color: var(--theme-text-secondary);
+  margin-bottom: var(--space-sm);
 }
 
-/* 滚动条由全局 index.css 统一 */
-
+/* ── 可拖拽图表项 ── */
 .draggable-chart-item {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-lg);
   cursor: grab;
-  transition: all 0.3s ease;
-  border-radius: 8px;
+  transition: transform var(--transition-spring), box-shadow var(--transition-spring);
+  border-radius: var(--radius-md);
 }
 
 .draggable-chart-item:hover {
@@ -136,45 +139,43 @@
   margin: 0 0 10px 0;
   font-size: 15px;
   font-weight: 600;
-  color: #262626;
+  color: var(--theme-text-primary);
 }
 
 .chart-type {
   margin: 0 0 14px 0;
-  color: #8c8c8c;
+  color: var(--theme-text-secondary);
   font-size: 13px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .chart-actions {
   text-align: right;
 }
 
+/* ── 仪表盘网格 ── */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   grid-auto-rows: minmax(250px, auto);
   gap: 20px;
-  padding: 24px;
+  padding: var(--space-lg);
   min-height: 600px;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.03);
 }
 
 .dashboard-card-wrapper {
   position: relative;
-  background: linear-gradient(145deg, #ffffff, #f0f0f0);
-  border-radius: 12px;
-  box-shadow: 
-    0 4px 20px rgba(0,0,0,0.08),
-    0 2px 6px rgba(0,0,0,0.04),
-    inset 0 1px 0 rgba(255,255,255,0.8);
-  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-  border: 1px solid rgba(0,0,0,0.05);
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition-spring), box-shadow var(--transition-spring), border-color var(--transition-base);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   overflow: hidden;
 }
 
@@ -185,16 +186,14 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #1890ff, #52c41a, #faad14, #f5222d);
-  border-radius: 12px 12px 0 0;
+  background: linear-gradient(90deg, var(--theme-primary), var(--theme-success), var(--theme-warning), var(--theme-danger));
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .dashboard-card-wrapper:hover {
-  box-shadow: 
-    0 8px 30px rgba(0,0,0,0.15),
-    0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-lg);
   transform: translateY(-4px) scale(1.02);
-  border-color: rgba(24, 144, 255, 0.2);
+  border-color: rgba(74, 144, 226, 0.2);
 }
 
 .dashboard-card-wrapper.dragging {
@@ -203,28 +202,26 @@
   z-index: 1000;
 }
 
+/* ── 拖拽手柄 ── */
 .drag-handle {
   position: absolute;
   top: 16px;
   right: 16px;
   cursor: move;
   z-index: 10;
-  background: rgba(255,255,255,0.95);
-  border-radius: 8px;
-  padding: 8px;
-  box-shadow: 
-    0 4px 12px rgba(0,0,0,0.1),
-    0 2px 4px rgba(0,0,0,0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  box-shadow: var(--shadow-md);
+  transition: background var(--transition-base), box-shadow var(--transition-spring), transform var(--transition-spring);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(0,0,0,0.05);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .drag-handle:hover {
-  background: rgba(255,255,255,1);
-  box-shadow: 
-    0 6px 20px rgba(0,0,0,0.15),
-    0 4px 8px rgba(0,0,0,0.1);
+  background: #ffffff;
+  box-shadow: var(--shadow-lg);
   transform: scale(1.1) rotate(90deg);
 }
 
@@ -239,50 +236,51 @@
   min-height: 0;
 }
 
+/* ── 网格占位符 ── */
 .grid-placeholder {
-  background: 
-    linear-gradient(45deg, #f0f2f5 25%, transparent 25%), 
-    linear-gradient(-45deg, #f0f2f5 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #f0f2f5 75%), 
+  background:
+    linear-gradient(45deg, #f0f2f5 25%, transparent 25%),
+    linear-gradient(-45deg, #f0f2f5 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f0f2f5 75%),
     linear-gradient(-45deg, transparent 75%, #f0f2f5 75%),
-    linear-gradient(135deg, #e6f7ff 0%, #f9f0ff 100%);
+    linear-gradient(135deg, #eef5ff 0%, #f5f9ff 100%);
   background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, 100% 100%;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px, 0 0;
   animation: placeholder-pulse 2s infinite;
-  border-radius: 12px;
-  border: 2px dashed #91d5ff;
-  transition: all 0.3s ease;
+  border-radius: var(--radius-md);
+  border: 2px dashed rgba(74, 144, 226, 0.4);
+  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
 }
 
 .grid-placeholder:hover {
-  background-color: #e6f7ff;
-  border-color: #1890ff;
+  background-color: var(--theme-primary-light);
+  border-color: var(--theme-primary);
   transform: scale(1.02);
 }
 
 @keyframes placeholder-pulse {
-  0% { 
-    opacity: 0.7; 
+  0% {
+    opacity: 0.7;
     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
   }
-  50% { 
-    opacity: 1; 
+  50% {
+    opacity: 1;
     background-position: 10px 10px, 10px 20px, 20px 0px, 0px 10px;
   }
-  100% { 
-    opacity: 0.7; 
+  100% {
+    opacity: 0.7;
     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
   }
 }
 
-/* 响应式设计 */
+/* ── 响应式 ── */
 @media (max-width: 768px) {
   .dashboard-grid {
     grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
+    gap: var(--space-md);
   }
-  
+
   .dashboard-content {
-    padding: 12px;
+    padding: var(--space-md);
   }
 }

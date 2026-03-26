@@ -1,33 +1,89 @@
+/* ══════════════════════════════════════════════════════════════
+   全局设计 Token（与 MetricFilterExprEditor.css 风格一致）
+   ══════════════════════════════════════════════════════════════ */
 :root {
-  /* 默认主题变量（浅色主题） */
+  /* ── 主题色 ── */
   --theme-background: #f8fafc;
   --theme-background-secondary: #ffffff;
   --theme-background-tertiary: #f1f5f9;
-  --theme-text-primary: #1a202c;
-  --theme-text-secondary: #4a5568;
-  --theme-text-tertiary: #718096;
-  --theme-border: #e2e8f0;
-  --theme-border-light: #f1f5f9;
-  --theme-primary: #4299e1;
-  --theme-primary-hover: #3182ce;
-  --theme-primary-active: #2c5282;
+  --theme-text-primary: #2C3E50;
+  --theme-text-secondary: #7F8C9A;
+  --theme-text-tertiary: #A0AEC0;
+  --theme-border: #E1E8ED;
+  --theme-border-light: #F1F5F9;
+
+  /* 主色体系（蓝调） */
+  --theme-primary: #4A90E2;
+  --theme-primary-hover: #357ABD;
+  --theme-primary-active: #2a6ab0;
+  --theme-primary-light: rgba(74, 144, 226, 0.08);
+
+  /* 语义色 */
+  --theme-danger: #FF4D4F;
+  --theme-danger-hover: #FF7875;
+  --theme-success: #52C41A;
+  --theme-warning: #FAAD14;
+  --theme-secondary: #FF8C42;
+
+  /* 侧边栏 */
   --theme-sidebar-background: #2d3748;
   --theme-sidebar-background-gradient: linear-gradient(180deg, #2d3748 0%, #1a202c 100%);
   --theme-sidebar-text: #ffffff;
   --theme-sidebar-text-secondary: #a0aec0;
   --theme-sidebar-border: rgba(255, 255, 255, 0.1);
-  --theme-sidebar-active: #4299e1;
+  --theme-sidebar-active: #4A90E2;
+
+  /* 顶栏 */
   --theme-top-bar-background: #ffffff;
   --theme-top-bar-border: #e2e8f0;
   --theme-top-bar-text: #1a202c;
+
+  /* 卡片 */
   --theme-card-background: #ffffff;
-  --theme-card-border: #e2e8f0;
-  --theme-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --theme-card-border: #E1E8ED;
+  --theme-card-shadow: 0 2px 8px rgba(74, 144, 226, 0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --theme-card-shadow-hover: 0 4px 16px rgba(74, 144, 226, 0.12), 0 2px 6px rgba(0,0,0,0.06);
+
+  /* 按钮 */
   --theme-button-background: #f7fafc;
   --theme-button-hover: #edf2f7;
   --theme-button-text: #2d3748;
-  
-  /* 图表颜色 */
+
+  /* ── 统一圆角 ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* ── 统一阴影 ── */
+  --shadow-xs: 0 1px 4px rgba(74, 144, 226, 0.06);
+  --shadow-sm: 0 2px 8px rgba(74, 144, 226, 0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(74, 144, 226, 0.12), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(74, 144, 226, 0.16), 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.12), 0 6px 16px rgba(0,0,0,0.06);
+
+  /* ── 统一过渡 ── */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  --transition-spring: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── 统一间距 ── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  /* ── 统一控件高度 ── */
+  --input-height: 44px;
+  --btn-height-sm: 34px;
+  --btn-height-md: 40px;
+  --btn-height-lg: 44px;
+
+  /* ── 图表调色板 ── */
   --chart-color-0: #5470c6;
   --chart-color-1: #91cc75;
   --chart-color-2: #fac858;
@@ -39,7 +95,7 @@
   --chart-color-8: #ea7ccc;
   --chart-color-9: #ff9f7f;
 
-  /* 全局滚动条（与仪表盘「添加图表」列表一致：不激活时隐藏，悬停时显示） */
+  /* ── 滚动条 ── */
   --scrollbar-size: 8px;
   --scrollbar-radius: 4px;
   --scrollbar-track: #f0f0f0;

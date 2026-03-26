@@ -1,41 +1,42 @@
+/* ══════════════════════════════════════════════════════════════
+   DashboardEditorPage — 统一视觉风格
+   ══════════════════════════════════════════════════════════════ */
+
 .dashboard-editor-canvas-loading {
   animation: dashboard-editor-canvas-fade-in 0.3s ease-out;
 }
 
 @keyframes dashboard-editor-canvas-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .dashboard-editor-chart-search-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-md);
   min-height: 0;
 }
 
 .dashboard-editor-chart-search-hint {
   font-size: 12px;
-  color: #8c8c8c;
+  color: var(--theme-text-secondary);
 }
 
 .dashboard-editor-chart-search-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 8px;
-  border-radius: 8px;
+  gap: var(--space-md);
+  padding: 10px var(--space-sm);
+  border-radius: var(--radius-sm);
   cursor: grab;
   user-select: none;
+  transition: background var(--transition-base);
 }
 
 .dashboard-editor-chart-search-item:hover {
-  background: rgba(24, 144, 255, 0.08);
+  background: var(--theme-primary-light);
 }
 
 .dashboard-editor-chart-search-item:active {
@@ -49,7 +50,7 @@
 
 .dashboard-editor-chart-search-item-title {
   font-weight: 600;
-  color: #262626;
+  color: var(--theme-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -58,24 +59,22 @@
 .dashboard-editor-chart-search-item-meta {
   margin-top: 2px;
   font-size: 12px;
-  color: #8c8c8c;
+  color: var(--theme-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 图表列表：限制高度并内部滚动，避免侧栏其它区块占满后底部图表被裁切且无法操作 */
+/* ── 图表列表：限制高度并内部滚动 ── */
 .dashboard-editor-chart-list {
   flex: 1 1 auto;
   min-height: 0;
   max-height: min(320px, 42vh);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: var(--space-xs);
   -webkit-overflow-scrolling: touch;
 }
-
-/* 滚动条样式由全局 index.css 统一提供 */
 
 .dashboard-editor-grid {
   height: 100%;
@@ -88,7 +87,8 @@
 }
 
 .dashboard-editor-grid .react-grid-item.react-grid-placeholder {
-  background: rgba(24, 144, 255, 0.15);
-  border: 1px dashed #1890ff;
+  background: rgba(74, 144, 226, 0.12);
+  border: 2px dashed var(--theme-primary);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-base), border-color var(--transition-base);
 }
-

@@ -1,16 +1,18 @@
-/* e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.css */
+/* ══════════════════════════════════════════════════════════════
+   ChartsManagementPage — 统一视觉风格
+   ══════════════════════════════════════════════════════════════ */
 
 .charts-management-page {
   height: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: var(--theme-background);
   min-height: 100vh;
 }
 
 .page-header {
-  background: white;
+  background: var(--theme-card-background);
   padding: 20px 32px;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-bottom: 1px solid var(--theme-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-content {
@@ -23,27 +25,29 @@
 .header-title {
   font-size: 24px;
   font-weight: 600;
-  color: #333;
+  color: var(--theme-text-primary);
 }
 
 .header-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
+/* ── 图表列表面板 ── */
 .chart-list-panel {
   height: calc(100% - 120px);
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(10px);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  border: 1px solid rgba(0,0,0,0.05);
-  margin-top: 24px;
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  margin-top: var(--space-xl);
   overflow: hidden;
 }
 
 .chart-table-container {
-  padding: 24px;
+  padding: var(--space-xl);
   height: 100%;
   overflow: auto;
 }
@@ -51,131 +55,177 @@
 .chart-table {
   width: 100%;
   border-collapse: collapse;
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .chart-table th {
-  background-color: #f5f5f5;
+  background-color: var(--theme-background-tertiary);
   font-weight: 600;
   text-align: left;
-  padding: 12px 16px;
-  color: #595959;
-  border-bottom: 1px solid #e8e8e8;
+  padding: var(--space-md) var(--space-lg);
+  color: var(--theme-text-secondary);
+  border-bottom: 1.5px solid var(--theme-border);
+  font-size: 13px;
+  letter-spacing: 0.2px;
 }
 
 .chart-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--theme-border-light);
   vertical-align: middle;
+  color: var(--theme-text-primary);
+  font-size: 14px;
 }
 
-.chart-table tr:hover {
-  background-color: #fafafa;
+.chart-table tr:hover td {
+  background-color: var(--theme-primary-light);
+}
+
+.chart-table tr:last-child td {
+  border-bottom: none;
 }
 
 .chart-name {
   font-weight: 500;
-  color: #333;
+  color: var(--theme-text-primary);
 }
 
 .chart-type {
-  color: #666;
+  color: var(--theme-text-secondary);
   font-size: 12px;
 }
 
 .chart-datasource {
-  color: #666;
+  color: var(--theme-text-tertiary);
   font-size: 12px;
 }
 
 .chart-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .chart-action-btn {
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  border: 1.5px solid transparent;
   cursor: pointer;
   font-size: 12px;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all var(--transition-base);
 }
 
 .edit-btn {
-  background-color: #1890ff;
-  color: white;
+  background-color: var(--theme-primary);
+  color: #ffffff;
+  border-color: var(--theme-primary);
 }
 
 .edit-btn:hover {
-  background-color: #40a9ff;
+  background-color: var(--theme-primary-hover);
+  border-color: var(--theme-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
 }
 
 .delete-btn {
-  background-color: #ff4d4f;
-  color: white;
+  background-color: var(--theme-danger);
+  color: #ffffff;
+  border-color: var(--theme-danger);
 }
 
 .delete-btn:hover {
-  background-color: #ff7875;
+  background-color: var(--theme-danger-hover);
+  border-color: var(--theme-danger-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 77, 79, 0.3);
 }
 
+/* ── 搜索框 ── */
 .search-bar {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-xl);
 }
 
 .search-input {
   width: 300px;
-  height: 36px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
+  border-radius: var(--radius-sm) !important;
+  border: 1.5px solid var(--theme-border) !important;
+  font-size: 14px !important;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base) !important;
 }
 
-/* 统一所有按钮高度为36px，与创建新图表按钮一致 */
+.search-input:hover,
+.search-input:focus-within {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1) !important;
+}
+
+/* 搜索按钮高度对齐 */
 .search-input .ant-input-search-button,
 .search-input .ant-input-group-addon,
 .header-actions .ant-btn {
-  height: 36px !important;
-  line-height: 36px !important;
-  min-height: 36px !important;
+  height: var(--btn-height-md) !important;
+  line-height: var(--btn-height-md) !important;
+  min-height: var(--btn-height-md) !important;
   display: flex !important;
   align-items: center !important;
+  border-radius: var(--radius-sm) !important;
 }
 
-/* 确保搜索按钮高度与搜索框一致 */
 .search-input .ant-input-search-button,
 .search-input .ant-input-group-addon {
-  height: 36px !important;
-  line-height: 36px !important;
-  padding: 0 12px !important;
-  background-color: #1890ff !important;
-  color: white !important;
-  border-left: 1px solid #d9d9d9 !important;
-  border-radius: 0 4px 4px 0 !important;
+  height: var(--btn-height-md) !important;
+  line-height: var(--btn-height-md) !important;
+  padding: 0 14px !important;
+  background-color: var(--theme-primary) !important;
+  color: #ffffff !important;
+  border-left: 1.5px solid var(--theme-primary-hover) !important;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
 }
 
+.header-actions .ant-btn-primary {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-hover) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25) !important;
+  transition: all var(--transition-base) !important;
+  height: var(--btn-height-md) !important;
+}
+
+.header-actions .ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(74, 144, 226, 0.35) !important;
+}
+
+/* ── 空状态 ── */
 .empty-state {
   text-align: center;
   padding: 80px 0;
-  color: #999;
+  color: var(--theme-text-tertiary);
 }
 
 .empty-state-icon {
   font-size: 48px;
-  margin-bottom: 16px;
-  color: #ccc;
+  margin-bottom: var(--space-lg);
+  color: #d0d7de;
 }
 
 .empty-state-title {
   font-size: 18px;
   font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-sm);
+  color: var(--theme-text-secondary);
 }
 
 .empty-state-description {
   font-size: 14px;
-  color: #666;
+  color: var(--theme-text-tertiary);
 }

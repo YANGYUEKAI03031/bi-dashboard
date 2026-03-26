@@ -1,25 +1,12 @@
-/* MetricFilterExprEditor Styles - Modern UI */
-
-:root {
-  --primary-color: #4A90E2;
-  --primary-hover: #357ABD;
-  --secondary-color: #FF8C42;
-  --border-color: #E1E8ED;
-  --bg-light: #F7F9FC;
-  --bg-white: #FFFFFF;
-  --text-primary: #2C3E50;
-  --text-secondary: #7F8C9A;
-  --shadow-sm: 0 2px 8px rgba(74, 144, 226, 0.08);
-  --shadow-md: 0 4px 16px rgba(74, 144, 226, 0.12);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-}
+/* ══════════════════════════════════════════════════════════════
+   MetricFilterExprEditor — 统一视觉风格
+   全局 Token 已定义在 index.css，本文件仅覆盖组件特定样式
+   ══════════════════════════════════════════════════════════════ */
 
 /* ── 主容器 ── */
 .metric-filter-expr-wrap {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  color: var(--text-primary);
+  color: var(--theme-text-primary);
 }
 
 /* ── 控件：现代圆角设计 ── */
@@ -36,14 +23,14 @@
   font-size: 14px !important;
   line-height: 44px !important;
   padding: 0 16px !important;
-  border: 1.5px solid var(--border-color) !important;
-  background: var(--bg-white) !important;
+  border: 1.5px solid var(--theme-border) !important;
+  background: var(--theme-card-background) !important;
   transition: all 0.2s ease !important;
 }
 
 .metric-filter-expr-wrap .ant-select-lg.ant-select:not(.ant-select-disabled) .ant-select-selector:hover,
 .metric-filter-expr-wrap .metric-filter-rule-select:not(.ant-select-disabled) .ant-select-selector:hover {
-  border-color: var(--primary-color) !important;
+  border-color: var(--theme-primary) !important;
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1) !important;
 }
 
@@ -55,7 +42,7 @@
 
 .metric-filter-expr-wrap .metric-filter-rule-select-op .ant-select-selector {
   font-weight: 600 !important;
-  background: linear-gradient(135deg, #F7F9FC 0%, #FFFFFF 100%) !important;
+  background: linear-gradient(135deg, var(--theme-background-tertiary) 0%, var(--theme-card-background) 100%) !important;
 }
 
 .metric-filter-expr-wrap .metric-filter-rule-input.ant-input-affix-wrapper,
@@ -67,13 +54,13 @@
   font-size: 14px !important;
   padding: 0 16px !important;
   line-height: 1.6 !important;
-  border: 1.5px solid var(--border-color) !important;
-  background: var(--bg-white) !important;
+  border: 1.5px solid var(--theme-border) !important;
+  background: var(--theme-card-background) !important;
   transition: all 0.2s ease !important;
 }
 
 .metric-filter-expr-wrap .metric-filter-rule-input:hover {
-  border-color: var(--primary-color) !important;
+  border-color: var(--theme-primary) !important;
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1) !important;
 }
 
@@ -81,7 +68,7 @@
   min-height: 44px !important;
   font-size: 14px !important;
   font-weight: 400 !important;
-  color: var(--text-secondary) !important;
+  color: var(--theme-text-secondary) !important;
 }
 
 /* ── 操作按钮：跟在值输入框右侧，悬停整行时展开，避免叠在输入框上 ── */
@@ -146,10 +133,10 @@
   height: 24px !important;
   line-height: 20px !important;
   box-sizing: border-box !important;
-  border: 2px solid var(--bg-white) !important;
+  border: 2px solid var(--theme-card-background) !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
   transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-  color: #fff !important;
+  color: #ffffff !important;
 }
 
 .metric-filter-expr-wrap .metric-filter-op-toggle:not(:disabled):hover {
@@ -174,9 +161,9 @@
   border-radius: var(--radius-md) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
-  color: var(--primary-color) !important;
-  border: 1.5px dashed var(--border-color) !important;
-  background: var(--bg-white) !important;
+  color: var(--theme-primary) !important;
+  border: 1.5px dashed var(--theme-border) !important;
+  background: var(--theme-card-background) !important;
 }
 
 .metric-filter-expr-wrap .metric-filter-insert-gap.gap-visible .ant-btn {
@@ -185,7 +172,7 @@
 }
 
 .metric-filter-expr-wrap .metric-filter-insert-gap .ant-btn:hover {
-  border-color: var(--primary-color) !important;
+  border-color: var(--theme-primary) !important;
   background: rgba(74, 144, 226, 0.05) !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15) !important;
@@ -193,7 +180,7 @@
 
 /* ── 主按钮：渐变效果 ── */
 .metric-filter-expr-wrap .ant-btn-primary {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%) !important;
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-hover) 100%) !important;
   border: none !important;
   border-radius: var(--radius-md) !important;
   font-weight: 600 !important;
@@ -208,13 +195,13 @@
 
 .metric-filter-expr-wrap .ant-btn-default {
   border-radius: var(--radius-sm) !important;
-  border: 1.5px solid var(--border-color) !important;
+  border: 1.5px solid var(--theme-border) !important;
   transition: all 0.2s ease !important;
 }
 
 .metric-filter-expr-wrap .ant-btn-default:hover {
-  border-color: var(--primary-color) !important;
-  color: var(--primary-color) !important;
+  border-color: var(--theme-primary) !important;
+  color: var(--theme-primary) !important;
   background: rgba(74, 144, 226, 0.05) !important;
 }
 
@@ -236,7 +223,7 @@
 /* ── 焦点状态优化 ── */
 .metric-filter-expr-wrap .ant-select-focused .ant-select-selector,
 .metric-filter-expr-wrap .metric-filter-rule-input:focus {
-  border-color: var(--primary-color) !important;
+  border-color: var(--theme-primary) !important;
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15) !important;
 }
 
@@ -244,6 +231,6 @@
 .metric-filter-expr-wrap .ant-select-disabled .ant-select-selector,
 .metric-filter-expr-wrap .metric-filter-rule-input:disabled {
   background: #F5F7FA !important;
-  color: var(--text-secondary) !important;
+  color: var(--theme-text-secondary) !important;
   cursor: not-allowed !important;
 }

@@ -14,7 +14,7 @@
   color: var(--theme-sidebar-text);
   display: flex;
   flex-direction: column;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 0 10px rgba(74, 144, 226, 0.12);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
               flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
               background-color 0.3s ease,
@@ -258,7 +258,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
@@ -581,7 +581,7 @@
 .nav-popover .ant-popover-inner {
   padding: 0;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 .nav-popover-content {
