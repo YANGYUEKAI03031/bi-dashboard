@@ -13,6 +13,7 @@
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@types/xlsx": "^0.0.35",
+    "@xyflow/react": "^12.10.1",
     "antd": "^6.3.0",
     "axios": "^1.13.4",
     "chart.js": "^4.5.1",

@@ -1,7 +1,7 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined, FundProjectionScreenOutlined } from '@ant-design/icons';
 import { Modal, Form, Input, message, Popconfirm, Popover, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
@@ -252,6 +252,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         return '图表管理';
       case '/datasources':
         return '数据源管理';
+      case '/pipeline-test':
+        return '管道测试';
       case '/analytics':
         return '数据分析';
       case '/data-chain':
@@ -456,6 +458,17 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             >
               <span className="icon">🗄</span>
               <span className="nav-text">数据源管理</span>
+            </Link>
+          )}
+
+          {/* 管道测试 - 仅管理员可见 */}
+          {isAdmin && (
+            <Link
+              to="/pipeline-test"
+              className={`nav-item ${isActive('/pipeline-test') ? 'active' : ''}`}
+            >
+              <span className="icon">🔧</span>
+              <span className="nav-text">管道测试</span>
             </Link>
           )}
         </nav>

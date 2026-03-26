@@ -12,6 +12,7 @@ import { DataSourceManagementPage } from './pages/DataSourceManagementPage'; // 
 import { DashboardEditorPage } from './pages/DashboardEditorPage';
 import { AuthService } from './services/authService';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { PipelineTestPage } from './pages/PipelineTestPage';
 
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -175,6 +176,18 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <UserManagementPage />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 管道测试路由 - 仅管理员 */}
+          <Route
+            path="/pipeline-test"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <PipelineTestPage />
                 </MainLayout>
               </ProtectedRoute>
             }

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy import text, select
+from sqlalchemy import text, select, asc
 from typing import List, Dict, Any, Optional
 from app.db.session import get_db
 from pydantic import BaseModel
@@ -92,7 +92,11 @@ async def get_visualization_datasources(db: AsyncSession = Depends(get_db)):
     直接基于现有 users.databases 表（对应模型 Database），不再使用环境变量。
     """
     try:
-        stmt = select(Database).where(Database.is_active == True)  # noqa: E712
+        stmt = (
+            select(Database)
+            .where(Database.is_active == True)  # noqa: E712
+            .order_by(asc(Database.id))
+        )
         result = await db.execute(stmt)
         databases: List[Database] = list(result.scalars().all())
 

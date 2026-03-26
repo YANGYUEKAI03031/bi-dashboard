@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, charts, dashboards, datasources, report_pages, permissions
+from app.api.v1 import auth, charts, dashboards, datasources, report_pages, permissions, pipeline
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -8,3 +8,4 @@ api_router.include_router(dashboards.router, tags=["dashboards"])
 api_router.include_router(datasources.router, prefix="/visualization", tags=["datasources"])
 api_router.include_router(report_pages.router, tags=["report-pages"])
 api_router.include_router(permissions.router, tags=["permissions"])
+api_router.include_router(pipeline.router, tags=["pipeline"])
