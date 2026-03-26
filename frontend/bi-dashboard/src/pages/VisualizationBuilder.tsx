@@ -17,6 +17,8 @@ import {
   ensureMetricFilterExprIds,
   collectFieldsFromMetricFilterExpr,
   type MetricFilterExprNode,
+  inferMetricFieldTypesFromSampleRows,
+  type MetricFieldKind,
 } from '../utils/chartMetric';
 import { MetricFilterExprEditor } from '../components/charts/MetricFilterExprEditor';
 
@@ -226,6 +228,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   const [totalRecords, setTotalRecords] = useState<number>(0);
   const [tableColumns, setTableColumns] = useState<any[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([]); // 确保始终是数组
+  const [fieldTypes, setFieldTypes] = useState<Record<string, MetricFieldKind>>({});
   const [authChecked, setAuthChecked] = useState(false);
 
   // 新增：图表类型动态配置函数
@@ -329,7 +332,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           showMultipleY: false,
           title: '指标卡',
           description:
-            '选择数值列与聚合方式；下方可配置固定筛选条件（单条或多条，AND），保存后不随仪表盘筛选器变化。',
+            '图表构建器 · 指标图：选择数值列与聚合方式。下方「数据筛选」仅作用于本指标的计算结果，可嵌套组内「且 / 或」；与仪表盘筛选器无关，保存后仍不随全局筛选变化。',
           defaultXGroupBy: false
         };
       default:
@@ -427,7 +430,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       // 更新可用字段列表
       const fieldNames = Object.keys(queryResult[0]);
       setAvailableFields(fieldNames);
-      
+      setFieldTypes(inferMetricFieldTypesFromSampleRows(queryResult as Record<string, unknown>[], fieldNames));
+
       // 智能自动设置字段映射
       setChartData(prev => {
         const currentSettings = prev.visualization_settings;
@@ -481,6 +485,8 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
         
         return prev;
       });
+    } else {
+      setFieldTypes({});
     }
   }, [queryResult]);
 
@@ -557,6 +563,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     setQueryResult([]);
     setPreviewData([]);
     setAvailableFields([]);
+    setFieldTypes({});
     loadTables(value);
   };
 
@@ -1198,6 +1205,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                             root={getMetricFilterExprForUi()}
                             onChange={commitMetricFilterExpr}
                             availableFields={availableFields}
+                            fieldTypes={fieldTypes}
                           />
 
                           <Row gutter={12} style={{ marginTop: 16 }}>
@@ -1228,9 +1236,9 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
                               />
                             </Col>
                           </Row>
-                          <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-                            {getChartFieldConfig('metric').description}
-                          </div>
+                          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: '#999', lineHeight: 1.5 }}>
+                            说明：此处为「指标图专用」固定筛选（图表构建器内配置，非仪表盘筛选器）。未填字段的条件在聚合时视为不限制。
+                          </p>
                         </>
                       ) : (
                         <>

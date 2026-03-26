@@ -1,0 +1,249 @@
+/* MetricFilterExprEditor Styles - Modern UI */
+
+:root {
+  --primary-color: #4A90E2;
+  --primary-hover: #357ABD;
+  --secondary-color: #FF8C42;
+  --border-color: #E1E8ED;
+  --bg-light: #F7F9FC;
+  --bg-white: #FFFFFF;
+  --text-primary: #2C3E50;
+  --text-secondary: #7F8C9A;
+  --shadow-sm: 0 2px 8px rgba(74, 144, 226, 0.08);
+  --shadow-md: 0 4px 16px rgba(74, 144, 226, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+/* ── 主容器 ── */
+.metric-filter-expr-wrap {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--text-primary);
+}
+
+/* ── 控件：现代圆角设计 ── */
+.metric-filter-expr-wrap .metric-rule-hover-row {
+  min-height: 48px;
+  padding: 8px 0;
+}
+
+.metric-filter-expr-wrap .ant-select-lg .ant-select-selector,
+.metric-filter-expr-wrap .metric-filter-rule-select .ant-select-selector {
+  border-radius: var(--radius-md) !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  font-size: 14px !important;
+  line-height: 44px !important;
+  padding: 0 16px !important;
+  border: 1.5px solid var(--border-color) !important;
+  background: var(--bg-white) !important;
+  transition: all 0.2s ease !important;
+}
+
+.metric-filter-expr-wrap .ant-select-lg.ant-select:not(.ant-select-disabled) .ant-select-selector:hover,
+.metric-filter-expr-wrap .metric-filter-rule-select:not(.ant-select-disabled) .ant-select-selector:hover {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1) !important;
+}
+
+.metric-filter-expr-wrap .ant-select-lg.ant-select .ant-select-selection-item,
+.metric-filter-expr-wrap .ant-select-lg.ant-select .ant-select-selection-placeholder {
+  line-height: 44px !important;
+  color: var(--text-primary) !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-rule-select-op .ant-select-selector {
+  font-weight: 600 !important;
+  background: linear-gradient(135deg, #F7F9FC 0%, #FFFFFF 100%) !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-rule-input.ant-input-affix-wrapper,
+.metric-filter-expr-wrap .metric-filter-rule-input.ant-input-affix-wrapper input,
+.metric-filter-expr-wrap .metric-filter-rule-input.ant-input {
+  border-radius: var(--radius-md) !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  font-size: 14px !important;
+  padding: 0 16px !important;
+  line-height: 1.6 !important;
+  border: 1.5px solid var(--border-color) !important;
+  background: var(--bg-white) !important;
+  transition: all 0.2s ease !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-rule-input:hover {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1) !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-rule-null-placeholder {
+  min-height: 44px !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ── 操作按钮：跟在值输入框右侧，悬停整行时展开，避免叠在输入框上 ── */
+.metric-filter-expr-wrap .metric-rule-actions-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: max-width 0.22s ease, opacity 0.2s ease, gap 0.2s ease;
+  padding: 0;
+  margin: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+}
+
+.metric-filter-expr-wrap .metric-rule-actions-right.visible {
+  max-width: 120px;
+  opacity: 1;
+  pointer-events: auto;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.metric-filter-expr-wrap .metric-rule-actions-right .ant-btn {
+  border-radius: var(--radius-sm) !important;
+  transition: all 0.2s ease !important;
+}
+
+.metric-filter-expr-wrap .metric-rule-actions-right .ant-btn:hover {
+  transform: scale(1.05);
+}
+
+.metric-filter-expr-wrap .metric-rule-hover-row {
+  position: relative;
+}
+
+/* 分组外框边框由 GroupBlock 内联样式控制，勿在此用深层选择器再套一层 border，否则会出现截图中的「双重边框」。 */
+
+/* ── 连接线：简洁垂直线 ── */
+.metric-filter-expr-wrap svg path {
+  stroke-width: 2.5px !important;
+  stroke-linecap: round !important;
+  filter: drop-shadow(0 1px 2px rgba(74, 144, 226, 0.15));
+}
+
+.metric-filter-expr-wrap svg circle {
+  filter: drop-shadow(0 1px 3px rgba(74, 144, 226, 0.2));
+}
+
+/* ── 且/或按钮：贴在弧线最左鼓出处（水平位置由 TSX 内联 left 控制） ── */
+.metric-filter-expr-wrap .metric-filter-op-toggle {
+  border-radius: 12px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  width: 26px !important;
+  height: 24px !important;
+  line-height: 20px !important;
+  box-sizing: border-box !important;
+  border: 2px solid var(--bg-white) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  color: #fff !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-op-toggle:not(:disabled):hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16) !important;
+}
+
+/* ── 插入区：优化显示逻辑 ── */
+.metric-filter-expr-wrap .metric-filter-insert-gap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 40px;
+  margin-top: 12px;
+}
+
+.metric-filter-expr-wrap .metric-filter-insert-gap .ant-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  min-width: 140px;
+  height: 34px;
+  border-radius: var(--radius-md) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--primary-color) !important;
+  border: 1.5px dashed var(--border-color) !important;
+  background: var(--bg-white) !important;
+}
+
+.metric-filter-expr-wrap .metric-filter-insert-gap.gap-visible .ant-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.metric-filter-expr-wrap .metric-filter-insert-gap .ant-btn:hover {
+  border-color: var(--primary-color) !important;
+  background: rgba(74, 144, 226, 0.05) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.15) !important;
+}
+
+/* ── 主按钮：渐变效果 ── */
+.metric-filter-expr-wrap .ant-btn-primary {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%) !important;
+  border: none !important;
+  border-radius: var(--radius-md) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+
+.metric-filter-expr-wrap .ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(74, 144, 226, 0.35) !important;
+}
+
+.metric-filter-expr-wrap .ant-btn-default {
+  border-radius: var(--radius-sm) !important;
+  border: 1.5px solid var(--border-color) !important;
+  transition: all 0.2s ease !important;
+}
+
+.metric-filter-expr-wrap .ant-btn-default:hover {
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+  background: rgba(74, 144, 226, 0.05) !important;
+}
+
+/* ── 响应式优化 ── */
+@media (max-width: 768px) {
+  .metric-filter-expr-wrap .metric-rule-inputs {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .metric-filter-expr-wrap .ant-select-lg .ant-select-selector,
+  .metric-filter-expr-wrap .metric-filter-rule-select .ant-select-selector,
+  .metric-filter-expr-wrap .metric-filter-rule-input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ── 焦点状态优化 ── */
+.metric-filter-expr-wrap .ant-select-focused .ant-select-selector,
+.metric-filter-expr-wrap .metric-filter-rule-input:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15) !important;
+}
+
+/* ── 禁用状态 ── */
+.metric-filter-expr-wrap .ant-select-disabled .ant-select-selector,
+.metric-filter-expr-wrap .metric-filter-rule-input:disabled {
+  background: #F5F7FA !important;
+  color: var(--text-secondary) !important;
+  cursor: not-allowed !important;
+}
