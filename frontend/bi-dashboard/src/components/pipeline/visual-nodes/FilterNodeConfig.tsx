@@ -4,13 +4,12 @@
  */
 import React, { useState, useEffect } from 'react';
 import {
-  Form, Select, Input, Button, Space, Divider, Tag, Typography,
-  Alert, Card, Tooltip,
+  Form, Select, Input, Button, Divider, Tag, Typography,
+  Alert, Card, Tooltip, Space,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, FilterOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, FilterOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
-import { DataSourceService } from '../../../services/dataSourceService';
 import { getDataTypeInfo } from '../../../utils/nodeTypeRegistry';
 
 const { Text } = Typography;
@@ -60,19 +59,10 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
     savedConditions.length > 0 ? savedConditions : [{ id: `cond_${Date.now()}`, column: '', operator: '', value: '' }]
   );
   const [columns, setColumns] = useState<Array<{ name: string; type: string }>>([]);
-  const [colsLoading, setColsLoading] = useState(false);
 
   // Load columns from first upstream source node
   useEffect(() => {
     if (upstreamNodes.length === 0) { setColumns([]); return; }
-    // Find the first upstream source node to get columns from
-    const firstUp = upstreamNodes[0];
-    const upPn = firstUp?.data?.pipelineNode as PipelineNode | undefined;
-    const upConfig = (upPn?.config || {}) as Record<string, unknown>;
-    const tableName = upConfig.tableName as string | undefined;
-    // We need the pipeline's data source ID to query columns
-    // For now, we'll show an empty list if we don't have table info
-    // This will be enhanced when upstream preview data is available
     setColumns([]);
   }, [upstreamNodes]);
 
@@ -177,7 +167,6 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
       {conditions.map((cond, idx) => {
         const ops = getOperatorsForColumn(cond.column);
         const needsValue = !['isNull', 'isNotNull'].includes(cond.operator);
-        const colType = columns.find(c => c.name === cond.column)?.type;
 
         return (
           <Card

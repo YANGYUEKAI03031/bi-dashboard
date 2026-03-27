@@ -303,14 +303,15 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     
     scheduleUpdate();
     const resizeObserver = new ResizeObserver(scheduleUpdate);
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
+    const containerEl = containerRef.current;
+    if (containerEl) {
+      resizeObserver.observe(containerEl);
     }
     
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      if (containerRef.current) {
-        resizeObserver.unobserve(containerRef.current);
+      if (containerEl) {
+        resizeObserver.unobserve(containerEl);
       }
     };
   }, [isReady]);
@@ -457,18 +458,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#ff9f7f'
     ];
 
-    // 估算 X 轴多行 label 占用高度，避免与底部 legend 重叠（仅用于默认 grid 配置）
-    const estimateXAxisLabelLines = (val: unknown) => {
-      // 面板太矮时，避免换行导致 plot 区域被严重挤压
-      if (compact) return 1;
-      if (typeof val !== 'string') return 1;
-      // 日期不换行
-      if (/^\d{4}-\d{2}-\d{2}/.test(val)) return 1;
-      if (val.length <= 10) return 1;
-      return Math.max(1, Math.ceil(val.length / 6));
-    };
-    const maxXAxisLabelLines = xAxisData.reduce((max, v) => Math.max(max, estimateXAxisLabelLines(v)), 1);
-
     const axisLabelFromConfig = config.xAxis?.axisLabel || {};
     const axisLabelFontSize = axisLabelFromConfig.fontSize ?? 11;
     const axisLabelMargin = axisLabelFromConfig.margin ?? 15;
@@ -477,21 +466,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const effectiveAxisLabelFontSize = compact ? Math.max(9, Math.round(axisLabelFontSize * 0.9)) : axisLabelFontSize;
     const effectiveAxisLabelMargin = compact ? Math.min(axisLabelMargin, 10) : axisLabelMargin;
     const effectiveXAxisNameGap = compact ? Math.min(xAxisNameGap, 22) : xAxisNameGap;
-    const xAxisLabelHeightEstimate = maxXAxisLabelLines * (effectiveAxisLabelFontSize + 4);
-    
-    // X 轴名称（如"支付日期"）的高度估算
-    const xAxisNameFontSize = config.xAxis?.nameTextStyle?.fontSize ?? 12;
-    const xAxisNameHeight = compact ? Math.max(10, Math.round(xAxisNameFontSize * 0.9)) : xAxisNameFontSize;
-
-    // 仅用于控制 X 轴 label/name 的字号和间距，不再据此为底部预留大块固定空间
-    const breathingRoom = compact ? Math.max(8, 10 * 0.8) : 10;
-    const xAxisReservedBottom =
-      breathingRoom +
-      xAxisLabelHeightEstimate +
-      effectiveAxisLabelMargin +
-      effectiveXAxisNameGap +
-      xAxisNameHeight +
-      4; // name 下方的额外边距（仅作为估算参考）
 
     // 估算 Y 轴刻度文字大致占用的宽度，用于在 grid.left / grid.right 上做平衡，
     // 让「真正的绘图区」而不是整张画布的左上角更接近卡片视觉中心。
@@ -644,25 +618,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...(config.grid?.right === undefined ? { right: gridRight } : {})
     };
 
-    // 计算 grid 的实际中心位置（考虑 Y 轴标签占用的空间）
-    // 这个中心位置用于让标题和 X 轴名称都基于相同的参考点对齐
-    // 注意：grid 区域的左边界是 gridOption.left，右边界是 containerWidth - gridOption.right
-    // 所以 grid 区域的中心 = gridOption.left + (containerWidth - gridOption.left - gridOption.right) / 2
-    // 简化后 = (gridOption.left + containerWidth - gridOption.right) / 2
-    const gridCenterPosition =
-      containerWidth > 0 &&
-      typeof gridOption.left === 'number' &&
-      typeof gridOption.right === 'number'
-        ? (gridOption.left + (containerWidth - gridOption.right)) / 2
-        : containerWidth / 2;
-    
-    // 让 ECharts 的标题与 grid 的几何中心对齐
-    // 这样标题和 X 轴名称（nameLocation: 'middle'）就会基于相同的参考点对齐
-    const titleLeft =
-      containerWidth > 0
-        ? `${((gridCenterPosition / containerWidth) * 100).toFixed(3)}%`
-        : 'center';
-    
     const baseOption: any = {
       backgroundColor: 'transparent',
       color: colorPalette,

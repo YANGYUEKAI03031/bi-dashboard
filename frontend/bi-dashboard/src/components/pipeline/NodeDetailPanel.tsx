@@ -5,13 +5,12 @@
  */
 import React, { useState, useCallback } from 'react';
 import {
-  Drawer, Tabs, Form, Input, Select, Button, Space, Divider,
-  Tag, Empty, Typography, Alert, Spin, message, Tooltip, Card,
+  Tabs, Form, Input, Select, Button, Space, Divider,
+  Tag, Empty, Typography, Alert, Spin, message, Tooltip,
 } from 'antd';
 import {
-  CloseOutlined, SaveOutlined, DeleteOutlined, ReloadOutlined,
-  DatabaseOutlined, SwapOutlined, FilterOutlined, BarChartOutlined,
-  AppstoreOutlined, ExportOutlined, EyeOutlined, InfoCircleOutlined,
+  CloseOutlined, DeleteOutlined, ReloadOutlined,
+  EyeOutlined, InfoCircleOutlined,
 } from '@ant-design/icons';
 import type { TabsProps } from 'antd';
 import { GraphNode, GraphEdge } from '../../utils/graphUtils';
@@ -27,7 +26,6 @@ import { NodePreviewTable } from './NodePreviewTable';
 import { useNodePreview } from '../../hooks/useNodePreview';
 
 const { Text } = Typography;
-const { TextArea } = Input;
 
 interface NodeDetailPanelProps {
   /** The node currently selected on the canvas */
@@ -54,20 +52,6 @@ function getUpstreamNodes(node: GraphNode, allNodes: GraphNode[]): GraphNode[] {
   const upstream = (node.data.pipelineNode as Record<string, unknown>)?.upstream as string[] | undefined;
   if (!upstream) return [];
   return upstream.map(id => allNodes.find(n => n.id === id)).filter(Boolean) as GraphNode[];
-}
-
-function getInputColumns(node: GraphNode, allNodes: GraphNode[]): Array<{ nodeId: string; nodeName: string; columns: string[] }> {
-  const upstreams = getUpstreamNodes(node, allNodes);
-  // For simplicity, expose column names from the SQL or from upstream config
-  // We'll resolve this from preview data in a real implementation
-  return upstreams.map(up => {
-    const pn = up.data.pipelineNode as PipelineNode;
-    return {
-      nodeId: up.id,
-      nodeName: pn.name,
-      columns: [], // Will be filled from preview data
-    };
-  });
 }
 
 export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -114,7 +98,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         pipelineDataSourceId: pipelineDataSourceId ?? undefined,
       });
     }
-  }, [selectedNode?.id, open]);
+  }, [selectedNode?.id, open, allEdges, allNodes, loadPreview, nodeDef?.hasPreview, pipelineDataSourceId, selectedNode]);
 
   const handleFormChange = useCallback(() => {
     if (!selectedNode || readOnly) return;

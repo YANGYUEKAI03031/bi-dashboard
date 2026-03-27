@@ -4,8 +4,8 @@
  */
 import React, { useState } from 'react';
 import {
-  Form, Select, Input, Button, Space, Divider, Tag, Typography,
-  Alert, Card, message,
+  Select, Input, Button, Divider, Tag, Typography,
+  Alert, Card,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, BarChartOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
@@ -312,7 +312,6 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
             ...groupBy.map(c => `\`${c}\``),
             ...validAggs.map(a => {
               const fn = a.func.toUpperCase();
-              const col = a.column ? `\`${a.column}\`` : '*';
               const alias = a.alias || `${a.func}_${a.column}`;
               if (a.func === 'count_distinct') {
                 return `COUNT(DISTINCT \`${a.column}\`) AS \`${alias}\``;

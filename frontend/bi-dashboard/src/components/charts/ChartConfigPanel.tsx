@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/components/charts/ChartConfigPanel.tsx
 import React, { useState } from 'react';
-import { Card, Form, Input, Select, Switch, Button, Space, Divider, Collapse, ColorPicker } from 'antd';
-import { SaveOutlined, UndoOutlined, SettingOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Select, Switch, Button, Space, Divider, Collapse } from 'antd';
+import { SaveOutlined, UndoOutlined } from '@ant-design/icons';
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -38,7 +38,7 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
   onCancel
 }) => {
   const [form] = Form.useForm();
-  const [settings, setSettings] = useState<VisualizationSettings>(initialSettings);
+  const [settings] = useState<VisualizationSettings>(initialSettings);
 
   const handleSave = () => {
     form.validateFields().then(values => {

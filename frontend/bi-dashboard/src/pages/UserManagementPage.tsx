@@ -1,7 +1,7 @@
 // src/pages/UserManagementPage.tsx
 
 import React, { useEffect, useState } from 'react';
-import { Table, Tag, Button, message, Modal, Select, Space, Typography, Form, Input, Switch, Divider } from 'antd';
+import { Table, Tag, Button, message, Modal, Select, Space, Typography, Form, Input, Switch } from 'antd';
 import { UserOutlined, CrownOutlined, TeamOutlined, ReloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { PermissionService, UserInfo, UserRole } from '../services/permissionService';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,7 +36,6 @@ export const UserManagementPage: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [createForm] = Form.useForm();
   const [isReportModalVisible, setIsReportModalVisible] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
 
   // 检查当前用户是否为管理员
   useEffect(() => {
@@ -85,7 +84,6 @@ export const UserManagementPage: React.FC = () => {
 
   // 加载指定用户的报表权限（直接接收报表列表参数，避免 state 异步问题）
   const loadUserReportPermissions = async (userId: number, pageList?: {id: number, name: string}[]) => {
-    setReportLoading(true);
     // 使用传入的 pageList，如果没传则使用 state 中的（兼容旧调用）
     const pages = pageList || reportPages;
     try {
@@ -109,8 +107,6 @@ export const UserManagementPage: React.FC = () => {
       setReportPermissions(permissions);
     } catch (error: any) {
       console.error('加载报表权限失败:', error);
-    } finally {
-      setReportLoading(false);
     }
   };
 

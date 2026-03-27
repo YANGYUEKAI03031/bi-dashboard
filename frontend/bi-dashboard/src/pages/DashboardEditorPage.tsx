@@ -420,7 +420,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       console.error('保存布局失败:', e);
       message.error(e?.message || '保存布局失败');
     }
-  }, []); // 依赖为空，闭包捕获的 ref 都是稳定的
+  }, [
+    dashboard, widgets, dashboardRef, widgetLayoutRef,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistWidgets 内部使用 ref，不直接依赖
+  ]);
 
   const isEditMode = mode === 'edit';
 
@@ -1181,6 +1184,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         cancelledRef.current = true;
       };
       // 关键：仅依赖 card.chart?.id，筛选值通过 ref 读取，不再触发重新请求
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- card.chart?.chart_type 用于条件判断
     }, [card.chart?.id]);
 
     if (!card.chart) {
@@ -1684,7 +1688,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>筛选条件</span>
                     {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
                       <a
-                        onClick={() => setFilterValues({})}
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); setFilterValues({}); }}
                         style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer' }}
                       >
                         重置全部

@@ -4,13 +4,12 @@
  */
 import React, { useState } from 'react';
 import {
-  Form, Select, Input, Button, Space, Divider, Tag, Typography,
+  Form, Select, Button, Divider, Tag, Typography,
   Alert, Card, Radio, Tooltip, message,
 } from 'antd';
 import { SwapOutlined, DeleteOutlined, WarningOutlined, PlusOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
-import { getNodeTypeDef } from '../../../utils/nodeTypeRegistry';
 
 const { Text } = Typography;
 
@@ -44,15 +43,11 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
   const config = (pipelineNode.config || {}) as Record<string, unknown>;
   const savedJoinType = (config.joinType as string) || 'inner';
   const savedJoinKeys = (config.joinKeys as JoinKey[]) || [];
-  const savedLeftInput = config.leftInput as string | undefined;
-  const savedRightInput = config.rightInput as string | undefined;
 
   const [joinType, setJoinType] = useState(savedJoinType);
   const [joinKeys, setJoinKeys] = useState<JoinKey[]>(
     savedJoinKeys.length > 0 ? savedJoinKeys : [{ id: `key_${Date.now()}`, leftCol: '', rightCol: '' }]
   );
-  const [leftInput, setLeftInput] = useState(savedLeftInput || '');
-  const [rightInput, setRightInput] = useState(savedRightInput || '');
 
   // Placeholder columns for left/right inputs
   const leftColumns: Array<{ name: string; type: string }> = [];
@@ -80,16 +75,6 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
   const handleJoinTypeChange = (type: string) => {
     setJoinType(type);
     updateConfig({ joinType: type });
-  };
-
-  const handleLeftInputChange = (id: string) => {
-    setLeftInput(id);
-    updateConfig({ leftInput: id });
-  };
-
-  const handleRightInputChange = (id: string) => {
-    setRightInput(id);
-    updateConfig({ rightInput: id });
   };
 
   const addJoinKey = () => {
@@ -131,17 +116,7 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     );
   }
 
-  const nodeOptions = upstreamNodes.map(up => {
-    const pn = up.data.pipelineNode as PipelineNode;
-    const def = getNodeTypeDef(pn.type);
-    return {
-      label: `${def.icon} ${pn.name}`,
-      value: up.id,
-    };
-  });
-
   const validKeys = joinKeys.filter(k => k.leftCol && k.rightCol);
-  const joinTypeDef = JOIN_TYPES.find(j => j.value === joinType);
 
   return (
     <div>

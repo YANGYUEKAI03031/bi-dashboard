@@ -1,6 +1,6 @@
 // frontend/bi-dashboard/src/pages/VisualizationBuilder.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Form, Table, Tabs, Switch, Divider, InputNumber } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Select, Input, Table, Tabs, Switch, Divider, InputNumber } from 'antd';
 import { SaveOutlined, DatabaseOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, PieChartOutlined, DotChartOutlined, AreaChartOutlined, RadarChartOutlined, FundViewOutlined, ClusterOutlined, FallOutlined, FilterOutlined, RiseOutlined } from '@ant-design/icons';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import { ChartConfigPanel } from '../components/charts/ChartConfigPanel';
@@ -226,7 +226,6 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [totalRecords, setTotalRecords] = useState<number>(0);
-  const [tableColumns, setTableColumns] = useState<any[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([]); // 确保始终是数组
   const [fieldTypes, setFieldTypes] = useState<Record<string, MetricFieldKind>>({});
   const [authChecked, setAuthChecked] = useState(false);
@@ -425,7 +424,6 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
           return String(a[key]).localeCompare(String(b[key]));
         }
       }));
-      setTableColumns(columns);
       
       // 更新可用字段列表
       const fieldNames = Object.keys(queryResult[0]);
@@ -488,6 +486,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     } else {
       setFieldTypes({});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- availableFields 仅用于条件判断
   }, [queryResult]);
 
   // 防止重复加载数据源的标志
@@ -499,6 +498,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       loadDataSources();
       dataSourcesLoadedRef.current = true;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 首次加载，仅执行一次
   }, []);
 
   const loadDataSources = async () => {
@@ -611,47 +611,6 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
     } catch (error: any) {
       console.error('加载数据预览失败:', error);
       message.error(error.message || '加载数据预览失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExecuteQuery = async () => {
-    if (!selectedDataSource || !selectedTable) {
-      message.warning('请选择数据源和表');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await DataSourceService.executeQuery({
-        data_source_id: selectedDataSource,
-        query: `SELECT * FROM ${selectedTable}`,
-      });
-      
-      console.log('=== Execute Query Result ===');
-      console.log('Raw result:', result);
-      console.log('Row count:', result.row_count);
-      console.log('Rows length:', result.rows.length);
-      
-      const formattedData = result.rows.map((row: any) => {
-        const obj: any = {};
-        result.columns.forEach((col: string, index: number) => {
-          obj[col] = Object.values(row)[index];
-        });
-        return obj;
-      });
-      
-      console.log('=== Formatted Data ===');
-      console.log('Formatted data length:', formattedData.length);
-      console.log('Formatted data:', formattedData);
-      
-      setQueryResult(formattedData);
-      setTotalRecords(result.row_count);
-      setPreviewData(formattedData.slice(0, 10));
-      message.success(`查询成功，返回 ${result.row_count} 条记录`);
-    } catch (error: any) {
-      message.error(error.message || '查询执行失败');
     } finally {
       setLoading(false);
     }

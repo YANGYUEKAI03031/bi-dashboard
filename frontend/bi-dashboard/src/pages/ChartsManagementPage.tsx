@@ -1,8 +1,8 @@
 // e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm, Switch } from 'antd';
+import { Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm, Switch } from 'antd';
 import { DataSourceService } from '../services/dataSourceService';
-import { SearchOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import './ChartsManagementPage.css';

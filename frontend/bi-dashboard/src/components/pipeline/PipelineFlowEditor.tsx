@@ -10,17 +10,16 @@ import {
   Edge,
   Connection,
   ReactFlowProvider,
-  BackgroundVariant,
   Panel,
   NodeTypes,
   useReactFlow,
 } from '@xyflow/react';
-import { Button, Space, message, Dropdown, Tag, Tooltip, Alert } from 'antd';
+import { Button, Space, message, Dropdown, Tag } from 'antd';
 import {
   PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  ThunderboltOutlined, ExportOutlined, MergeOutlined, DownOutlined,
-  DatabaseOutlined, FilterOutlined, BarChartOutlined, SwapOutlined,
-  AppstoreOutlined, TableOutlined, ColumnWidthOutlined, EyeOutlined
+  ExportOutlined, DownOutlined,
+  FilterOutlined, BarChartOutlined, SwapOutlined,
+  AppstoreOutlined, TableOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import './PipelineFlowEditor.css';
@@ -91,7 +90,6 @@ function PipelineNodeCard({
 
 function NodeConfigSummary({ node }: { node: PipelineNode }) {
   const config = (node.config || {}) as Record<string, unknown>;
-  const def = getNodeTypeDef(node.type);
 
   if (node.type === 'source') {
     const tableName = config.tableName as string | undefined;

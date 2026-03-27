@@ -4,10 +4,10 @@
  */
 import React, { useState } from 'react';
 import {
-  Form, Select, Input, Button, Space, Divider, Tag, Typography,
-  Alert, Transfer, Checkbox, Card, message,
+  Form, Input, Button, Divider, Tag, Typography,
+  Alert, Transfer, Checkbox, Card,
 } from 'antd';
-import { AppstoreOutlined, SwapOutlined } from '@ant-design/icons';
+import { AppstoreOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { getDataTypeInfo } from '../../../utils/nodeTypeRegistry';

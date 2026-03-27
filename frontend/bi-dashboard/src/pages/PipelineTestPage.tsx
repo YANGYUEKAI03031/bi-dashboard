@@ -21,7 +21,6 @@ interface DataSource {
   type: string;
 }
 
-const { TextArea } = Input;
 const { TabPane } = Tabs;
 
 const statusColors: Record<string, string> = {
@@ -57,7 +56,6 @@ export const PipelineTestPage: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [running, setRunning] = useState<number | null>(null);
   const [editorNodes, setEditorNodes] = useState<PipelineNode[]>([]);
-  const [editorEdges, setEditorEdges] = useState<GraphEdge[]>([]);
   const [editingPipelineId, setEditingPipelineId] = useState<number | null>(null);
   const [form] = Form.useForm();
   const [runForm] = Form.useForm();
@@ -100,33 +98,8 @@ export const PipelineTestPage: React.FC = () => {
     }
   };
 
-  const handleCreatePipeline = async (values: any) => {
-    try {
-      if (editorNodes.length === 0) {
-        message.error('请至少配置一个节点');
-        return;
-      }
-      await PipelineService.createPipeline({
-        name: values.name,
-        description: values.description,
-        source_data_source_id: parseInt(values.source_data_source_id),
-        nodes: editorNodes,
-        is_public: false,
-      });
-      message.success('管道创建成功');
-      setCreateModalVisible(false);
-      setEditorNodes([]);
-      setEditorEdges([]);
-      form.resetFields();
-      loadPipelines();
-    } catch (error: any) {
-      message.error(error.message || '创建管道失败');
-    }
-  };
-
-  const handleEditorSave = (nodes: PipelineNode[], edges: GraphEdge[]) => {
+  const handleEditorSave = (nodes: PipelineNode[]) => {
     setEditorNodes(nodes);
-    setEditorEdges(edges);
   };
 
   const handleDeletePipeline = async (pipelineId: number) => {
@@ -355,7 +328,6 @@ export const PipelineTestPage: React.FC = () => {
               setEditingPipelineId(null);
               form.resetFields();
               setEditorNodes([]);
-              setEditorEdges([]);
               setCreateModalVisible(true);
             }}
           >
@@ -379,7 +351,6 @@ export const PipelineTestPage: React.FC = () => {
         onCancel={() => {
           setCreateModalVisible(false);
           setEditorNodes([]);
-          setEditorEdges([]);
           setEditingPipelineId(null);
           form.resetFields();
         }}
@@ -439,7 +410,6 @@ export const PipelineTestPage: React.FC = () => {
             onCancel={() => {
               setCreateModalVisible(false);
               setEditorNodes([]);
-              setEditorEdges([]);
               setEditingPipelineId(null);
               form.resetFields();
             }}
@@ -451,7 +421,6 @@ export const PipelineTestPage: React.FC = () => {
               onClick={() => {
                 setCreateModalVisible(false);
                 setEditorNodes([]);
-                setEditorEdges([]);
                 setEditingPipelineId(null);
                 form.resetFields();
               }}
@@ -488,7 +457,6 @@ export const PipelineTestPage: React.FC = () => {
                     message.success('管道更新成功');
                     setCreateModalVisible(false);
                     setEditorNodes([]);
-                    setEditorEdges([]);
                     setEditingPipelineId(null);
                     form.resetFields();
                     loadPipelines();
@@ -504,7 +472,6 @@ export const PipelineTestPage: React.FC = () => {
                     message.success('管道创建成功');
                     setCreateModalVisible(false);
                     setEditorNodes([]);
-                    setEditorEdges([]);
                     form.resetFields();
                     loadPipelines();
                   }
@@ -570,7 +537,6 @@ export const PipelineTestPage: React.FC = () => {
                   });
                   setEditingPipelineId(selectedPipeline.id);
                   setEditorNodes(selectedPipeline.nodes || []);
-                  setEditorEdges([]);
                   setDetailDrawerVisible(false);
                   setCreateModalVisible(true);
                 }

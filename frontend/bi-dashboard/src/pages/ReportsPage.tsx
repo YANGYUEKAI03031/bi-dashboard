@@ -1,17 +1,16 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { flushSync } from 'react-dom';
-import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker, Space } from 'antd';
+import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
 import { ChartService } from '../services/chartService';
-import { DataSourceService } from '../services/dataSourceService';
 import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate, useParams } from 'react-router-dom';
-import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, FilterOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
 import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
 const { Title, Paragraph } = Typography;
@@ -201,6 +200,7 @@ const ChartCardComponent: React.FC<{
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- card.chart 用于条件判断
   }, [card.chart?.id, filterValues, allFilters, externalData, externalLoading, externalError]);
 
   // 使用外部或内部数据
@@ -888,7 +888,8 @@ export const ReportsPage: React.FC = () => {
       });
       setBatchChartData(errorMap);
     }
-  }, []);  // 移除 batchChartData 依赖，避免无限循环
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内部使用 ref 和稳定的回调
+  }, []);
 
   // 图表联动变化时按「同名列」重新请求后端数据（与筛选器一致，在 SQL 中加 WHERE）
   const currentDashboardForLink = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
@@ -985,6 +986,7 @@ export const ReportsPage: React.FC = () => {
     };
 
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadBatchChartData 和 loadDashboardDetails 内部使用稳定的回调
   }, [user, pageId]);
 
   const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[], forceRefreshCharts?: boolean) => {
@@ -1037,10 +1039,6 @@ export const ReportsPage: React.FC = () => {
       // 该仪表盘详情尚未加载，先加载再拉图表数据
       await loadDashboardDetails(id, charts);
     }
-  };
-
-  const handleTabClick = (key: string, e: React.MouseEvent<Element, MouseEvent> | React.KeyboardEvent<Element>) => {
-    // 不再需要，因为已经改用按钮
   };
 
   const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;

@@ -1,7 +1,7 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined, FundProjectionScreenOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Modal, Form, Input, message, Popconfirm, Popover, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
