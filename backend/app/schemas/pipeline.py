@@ -223,3 +223,26 @@ class PipelineStatsResponse(BaseModel):
     failed_executions: int
     avg_execution_time_ms: Optional[float]
     last_execution: Optional[datetime]
+
+
+class NodePreviewRequest(BaseModel):
+    """节点预览请求 - 用于无代码编辑器的实时预览"""
+    node_type: str = Field(..., description="节点类型: source | filter | aggregate | join | column_select | output")
+    config: Dict[str, Any] = Field(default_factory=dict, description="节点可视化配置 JSON")
+    source_data_source_id: int = Field(..., description="管道级业务数据源 ID")
+    # 可选的已完成上游节点预览（用于 join 等多输入节点）
+    upstream_previews: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="上游节点预览结果列表，每个元素含 node_id, columns, rows"
+    )
+    limit: int = Field(default=100, ge=1, le=500, description="预览行数限制")
+
+
+class NodePreviewResponse(BaseModel):
+    """节点预览响应"""
+    columns: List[str]
+    column_types: List[str] = Field(default_factory=list, description="列类型列表")
+    rows: List[Dict[str, Any]]
+    total: int
+    has_more: bool
+    sql_generated: str = Field(default="", description="实际生成的 SQL（调试用）")

@@ -26,7 +26,7 @@ from app.schemas.pipeline import (
     PipelineCreate, PipelineUpdate, PipelineResponse,
     PipelineListResponse, ExecutionResponse, ExecutionListResponse,
     StepPreviewResponse, StepSchemaResponse, RunPipelineResponse,
-    PipelineStatsResponse
+    PipelineStatsResponse, NodePreviewRequest, NodePreviewResponse
 )
 from app.core.security import get_current_user_id
 from app.models.pipeline import DataPipeline, PipelineExecution
@@ -616,3 +616,51 @@ async def get_execution(
     except Exception as e:
         logger.error(f"获取执行记录API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 节点实时预览（无代码编辑器用）====================
+
+async def _get_data_source_engine(db: AsyncSession, data_source_id: int):
+    """根据 data_source_id 获取数据源引擎和 Database 记录"""
+    from sqlalchemy import select
+    from app.models.visualization import Database
+    stmt = select(Database).where(Database.id == data_source_id, Database.is_active == True)  # noqa: E712
+    result = await db.execute(stmt)
+    db_model = result.scalar_one_or_none()
+    if not db_model:
+        raise ValueError(f"数据源 {data_source_id} 不存在或未激活")
+    url = (
+        f"mysql+aiomysql://{db_model.username}:{db_model.password}"
+        f"@{db_model.host}:{db_model.port}/{db_model.database_name}"
+    )
+    from sqlalchemy.ext.asyncio import create_async_engine
+    return db_model, create_async_engine(url, pool_pre_ping=True)
+
+
+@router.post("/preview", response_model=NodePreviewResponse)
+async def preview_node(
+    request: NodePreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    _: int = Depends(get_current_user_id),
+):
+    """
+    根据节点类型和可视化配置实时预览数据。
+
+    用于无代码编辑器中，用户配置节点后实时查看预览效果。
+    不依赖已保存的管道，直接从业务数据源拉取。
+    """
+    try:
+        db_model, engine = await _get_data_source_engine(db, request.source_data_source_id)
+        previewer = PipelineEngine(session=db, data_source_engine=engine, data_source_id=request.source_data_source_id)
+        result = await previewer.preview_node(
+            node_type=request.node_type,
+            config=request.config or {},
+            limit=request.limit,
+        )
+        return NodePreviewResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"节点预览API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+

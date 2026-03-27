@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -15,52 +15,37 @@ import {
   NodeTypes,
   useReactFlow,
 } from '@xyflow/react';
-import { Button, Space, message, Modal, Form, Input, Select, Divider, Tag, Alert } from 'antd';
+import { Button, Space, message, Dropdown, Tag, Tooltip, Alert } from 'antd';
 import {
   PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  ThunderboltOutlined, ExportOutlined, MergeOutlined
+  ThunderboltOutlined, ExportOutlined, MergeOutlined, DownOutlined,
+  DatabaseOutlined, FilterOutlined, BarChartOutlined, SwapOutlined,
+  AppstoreOutlined, TableOutlined, ColumnWidthOutlined, EyeOutlined
 } from '@ant-design/icons';
+import type { MenuProps } from 'antd';
 import './PipelineFlowEditor.css';
 import { PipelineNode } from '../../services/pipelineService';
 import {
   GraphNode, GraphEdge, detectCycle, topologicalSort,
   nodesToPipelineNodes, autoLayoutNodes
 } from '../../utils/graphUtils';
-import { MergeNodeDrawer } from './MergeNodeDrawer';
-import { DataSourceService } from '../../services/dataSourceService';
+import { NodeDetailPanel } from './NodeDetailPanel';
+import { CompactNodePreview } from './CompactNodePreview';
+import { getNodeTypeDef, NODE_TYPE_REGISTRY } from '../../utils/nodeTypeRegistry';
 
 interface PipelineFlowEditorProps {
   nodes: PipelineNode[];
-  /** 管道级业务数据源：源节点从此库拉取表列表并生成 SELECT */
   pipelineDataSourceId?: number | null;
   onSave: (nodes: PipelineNode[], edges: GraphEdge[]) => void;
   onCancel: () => void;
   readOnly?: boolean;
 }
 
-function quoteMysqlIdentifier(name: string): string {
-  return `\`${name.replace(/`/g, '``')}\``;
-}
-
-const { TextArea } = Input;
-
-const nodeTypeColors: Record<string, string> = {
-  source: '#1890ff',
-  transform: '#52c41a',
-  output: '#722ed1',
-  merge: '#fa8c16',
-};
-
-const typeLabels: Record<string, string> = {
-  source: '源',
-  transform: '转换',
-  output: '输出',
-  merge: '合并',
-};
-
 function generateId(): string {
   return `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
+
+// ─── Node Card (updated to show type + compact preview) ───────────────────────
 
 function PipelineNodeCard({
   data,
@@ -70,39 +55,187 @@ function PipelineNodeCard({
   selected: boolean;
 }) {
   const pipelineNode = data.pipelineNode as PipelineNode;
+  const def = getNodeTypeDef(pipelineNode.type);
+
   return (
     <div
       className={`pipeline-node-card type-${pipelineNode.type}`}
-      style={{ borderColor: nodeTypeColors[pipelineNode.type] || '#1890ff' }}
+      style={{
+        borderColor: selected ? def.color : def.borderColor,
+        boxShadow: selected ? `0 0 0 2px ${def.color}40` : undefined,
+      }}
     >
       <div className="pipeline-node-card-header">
+        <span style={{ color: def.color, fontSize: 16, flexShrink: 0 }}>{def.icon}</span>
         <span className="pipeline-node-card-name" title={pipelineNode.name}>
           {pipelineNode.name}
         </span>
-        <span className={`pipeline-node-card-type type-${pipelineNode.type}`}>
-          {typeLabels[pipelineNode.type] || pipelineNode.type}
+        <span
+          className={`pipeline-node-card-type type-badge`}
+          style={{ background: def.tagBg, color: def.tagColor }}
+        >
+          {def.labelShort}
         </span>
       </div>
-      {pipelineNode.merge_type && (
-        <Tag color="orange" style={{ marginBottom: 6, fontSize: 11 }}>
-          {pipelineNode.merge_type.replace('_', ' ')}
-        </Tag>
-      )}
-      {pipelineNode.upstream && pipelineNode.upstream.length > 0 && (
-        <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 4 }}>
-          上游: {pipelineNode.upstream.join(', ')}
-        </div>
-      )}
-      <div className="pipeline-node-card-sql" title={pipelineNode.sql}>
-        {pipelineNode.sql}
+
+      {/* Compact config summary */}
+      <NodeConfigSummary node={pipelineNode} />
+
+      {/* Mini preview (when available) */}
+      <div className="pipeline-node-card-preview">
+        <CompactNodePreview pipelineNode={pipelineNode} />
       </div>
     </div>
   );
 }
 
+function NodeConfigSummary({ node }: { node: PipelineNode }) {
+  const config = (node.config || {}) as Record<string, unknown>;
+  const def = getNodeTypeDef(node.type);
+
+  if (node.type === 'source') {
+    const tableName = config.tableName as string | undefined;
+    if (tableName) {
+      return (
+        <div className="pipeline-node-card-summary">
+          <Tag icon={<TableOutlined />} style={{ fontSize: 11 }}>
+            {tableName}
+          </Tag>
+        </div>
+      );
+    }
+  }
+
+  if (node.type === 'filter') {
+    const conditions = (config.conditions || []) as Array<{ column: string; operator: string; value: string }>;
+    const logic = (config.logic as string) || 'AND';
+    if (conditions.length > 0) {
+      const preview = conditions
+        .filter(c => c.column)
+        .slice(0, 2)
+        .map(c => `${c.column} ${c.operator} ${c.value || '…'}`)
+        .join(` ${logic} `);
+      return (
+        <div className="pipeline-node-card-summary">
+          <Tag style={{ fontSize: 10 }}>{conditions.length}个条件</Tag>
+          <span style={{ fontSize: 10, color: '#8c8c8c' }}>{preview}</span>
+        </div>
+      );
+    }
+  }
+
+  if (node.type === 'aggregate') {
+    const groupBy = (config.groupBy as string[]) || [];
+    const aggs = (config.aggregations || []) as Array<{ func: string; column: string; alias: string }>;
+    if (aggs.length > 0 || groupBy.length > 0) {
+      const summary = [
+        groupBy.length > 0 && `按 ${groupBy.length} 维分组`,
+        aggs.length > 0 && `${aggs.length} 个聚合`,
+      ].filter(Boolean).join('，');
+      return (
+        <div className="pipeline-node-card-summary">
+          <Tag color="green" style={{ fontSize: 10 }}>{summary}</Tag>
+        </div>
+      );
+    }
+  }
+
+  if (node.type === 'join') {
+    const jt = (config.joinType as string) || 'inner';
+    const keys = (config.joinKeys || []) as Array<{ leftCol: string; rightCol: string }>;
+    if (keys.length > 0) {
+      return (
+        <div className="pipeline-node-card-summary">
+          <Tag color="purple" style={{ fontSize: 10 }}>{jt.toUpperCase()}</Tag>
+          <span style={{ fontSize: 10, color: '#8c8c8c' }}>{keys[0]?.leftCol} = {keys[0]?.rightCol}</span>
+        </div>
+      );
+    }
+  }
+
+  if (node.type === 'output') {
+    const target = (config.targetTable as string) || config.targetSchema as string;
+    const mode = (config.writeMode as string) || 'create';
+    return (
+      <div className="pipeline-node-card-summary">
+        <Tag color="orange" style={{ fontSize: 10 }}>{mode === 'create' ? '新建' : mode === 'replace' ? '覆盖' : '追加'}</Tag>
+        {target && <Tag style={{ fontSize: 10 }}>{target}</Tag>}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 const nodeTypes: NodeTypes = {
   pipelineNode: PipelineNodeCard as unknown as NodeTypes[string],
 };
+
+// ─── Add Node Menu ────────────────────────────────────────────────────────────
+
+function AddNodeMenu({ onAdd }: { onAdd: (type: string) => void }) {
+  const items: MenuProps['items'] = [
+    {
+      key: 'header',
+      type: 'group',
+      label: '数据处理',
+      children: [
+        {
+          key: 'filter',
+          label: (
+            <Space><FilterOutlined style={{ color: NODE_TYPE_REGISTRY.filter.color }} />过滤行</Space>
+          ),
+          onClick: () => onAdd('filter'),
+        },
+        {
+          key: 'aggregate',
+          label: (
+            <Space><BarChartOutlined style={{ color: NODE_TYPE_REGISTRY.aggregate.color }} />聚合汇总</Space>
+          ),
+          onClick: () => onAdd('aggregate'),
+        },
+        {
+          key: 'join',
+          label: (
+            <Space><SwapOutlined style={{ color: NODE_TYPE_REGISTRY.join.color }} />关联表</Space>
+          ),
+          onClick: () => onAdd('join'),
+        },
+        {
+          key: 'column_select',
+          label: (
+            <Space><AppstoreOutlined style={{ color: NODE_TYPE_REGISTRY.column_select.color }} />选择列</Space>
+          ),
+          onClick: () => onAdd('column_select'),
+        },
+      ],
+    },
+    {
+      key: 'header2',
+      type: 'group',
+      label: '数据输出',
+      children: [
+        {
+          key: 'output',
+          label: (
+            <Space><ExportOutlined style={{ color: NODE_TYPE_REGISTRY.output.color }} />输出到表</Space>
+          ),
+          onClick: () => onAdd('output'),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <Dropdown menu={{ items }} trigger={['click']} placement="bottomLeft">
+      <Button icon={<PlusOutlined />}>
+        添加节点 <DownOutlined />
+      </Button>
+    </Dropdown>
+  );
+}
+
+// ─── Flow Inner ──────────────────────────────────────────────────────────────
 
 function FlowInner({
   initialNodes,
@@ -113,44 +246,18 @@ function FlowInner({
 }: PipelineFlowEditorProps & { initialNodes: Node[] }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [mergeDrawerVisible, setMergeDrawerVisible] = useState(false);
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [sourceTables, setSourceTables] = useState<{ name: string }[]>([]);
-  const [tablesLoading, setTablesLoading] = useState(false);
-  const [form] = Form.useForm();
-  const watchedNodeType = Form.useWatch('type', form);
+
+  // Panel state
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+
   const { fitView } = useReactFlow();
   const nextIdRef = useRef(initialNodes.length + 1);
 
-  const getPipelineNode = useCallback((node: Node): PipelineNode => {
-    return node.data.pipelineNode as PipelineNode;
-  }, []);
-
-  useEffect(() => {
-    if (!editModalVisible || !pipelineDataSourceId || watchedNodeType !== 'source') {
-      setSourceTables([]);
-      return;
-    }
-    let cancelled = false;
-    setTablesLoading(true);
-    DataSourceService.getTables(String(pipelineDataSourceId))
-      .then((list) => {
-        if (!cancelled) setSourceTables(list);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSourceTables([]);
-          message.error('加载表列表失败');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setTablesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [editModalVisible, pipelineDataSourceId, watchedNodeType]);
+  const selectedNode = useMemo(
+    () => (nodes as unknown as GraphNode[]).find(n => n.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId]
+  );
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -166,7 +273,7 @@ function FlowInner({
         target: params.target,
       };
 
-      // 环检测
+      // Cycle detection
       const testEdges: GraphEdge[] = [...(edges as unknown as GraphEdge[]), {
         id: newEdge.id,
         source: newEdge.source,
@@ -182,7 +289,7 @@ function FlowInner({
         return;
       }
 
-      // 更新目标节点 upstream
+      // Update target node's upstream
       const updatedNodes = (nodes as unknown as GraphNode[]).map(n => {
         if (n.id === params.target) {
           const pn = n.data.pipelineNode as Record<string, unknown>;
@@ -206,55 +313,58 @@ function FlowInner({
     [nodes, edges, setNodes, setEdges]
   );
 
-  const openEditModal = (nodeId: string) => {
-    setEditingNodeId(nodeId);
-    const node = (nodes as unknown as GraphNode[]).find(n => n.id === nodeId);
-    if (!node) return;
-    const pn = node.data.pipelineNode as PipelineNode;
-    form.setFieldsValue({
-      name: pn.name,
-      type: pn.type,
-      sql: pn.sql,
-      merge_type: pn.merge_type,
-    });
-    setEditModalVisible(true);
-  };
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (readOnly) return;
+    setSelectedNodeId(node.id);
+    setPanelOpen(true);
+  }, [readOnly]);
 
-  const handleEditSave = () => {
-    const values = form.getFieldsValue();
-    if (!editingNodeId) return;
-
-    const updatedNodes = (nodes as unknown as GraphNode[]).map(n => {
-      if (n.id === editingNodeId) {
+  const handleNodesDelete = useCallback(() => {
+    const toDelete = (nodes as unknown as GraphNode[])
+      .filter(n => n.data?.selected)
+      .map(n => n.id);
+    if (toDelete.length === 0) {
+      message.warning('请先选中要删除的节点');
+      return;
+    }
+    toDelete.forEach(id => {
+      const filteredNodes = (nodes as unknown as GraphNode[]).filter(n => n.id !== id);
+      const filteredEdges = (edges as unknown as GraphEdge[]).filter(e => e.source !== id && e.target !== id);
+      const cleaned = filteredNodes.map(n => {
         const pn = n.data.pipelineNode as Record<string, unknown>;
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            pipelineNode: {
-              ...pn,
-              name: values.name,
-              type: values.type,
-              sql: values.sql,
-              merge_type: values.merge_type,
+        const upstream = (pn.upstream as string[]) || [];
+        if (upstream.includes(id)) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              pipelineNode: { ...pn, upstream: upstream.filter((u: string) => u !== id) },
             },
-          },
-        } as unknown as Node;
-      }
-      return n;
+          } as unknown as Node;
+        }
+        return n;
+      });
+      setNodes(cleaned);
+      setEdges(filteredEdges as unknown as Edge[]);
     });
+    if (selectedNodeId && toDelete.includes(selectedNodeId)) {
+      setPanelOpen(false);
+      setSelectedNodeId(null);
+    }
+    message.success(`已删除 ${toDelete.length} 个节点`);
+  }, [nodes, edges, selectedNodeId, setNodes, setEdges]);
 
-    setNodes(updatedNodes);
-    setEditModalVisible(false);
-    setEditingNodeId(null);
-    form.resetFields();
-  };
+  const handlePanelNodeUpdate = useCallback((updatedNode: GraphNode) => {
+    setNodes(prev => prev.map(n =>
+      n.id === updatedNode.id
+        ? { ...n, data: { ...updatedNode.data } }
+        : n
+    ));
+  }, [setNodes]);
 
-  const handleDeleteNode = (nodeId: string) => {
+  const handlePanelNodeDelete = useCallback((nodeId: string) => {
     const filteredNodes = (nodes as unknown as GraphNode[]).filter(n => n.id !== nodeId);
     const filteredEdges = (edges as unknown as GraphEdge[]).filter(e => e.source !== nodeId && e.target !== nodeId);
-
-    // 清理其他节点 upstream 引用
     const cleaned = filteredNodes.map(n => {
       const pn = n.data.pipelineNode as Record<string, unknown>;
       const upstream = (pn.upstream as string[]) || [];
@@ -263,18 +373,20 @@ function FlowInner({
           ...n,
           data: {
             ...n.data,
-            pipelineNode: { ...pn, upstream: upstream.filter((id: string) => id !== nodeId) },
+            pipelineNode: { ...pn, upstream: upstream.filter((u: string) => u !== nodeId) },
           },
         } as unknown as Node;
       }
       return n;
     });
-
     setNodes(cleaned);
     setEdges(filteredEdges as unknown as Edge[]);
-  };
+    setPanelOpen(false);
+    setSelectedNodeId(null);
+  }, [nodes, edges, setNodes, setEdges]);
 
-  const addNode = (type: string) => {
+  const addNode = useCallback((type: string) => {
+    const def = getNodeTypeDef(type);
     const newId = generateId();
     const newNode: Node = {
       id: newId,
@@ -283,26 +395,28 @@ function FlowInner({
       data: {
         pipelineNode: {
           id: newId,
-          name: `新建${typeLabels[type] || type}节点`,
+          name: `新建${def.label}节点`,
           type,
-          sql: '',
+          config: {},
           order: nextIdRef.current,
           upstream: [],
-          merge_type: type === 'merge' ? 'union' : undefined,
         },
       },
     };
     nextIdRef.current += 1;
-    setNodes([...nodes, newNode]);
-  };
+    setNodes(prev => [...prev, newNode]);
+    // Auto-open panel for new node
+    setSelectedNodeId(newId);
+    setPanelOpen(true);
+  }, [setNodes]);
 
-  const handleAutoLayout = () => {
+  const handleAutoLayout = useCallback(() => {
     const layouted = autoLayoutNodes(nodes as unknown as GraphNode[], edges as unknown as GraphEdge[]);
     setNodes(layouted as unknown as Node[]);
     setTimeout(() => fitView({ padding: 0.2 }), 50);
-  };
+  }, [nodes, edges, setNodes, fitView]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (nodes.length === 0) {
       message.warning('请至少添加一个节点');
       return;
@@ -319,7 +433,6 @@ function FlowInner({
     const pipelineNodes = nodesToPipelineNodes(sortedNodes, positions);
     const graphEdges = edges as unknown as GraphEdge[];
 
-    // 从边推导 upstream
     const withUpstream = pipelineNodes.map((pn, i) => {
       const nodeId = sortedIds[i];
       const ups = graphEdges.filter(e => e.target === nodeId).map(e => e.source);
@@ -327,185 +440,77 @@ function FlowInner({
     });
 
     onSave(withUpstream as PipelineNode[], graphEdges);
-  };
+  }, [nodes, edges, onSave]);
 
   return (
     <div className="pipeline-editor-container">
+      {/* Toolbar */}
       {!readOnly && (
         <div className="pipeline-editor-toolbar">
           <Space wrap>
-            <Button icon={<PlusOutlined />} onClick={() => addNode('source')}>添加源节点</Button>
-            <Button icon={<ThunderboltOutlined />} onClick={() => addNode('transform')}>添加转换节点</Button>
-            <Button icon={<MergeOutlined />} onClick={() => setMergeDrawerVisible(true)}>添加合并节点</Button>
-            <Button icon={<ExportOutlined />} onClick={() => addNode('output')}>添加输出节点</Button>
+            <AddNodeMenu onAdd={addNode} />
           </Space>
-          <Divider type="vertical" style={{ height: 24, margin: '0 8px' }} />
-          <Button onClick={handleAutoLayout}>自动布局</Button>
-          <Divider type="vertical" style={{ height: 24, margin: '0 8px' }} />
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存</Button>
-          <Button icon={<CloseOutlined />} onClick={onCancel}>取消</Button>
+          <Space style={{ marginLeft: 'auto' }}>
+            <Button onClick={handleAutoLayout}>自动布局</Button>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存</Button>
+            <Button icon={<CloseOutlined />} onClick={onCancel}>取消</Button>
+          </Space>
         </div>
       )}
 
-      <div className="pipeline-flow-wrapper">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={readOnly ? undefined : onNodesChange}
-          onEdgesChange={readOnly ? undefined : onEdgesChange}
-          onConnect={readOnly ? undefined : handleConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          deleteKeyCode={readOnly ? null : 'Delete'}
-          disabled={readOnly}
-          onNodeClick={(_, node) => !readOnly && openEditModal(node.id)}
-        >
-          <Background variant="dots" gap={20} size={1} />
-          <Controls />
-          <MiniMap
-            nodeColor={(n) => {
-              const pn = n.data?.pipelineNode as PipelineNode | undefined;
-              return nodeTypeColors[pn?.type || ''] || '#1890ff';
-            }}
-          />
-          {!readOnly && (
-            <Panel position="top-right">
-              <Space direction="vertical">
+      {/* Main area: canvas + right panel */}
+      <div className="pipeline-editor-body">
+        <div className="pipeline-flow-wrapper">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={readOnly ? undefined : onNodesChange}
+            onEdgesChange={readOnly ? undefined : onEdgesChange}
+            onConnect={readOnly ? undefined : handleConnect}
+            nodeTypes={nodeTypes}
+            fitView
+            deleteKeyCode={readOnly ? null : 'Delete'}
+            disabled={readOnly}
+            onNodeClick={handleNodeClick}
+          >
+            <Background variant="dots" gap={20} size={1} />
+            <Controls />
+            <MiniMap
+              nodeColor={(n) => {
+                const pn = n.data?.pipelineNode as PipelineNode | undefined;
+                return getNodeTypeDef(pn?.type || '').color || '#1890ff';
+              }}
+            />
+            {!readOnly && (
+              <Panel position="top-right">
                 <Button
                   size="small"
                   icon={<DeleteOutlined />}
                   danger
-                  onClick={() => {
-                    const selected = (nodes as unknown as GraphNode[]).filter(n => n.data?.selected);
-                    if (selected.length > 0) {
-                      selected.forEach(n => handleDeleteNode(n.id));
-                    }
-                  }}
+                  onClick={handleNodesDelete}
                 >
                   删除选中
                 </Button>
-              </Space>
-            </Panel>
-          )}
-        </ReactFlow>
+              </Panel>
+            )}
+          </ReactFlow>
+        </div>
+
+        {/* Right-side configuration panel */}
+        {panelOpen && !readOnly && (
+          <NodeDetailPanel
+            selectedNode={selectedNode}
+            allNodes={nodes as unknown as GraphNode[]}
+            allEdges={edges as unknown as GraphEdge[]}
+            pipelineDataSourceId={pipelineDataSourceId}
+            onNodeUpdate={handlePanelNodeUpdate}
+            onNodeDelete={handlePanelNodeDelete}
+            onClose={() => { setPanelOpen(false); setSelectedNodeId(null); }}
+            open={panelOpen}
+            readOnly={readOnly}
+          />
+        )}
       </div>
-
-      <Modal
-        title="编辑节点"
-        open={editModalVisible}
-        onOk={handleEditSave}
-        onCancel={() => { setEditModalVisible(false); setEditingNodeId(null); form.resetFields(); }}
-        okText="保存"
-        cancelText="取消"
-        width={600}
-      >
-        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item name="name" label="节点名称" rules={[{ required: true, message: '请输入节点名称' }]}>
-            <Input placeholder="请输入节点名称" />
-          </Form.Item>
-          <Form.Item name="type" label="节点类型" rules={[{ required: true, message: '请选择节点类型' }]}>
-            <Select>
-              <Select.Option value="source">源 (Source)</Select.Option>
-              <Select.Option value="transform">转换 (Transform)</Select.Option>
-              <Select.Option value="output">输出 (Output)</Select.Option>
-              <Select.Option value="merge">合并 (Merge)</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="merge_type" label="合并类型" extra="仅在节点类型为「合并」时生效">
-            <Select allowClear placeholder="选择合并类型（可选）">
-              <Select.Option value="union">UNION</Select.Option>
-              <Select.Option value="left_join">LEFT JOIN</Select.Option>
-              <Select.Option value="right_join">RIGHT JOIN</Select.Option>
-              <Select.Option value="full_join">FULL JOIN</Select.Option>
-            </Select>
-          </Form.Item>
-          {watchedNodeType === 'source' && (
-            <div style={{ marginBottom: 16 }}>
-              {!pipelineDataSourceId ? (
-                <Alert type="warning" showIcon message="请先在表单中选择管道数据源（业务库），再为源节点选表。" />
-              ) : (
-                <Form.Item label="从库中选择表">
-                  <Select
-                    showSearch
-                    optionFilterProp="label"
-                    loading={tablesLoading}
-                    allowClear
-                    placeholder="选择表后将生成 SELECT * FROM …（可再在下方修改 SQL）"
-                    options={sourceTables.map((t) => ({ label: t.name, value: t.name }))}
-                    onChange={(tableName: string | null) => {
-                      if (!tableName) return;
-                      form.setFieldsValue({ sql: `SELECT * FROM ${quoteMysqlIdentifier(tableName)}` });
-                    }}
-                  />
-                </Form.Item>
-              )}
-            </div>
-          )}
-          <Form.Item
-            name="sql"
-            label="SQL 语句"
-            rules={[{ required: true, message: '请输入 SQL 语句' }]}
-            extra={
-              <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
-                占位符说明：<br />
-                - <code>{'{prev_table}'}</code> — 第一个上游节点的结果表<br />
-                - <code>{'{upstream_table_0}'}</code>, <code>{'{upstream_table_1}'}</code> — 按索引引用<br />
-                - <code>{'{upstream_table_<node_id>'}</code> — 按节点 ID 引用
-              </div>
-            }
-          >
-            <TextArea rows={6} placeholder="SELECT * FROM {prev_table} WHERE ..." style={{ fontFamily: 'monospace' }} />
-          </Form.Item>
-          {editingNodeId && (
-            <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
-              节点 ID: <code>{editingNodeId}</code>
-              {(() => {
-                const node = (nodes as unknown as GraphNode[]).find(n => n.id === editingNodeId);
-                const pn = node?.data?.pipelineNode as PipelineNode | undefined;
-                if (pn?.upstream?.length) {
-                  return <><br />上游节点: <Tag>{pn.upstream.join(', ')}</Tag></>;
-                }
-                return null;
-              })()}
-            </div>
-          )}
-        </Form>
-      </Modal>
-
-      <MergeNodeDrawer
-        visible={mergeDrawerVisible}
-        sourceNodes={nodes as unknown as GraphNode[]}
-        onConfirm={(config) => {
-          const newId = generateId();
-          const newNode: Node = {
-            id: newId,
-            type: 'pipelineNode',
-            position: { x: 300 + nextIdRef.current * 50, y: 200 },
-            data: {
-              pipelineNode: {
-                id: newId,
-                name: config.output_name || '合并节点',
-                type: 'merge',
-                sql: '',
-                order: nextIdRef.current,
-                upstream: config.upstream_ids,
-                merge_type: config.merge_type,
-              },
-            },
-          };
-          nextIdRef.current += 1;
-          setNodes([...nodes, newNode]);
-
-          const newEdges: Edge[] = config.upstream_ids.map(uid => ({
-            id: `${uid}-${newId}`,
-            source: uid,
-            target: newId,
-          }));
-          setEdges([...edges, ...newEdges] as Edge[]);
-          setMergeDrawerVisible(false);
-        }}
-        onCancel={() => setMergeDrawerVisible(false)}
-      />
     </div>
   );
 }

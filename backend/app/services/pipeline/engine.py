@@ -587,3 +587,214 @@ class PipelineEngine:
             return False, "管道配置存在循环依赖"
 
         return True, ""
+
+    # ================================================================
+    # 节点预览（用于无代码编辑器实时预览）
+    # ================================================================
+
+    @staticmethod
+    def _safe_identifier(name: str) -> str:
+        """安全地包裹表名/列名，避免 SQL 注入"""
+        return f"`{name.replace('`', '``')}`"
+
+    @staticmethod
+    def _build_filter_sql(
+        table_ref: str,
+        conditions: List[Dict[str, Any]],
+        logic: str = "AND",
+    ) -> str:
+        """根据可视化配置构建 WHERE 子句"""
+        if not conditions:
+            return ""
+        clauses = []
+        for cond in conditions:
+            col = PipelineEngine._safe_identifier(str(cond.get("column", "")))
+            op = str(cond.get("operator", "eq"))
+            val = str(cond.get("value", ""))
+            if op == "eq":
+                clauses.append(f"{col} = '{val}'")
+            elif op == "ne":
+                clauses.append(f"{col} != '{val}'")
+            elif op == "gt":
+                clauses.append(f"{col} > '{val}'")
+            elif op == "ge":
+                clauses.append(f"{col} >= '{val}'")
+            elif op == "lt":
+                clauses.append(f"{col} < '{val}'")
+            elif op == "le":
+                clauses.append(f"{col} <= '{val}'")
+            elif op == "contains":
+                clauses.append(f"{col} LIKE '%{val}%'")
+            elif op == "startsWith":
+                clauses.append(f"{col} LIKE '{val}%'")
+            elif op == "endsWith":
+                clauses.append(f"{col} LIKE '%{val}'")
+            elif op == "isNull":
+                clauses.append(f"{col} IS NULL")
+            elif op == "isNotNull":
+                clauses.append(f"{col} IS NOT NULL")
+            elif op == "in":
+                items = ", ".join(f"'{v.strip()}'" for v in val.split(",") if v.strip())
+                clauses.append(f"{col} IN ({items})")
+        if not clauses:
+            return ""
+        sep = f" {logic} "
+        return f" WHERE {sep.join(clauses)}"
+
+    @staticmethod
+    def build_node_sql(
+        node_type: str,
+        config: Dict[str, Any],
+        upstream_refs: Optional[List[Tuple[str, str]]] = None,
+        # upstream_refs: List[Tuple[table_or_sql, alias]] for multi-input nodes
+    ) -> Tuple[str, List[str]]:
+        """
+        根据节点类型和可视化配置生成 SELECT SQL。
+
+        Returns:
+            (sql, list_of_column_names)
+        """
+        table_name = config.get("tableName", "")
+        limit = 100
+
+        if node_type == "source":
+            tbl = PipelineEngine._safe_identifier(table_name) if table_name else "unknown_table"
+            return f"SELECT * FROM {tbl} LIMIT {limit}", []
+
+        if node_type == "filter":
+            conditions = config.get("conditions", [])
+            logic = config.get("logic", "AND")
+            if upstream_refs:
+                ref, alias = upstream_refs[0]
+                where = PipelineEngine._build_filter_sql(ref, conditions, logic)
+                return f"SELECT * FROM ({ref}) AS t{where} LIMIT {limit}", []
+            return "", []
+
+        if node_type == "aggregate":
+            group_by = config.get("groupBy", [])
+            aggregations = config.get("aggregations", [])
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                if not aggregations:
+                    return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+                def _agg_alias(agg):
+                    fn = agg.get("func", "count")
+                    col = agg.get("column", "x")
+                    alias = agg.get("alias", f"{fn}_{col}")
+                    return f"{fn.upper()}({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
+
+                select_parts = [
+                    *[PipelineEngine._safe_identifier(c) for c in group_by],
+                    *[_agg_alias(agg) for agg in aggregations],
+                ]
+                group_str = ""
+                if group_by:
+                    group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in group_by)}"
+                return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str} LIMIT {limit}", []
+
+        if node_type == "join":
+            join_type = config.get("joinType", "inner")
+            join_keys = config.get("joinKeys", [])
+            jt_sql = {
+                "inner": "INNER JOIN",
+                "left": "LEFT JOIN",
+                "right": "RIGHT JOIN",
+                "full": "FULL JOIN",
+            }.get(join_type, "INNER JOIN")
+            if upstream_refs and len(upstream_refs) >= 2:
+                left_ref, _ = upstream_refs[0]
+                right_ref, _ = upstream_refs[1]
+                if join_keys:
+                    on_clause = " AND ".join(
+                        f"a.{PipelineEngine._safe_identifier(k.get('leftCol', ''))} = b.{PipelineEngine._safe_identifier(k.get('rightCol', ''))}"
+                        for k in join_keys
+                    )
+                    return (
+                        f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON {on_clause} LIMIT {limit}",
+                        [],
+                    )
+                return f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON 1=0 LIMIT {limit}", []
+            return "", []
+
+        if node_type == "column_select":
+            selected = config.get("selectedColumns", [])
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                if not selected:
+                    return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+                cols = [
+                    (
+                        f"{PipelineEngine._safe_identifier(sc.get('from', ''))} AS {PipelineEngine._safe_identifier(sc.get('to', sc.get('from', '')))}"
+                        if sc.get("from") != sc.get("to")
+                        else PipelineEngine._safe_identifier(sc.get("from", ""))
+                    )
+                    for sc in selected
+                    if sc.get("from")
+                ]
+                return f"SELECT {', '.join(cols)} FROM ({ref}) AS t LIMIT {limit}", []
+
+        if node_type == "output":
+            # Output 节点预览上游数据
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+
+        return "", []
+
+    async def preview_node(
+        self,
+        node_type: str,
+        config: Dict[str, Any],
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        对单个节点执行实时预览（不保存到临时表）。
+
+        Args:
+            node_type: 节点类型
+            config: 节点可视化配置
+            limit: 预览行数
+
+        Returns:
+            {"columns": [...], "column_types": [...], "rows": [...], "total": int,
+             "has_more": bool, "sql_generated": str}
+        """
+        try:
+            sql, _ = self.build_node_sql(node_type, config)
+            if not sql:
+                return {
+                    "columns": [],
+                    "column_types": [],
+                    "rows": [],
+                    "total": 0,
+                    "has_more": False,
+                    "sql_generated": "",
+                }
+
+            async with self.data_source_engine.connect() as conn:
+                result = await conn.execute(text(sql))
+                rows_raw = result.fetchall()
+                columns = list(result.keys()) if hasattr(result, "keys") and result.keys() else []
+                col_types = []
+                for col in columns:
+                    col_types.append("string")
+
+                data = []
+                for row in rows_raw:
+                    item = dict(zip(columns, row))
+                    for k, v in list(item.items()):
+                        if hasattr(v, "isoformat"):
+                            item[k] = v.isoformat()
+                    data.append(item)
+
+                return {
+                    "columns": columns,
+                    "column_types": col_types,
+                    "rows": data,
+                    "total": len(data),
+                    "has_more": len(data) >= limit,
+                    "sql_generated": sql,
+                }
+        except Exception as e:
+            logger.error(f"节点预览失败: {e}")
+            raise ValueError(f"预览失败: {str(e)}")
