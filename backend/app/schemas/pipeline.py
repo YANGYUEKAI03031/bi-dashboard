@@ -105,6 +105,9 @@ class PipelineUpdate(BaseModel):
     config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     is_public: Optional[bool] = None
+    source_data_source_id: Optional[int] = Field(
+        None, description="管道级业务数据源；可与源节点 config 中的选择同步"
+    )
 
 
 class PipelineResponse(BaseModel):

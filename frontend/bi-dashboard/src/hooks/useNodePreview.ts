@@ -35,21 +35,25 @@ export function useNodePreview() {
   const loadPreview = useCallback(async (params: LoadPreviewParams, immediate = false) => {
     const { node, pipelineDataSourceId, limit = 100 } = params;
     if (!pipelineDataSourceId) {
-      setPreviewError('请先选择业务数据源');
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setPreviewLoading(false);
+      setPreviewError(null);
+      setPreviewData(null);
       return;
     }
 
     const cacheKey = `${node.id}-${JSON.stringify(node.data.pipelineNode)}`;
     if (!immediate && cacheRef.current[cacheKey]) {
+      setPreviewLoading(false);
+      setPreviewError(null);
       setPreviewData(cacheRef.current[cacheKey]);
       return;
     }
 
-    // Debounce
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    setPreviewLoading(true);
+    setPreviewError(null);
     debounceRef.current = setTimeout(async () => {
-      setPreviewLoading(true);
-      setPreviewError(null);
       try {
         const token = AuthService.getAuthToken();
         const response = await fetch(`${API_BASE_URL}/pipeline/preview`, {
@@ -82,9 +86,9 @@ export function useNodePreview() {
         };
         cacheRef.current[cacheKey] = result;
         setPreviewData(result);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : '预览加载失败';
-        setPreviewError(msg);
+      } catch (_err: unknown) {
+        // 预览失败不弹红条，统一在面板层显示「暂无数据」
+        setPreviewError(null);
         setPreviewData(null);
       } finally {
         setPreviewLoading(false);
@@ -94,9 +98,10 @@ export function useNodePreview() {
 
   const clearPreview = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    setPreviewLoading(false);
     setPreviewData(null);
     setPreviewError(null);
   }, []);
 
-  return { previewData, previewLoading, previewError, loadPreview, clearPreview };
+  return { previewData, previewLoading, loadPreview, clearPreview };
 }

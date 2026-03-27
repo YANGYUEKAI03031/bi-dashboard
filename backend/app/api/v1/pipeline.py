@@ -164,6 +164,9 @@ async def update_pipeline(
             update_fields['is_active'] = update_data.is_active
         if update_data.is_public is not None:
             update_fields['is_public'] = update_data.is_public
+        if update_data.source_data_source_id is not None:
+            await service._assert_pipeline_business_data_source(update_data.source_data_source_id)
+            update_fields['source_data_source_id'] = update_data.source_data_source_id
 
         pipeline = await service.update_pipeline(pipeline_id, user_id, **update_fields)
 

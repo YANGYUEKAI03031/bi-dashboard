@@ -11,6 +11,7 @@ import {
   SwapOutlined,
   AppstoreOutlined,
   ExportOutlined,
+  HolderOutlined,
 } from '@ant-design/icons';
 
 /** Data type colors for column chips */
@@ -140,6 +141,34 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     description: '将结果写入目标表',
     icon: <ExportOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select'],
+  },
+  transform: {
+    type: 'transform',
+    label: '数据转换',
+    labelShort: '转换',
+    color: '#52c41a',
+    bgColor: '#F6FFED',
+    borderColor: '#52c41a',
+    tagBg: '#d9f7be',
+    tagColor: '#52c41a',
+    hasPreview: true,
+    description: '对字段进行表达式转换',
+    icon: <HolderOutlined />,
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform'],
+  },
+  merge: {
+    type: 'merge',
+    label: '合并节点',
+    labelShort: '合并',
+    color: '#fa8c16',
+    bgColor: '#FFFAF0',
+    borderColor: '#fa8c16',
+    tagBg: '#FFE7BA',
+    tagColor: '#FA541C',
+    hasPreview: true,
+    description: '将多个上游节点合并',
+    icon: <SwapOutlined />,
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform', 'merge'],
   },
 };
 

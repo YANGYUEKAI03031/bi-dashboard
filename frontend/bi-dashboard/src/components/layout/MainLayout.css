@@ -248,6 +248,7 @@
   flex-direction: column;
   overflow: hidden;
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
 }
 
 .top-bar {
@@ -721,4 +722,131 @@
   padding-right: 32px;
 }
 
-/* 滚动条由全局 index.css 统一 */
+/* ─── Responsive: medium – narrower expanded sidebar ─── */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 200px;
+    flex: 0 0 200px;
+  }
+
+  .nav-item {
+    padding: 10px 16px;
+    margin: 3px 12px;
+    font-size: 13px;
+  }
+
+  .nav-item .icon {
+    margin-right: 10px;
+    font-size: 16px;
+  }
+
+  .nav-subitem {
+    padding: 7px 14px;
+    font-size: 12px;
+  }
+
+  .logo {
+    padding: 20px 16px;
+  }
+
+  .logo h2 {
+    font-size: 18px;
+  }
+}
+
+/* ─── Responsive: small – default collapsed, main area maximised ─── */
+@media (max-width: 992px) {
+  .sidebar {
+    width: 70px;
+    flex: 0 0 70px;
+    min-width: 70px;
+  }
+
+  .sidebar .logo {
+    padding: 20px 12px;
+    justify-content: center;
+  }
+
+  .sidebar .logo h2 {
+    display: none;
+  }
+
+  .sidebar .logo .sidebar-toggle {
+    margin: 0 auto;
+  }
+
+  .sidebar .nav-item {
+    padding: 12px;
+    margin: 4px 8px;
+    justify-content: center;
+  }
+
+  .sidebar .nav-item .icon {
+    margin-right: 0;
+  }
+
+  .sidebar .nav-item .nav-text {
+    display: none;
+  }
+
+  .sidebar .nav-submenu {
+    display: none;
+  }
+
+  .sidebar .sidebar-footer {
+    padding: 20px 12px;
+  }
+
+  .sidebar .user-info {
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .sidebar .user-details {
+    display: none;
+  }
+
+  .sidebar .logout-btn {
+    padding: 10px;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .sidebar .logout-btn .logout-text {
+    display: none;
+  }
+
+  .sidebar .logout-btn .icon {
+    margin-right: 0;
+  }
+
+  .sidebar .nav-add-btn {
+    display: none;
+  }
+
+  .main-content {
+    min-width: 0;
+  }
+
+  .content-wrapper {
+    padding: 16px;
+  }
+}
+
+/* ─── Responsive: tiny – tighter top-bar & content ─── */
+@media (max-width: 576px) {
+  .top-bar {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .content-wrapper {
+    padding: 12px;
+  }
+}
+
+/* ─── Scrollbar: global fallback (index.css should override) ─── */

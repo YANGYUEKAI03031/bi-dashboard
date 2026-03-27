@@ -158,7 +158,7 @@ class PipelineService:
             # 更新字段
             allowed_fields = {
                 'name', 'description', 'nodes', 'variables',
-                'config', 'is_active', 'is_public'
+                'config', 'is_active', 'is_public', 'source_data_source_id',
             }
             update_data = {}
 

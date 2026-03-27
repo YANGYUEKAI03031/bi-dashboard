@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/PipelineTestPage.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Card, Button, Table, Modal, Form, Input, Select, Space, Tag, message,
+  Card, Button, Table, Modal, Form, Input, Space, Tag, message,
   Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert
 } from 'antd';
 import {
@@ -12,8 +12,12 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { PipelineService, PipelineResponse, ExecutionResponse, PipelineNode } from '../services/pipelineService';
 import { DataSourceService } from '../services/dataSourceService';
-import { PipelineFlowEditor } from '../components/pipeline/PipelineFlowEditor';
+import { PipelineFlowEditor, PipelineFlowEditorHandle } from '../components/pipeline/PipelineFlowEditor';
 import { GraphEdge } from '../utils/graphUtils';
+import {
+  getFirstSourceDataSourceId,
+  hydrateSourceNodesWithPipelineDataSource,
+} from '../utils/pipelineDataSourceUtils';
 
 interface DataSource {
   id: string;
@@ -59,18 +63,21 @@ export const PipelineTestPage: React.FC = () => {
   const [editingPipelineId, setEditingPipelineId] = useState<number | null>(null);
   const [form] = Form.useForm();
   const [runForm] = Form.useForm();
-  const watchedPipelineSourceId = Form.useWatch('source_data_source_id', form);
+  /** 拉取画布当前节点（弹窗「创建/保存」时与工具栏「保存」一致，避免父 state 未同步） */
+  const flowEditorRef = useRef<PipelineFlowEditorHandle>(null);
 
-  /** 与数据源管理页一致：列表按 ID 升序，首条为系统默认库；管道仅允许选其余业务库 */
+  /** 与数据源管理页一致：多库时首条为系统默认，管道选其余业务库；仅有一个库时可用该库 */
   const pipelineDataSources = useMemo(() => {
-    if (dataSources.length <= 1) return [];
+    if (dataSources.length === 0) return [];
+    if (dataSources.length === 1) return dataSources;
     return dataSources.slice(1);
   }, [dataSources]);
 
-  const showLegacySourceOption = useMemo(() => {
-    if (!editingPipelineId || !selectedPipeline) return false;
-    return !pipelineDataSources.some(ds => parseInt(ds.id, 10) === selectedPipeline.source_data_source_id);
-  }, [editingPipelineId, selectedPipeline, pipelineDataSources]);
+  /** 从图中源节点 config 解析管道级数据源 ID（用于预览回退等） */
+  const pipelineDsFromNodes = useMemo(
+    () => getFirstSourceDataSourceId(editorNodes),
+    [editorNodes]
+  );
 
   useEffect(() => {
     loadPipelines();
@@ -98,7 +105,7 @@ export const PipelineTestPage: React.FC = () => {
     }
   };
 
-  const handleEditorSave = (nodes: PipelineNode[]) => {
+  const handleEditorSave = (nodes: PipelineNode[], _edges: import('../utils/graphUtils').GraphEdge[]) => {
     setEditorNodes(nodes);
   };
 
@@ -355,11 +362,12 @@ export const PipelineTestPage: React.FC = () => {
           form.resetFields();
         }}
         footer={null}
-        width={1100}
-        style={{ top: 20 }}
-        bodyStyle={{ padding: 0, height: '70vh' }}
+        width="min(1400px, 96vw)"
+        style={{ top: 12, paddingBottom: 0 }}
+        styles={{ body: { padding: 0, height: 'min(92vh, calc(100vh - 64px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
       >
-        <Form form={form} layout="vertical" style={{ padding: '16px 24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1 }}>
+          <Form form={form} layout="vertical" style={{ padding: '16px 24px', flexShrink: 0 }}>
           <Space style={{ width: '100%', marginBottom: 12 }} size="large">
             <Form.Item
               name="name"
@@ -376,36 +384,22 @@ export const PipelineTestPage: React.FC = () => {
             >
               <Input placeholder="请输入描述（可选）" />
             </Form.Item>
-            <Form.Item
-              name="source_data_source_id"
-              label="数据源（业务库）"
-              extra="须选择除系统默认库以外的数据源；源节点将从该库选表生成查询。"
-              rules={[{ required: true, message: '请选择业务数据源' }]}
-              style={{ flex: 1, marginBottom: 0 }}
-            >
-              <Select
-                placeholder={pipelineDataSources.length ? '请选择业务数据源' : '请先在数据源管理中新增业务库'}
-                disabled={!pipelineDataSources.length && !showLegacySourceOption}
-                notFoundContent={pipelineDataSources.length ? undefined : '暂无可用业务数据源'}
-              >
-                {pipelineDataSources.map(ds => (
-                  <Select.Option key={ds.id} value={parseInt(ds.id, 10)}>
-                    {ds.name} ({ds.type})
-                  </Select.Option>
-                ))}
-                {showLegacySourceOption && selectedPipeline && (
-                  <Select.Option value={selectedPipeline.source_data_source_id}>
-                    当前绑定 #{selectedPipeline.source_data_source_id}（请尽快改为业务库）
-                  </Select.Option>
-                )}
-              </Select>
-            </Form.Item>
           </Space>
-        </Form>
-        <div style={{ height: 'calc(70vh - 140px)', borderTop: '1px solid #e8e8e8' }}>
+          </Form>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            borderTop: '1px solid #e8e8e8',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           <PipelineFlowEditor
+            ref={flowEditorRef}
             nodes={editorNodes}
-            pipelineDataSourceId={watchedPipelineSourceId}
+            pipelineDataSourceId={pipelineDsFromNodes ?? undefined}
             onSave={handleEditorSave}
             onCancel={() => {
               setCreateModalVisible(false);
@@ -415,7 +409,7 @@ export const PipelineTestPage: React.FC = () => {
             }}
           />
         </div>
-        <div style={{ padding: '12px 24px', borderTop: '1px solid #e8e8e8', textAlign: 'right' }}>
+        <div style={{ padding: '12px 24px', borderTop: '1px solid #e8e8e8', textAlign: 'right', flexShrink: 0, background: '#fff' }}>
           <Space>
             <Button
               onClick={() => {
@@ -435,16 +429,19 @@ export const PipelineTestPage: React.FC = () => {
                   message.error('请输入管道名称');
                   return;
                 }
-                if (!values.source_data_source_id) {
-                  message.error('请选择业务数据源');
-                  return;
-                }
                 if (!pipelineDataSources.length && !editingPipelineId) {
-                  message.error('请先在数据源管理中配置至少一个业务数据源（除默认库外）');
+                  message.error('请先在数据源管理中配置至少一个数据源');
                   return;
                 }
-                if (editorNodes.length === 0) {
+                const snap = flowEditorRef.current?.getPipelineSnapshot();
+                const nodesPayload = snap?.nodes ?? editorNodes;
+                if (nodesPayload.length === 0) {
                   message.error('请至少添加一个节点');
+                  return;
+                }
+                const pipelineDsId = getFirstSourceDataSourceId(nodesPayload);
+                if (pipelineDsId == null) {
+                  message.error('请在数据源节点中选择业务数据源（业务库）');
                   return;
                 }
                 try {
@@ -452,7 +449,8 @@ export const PipelineTestPage: React.FC = () => {
                     await PipelineService.updatePipeline(editingPipelineId, {
                       name: values.name,
                       description: values.description,
-                      nodes: editorNodes,
+                      nodes: nodesPayload,
+                      source_data_source_id: pipelineDsId,
                     });
                     message.success('管道更新成功');
                     setCreateModalVisible(false);
@@ -465,8 +463,8 @@ export const PipelineTestPage: React.FC = () => {
                     await PipelineService.createPipeline({
                       name: values.name,
                       description: values.description,
-                      source_data_source_id: parseInt(values.source_data_source_id),
-                      nodes: editorNodes,
+                      source_data_source_id: pipelineDsId,
+                      nodes: nodesPayload,
                       is_public: false,
                     });
                     message.success('管道创建成功');
@@ -483,6 +481,7 @@ export const PipelineTestPage: React.FC = () => {
               {editingPipelineId ? '保存更新' : '创建'}
             </Button>
           </Space>
+        </div>
         </div>
       </Modal>
 
@@ -533,10 +532,14 @@ export const PipelineTestPage: React.FC = () => {
                   form.setFieldsValue({
                     name: selectedPipeline.name,
                     description: selectedPipeline.description,
-                    source_data_source_id: selectedPipeline.source_data_source_id,
                   });
                   setEditingPipelineId(selectedPipeline.id);
-                  setEditorNodes(selectedPipeline.nodes || []);
+                  setEditorNodes(
+                    hydrateSourceNodesWithPipelineDataSource(
+                      selectedPipeline.nodes || [],
+                      selectedPipeline.source_data_source_id
+                    )
+                  );
                   setDetailDrawerVisible(false);
                   setCreateModalVisible(true);
                 }

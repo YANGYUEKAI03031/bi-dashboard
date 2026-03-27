@@ -16,6 +16,55 @@
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <!--
+      ResizeObserver 在密集布局下会触发浏览器「错误」事件；react-error-overlay 会红屏。
+      必须在 webpack 打包脚本之前注册捕获阶段 listener，才能先于 overlay 执行并吞掉事件。
+    -->
+    <script>
+      (function () {
+        function isResizeObserverNoise(m) {
+          return (
+            m &&
+            String(m)
+              .toLowerCase()
+              .indexOf('resizeobserver') !== -1
+          );
+        }
+        function errorMessage(ev) {
+          var msg = ev && ev.message;
+          if (isResizeObserverNoise(msg)) return msg;
+          var err = ev && ev.error;
+          if (err && typeof err.message === 'string') return err.message;
+          return msg || '';
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (isResizeObserverNoise(errorMessage(e))) {
+              e.stopImmediatePropagation();
+              e.preventDefault();
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            var r = e.reason;
+            var m =
+              typeof r === 'string'
+                ? r
+                : r && r.message
+                  ? String(r.message)
+                  : '';
+            if (isResizeObserverNoise(m)) {
+              e.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+      })();
+    </script>
+    <!--
       Notice the use of %PUBLIC_URL% in the tags above.
       It will be replaced with the URL of the `public` folder during the build.
       Only files inside the `public` folder can be referenced from the HTML.

@@ -32,6 +32,8 @@ export interface PipelineUpdateRequest {
   config?: Record<string, any>;
   is_active?: boolean;
   is_public?: boolean;
+  /** 与源节点所选业务库同步（首个 source 节点的 config.source_data_source_id） */
+  source_data_source_id?: number;
 }
 
 export interface PipelineResponse {

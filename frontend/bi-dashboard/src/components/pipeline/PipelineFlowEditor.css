@@ -1,34 +1,118 @@
-/* PipelineFlowEditor styles - Updated for three-column layout */
+/**
+ * PipelineFlowEditor — Coze-style design system
+ *
+ * All color/spacing tokens are scoped to .pipeline-editor-container so they
+ * never leak into the rest of the app.  TSX only ever references classNames.
+ */
 
-/* ─── Main container ─────────────────────────────────────────────── */
+/* ─── Design tokens ──────────────────────────────────────────────── */
 .pipeline-editor-container {
+  /* Canvas */
+  --pipeline-canvas-bg:      #f0f2f5;
+  --pipeline-dot-color:     #d0d5dd;
+  --pipeline-dot-size:      1px;
+  --pipeline-dot-gap:       20px;
+
+  /* Node card */
+  --pipeline-card-radius:   10px;
+  --pipeline-card-bg:       #ffffff;
+  --pipeline-card-border:   #e4e7ec;
+  --pipeline-card-shadow:   0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --pipeline-card-shadow-h: 0 4px 12px rgba(0, 0, 0, 0.11), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --pipeline-card-shadow-sel: 0 0 0 2px var(--pipeline-accent-primary);
+
+  /* Node type icon badge */
+  --pipeline-icon-size:     28px;
+  --pipeline-icon-radius:   6px;
+
+  /* Chips (summary pills) */
+  --pipeline-chip-bg:       #f1f3f9;
+  --pipeline-chip-text:     #374151;
+  --pipeline-chip-border:   transparent;
+  --pipeline-chip-radius:   20px;
+  --pipeline-chip-font:     11px;
+
+  /* Upstream chips */
+  --pipeline-upstream-bg:   #eef2ff;
+  --pipeline-upstream-text: #4f46e5;
+
+  /* Edges */
+  --pipeline-edge-color:        #94a3b8;
+  --pipeline-edge-color-sel:   var(--pipeline-accent-primary);
+  --pipeline-edge-color-hover:  #64748b;
+  --pipeline-edge-width:        1.5px;
+  --pipeline-edge-width-sel:    2px;
+  --pipeline-edge-anim-color:   #93c5fd;
+
+  /* Handles (connection dots) */
+  --pipeline-handle-size:   8px;
+  --pipeline-handle-color:  var(--pipeline-accent-primary);
+  --pipeline-handle-border: 2px solid #fff;
+
+  /* Connection line (in-progress drag) */
+  --pipeline-conn-color:    var(--pipeline-accent-primary);
+  --pipeline-conn-width:   1.5px;
+
+  /* Accent / semantic */
+  --pipeline-accent-primary:   #4f46e5;
+  --pipeline-accent-success:   #10b981;
+  --pipeline-accent-danger:    #ef4444;
+  --pipeline-accent-warning:   #f59e0b;
+
+  /* Toolbar */
+  --pipeline-toolbar-bg:    #ffffff;
+  --pipeline-toolbar-h:     52px;
+
+  /* Bottom pill bar */
+  --pipeline-pill-bg:       #ffffff;
+  --pipeline-pill-shadow:  0 -2px 16px rgba(0, 0, 0, 0.08), 0 -1px 4px rgba(0, 0, 0, 0.05);
+  --pipeline-pill-radius:  12px;
+  --pipeline-pill-h:       48px;
+  --pipeline-pill-btn-radius: 8px;
+
+  /* Right panel */
+  --pipeline-panel-w:       380px;
+  --pipeline-panel-bg:     #ffffff;
+  --pipeline-panel-border: #e8e8e8;
+
+  /* Controls / MiniMap */
+  --pipeline-ctrl-bg:      rgba(255, 255, 255, 0.90);
+  --pipeline-ctrl-border:  #e4e7ec;
+  --pipeline-ctrl-shadow:  0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* Divider / separator */
+  --pipeline-divider:      #e4e7ec;
+
+  /* ── Apply tokens ── */
+
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #f5f7fa;
+  background: var(--pipeline-canvas-bg);
   border-radius: 8px;
   overflow: hidden;
 }
 
-/* ─── Toolbar ────────────────────────────────────────────────────── */
-.pipeline-editor-toolbar {
+/* ─── Minimal top toolbar (just title + breadcrumb, not the main action bar) ─── */
+.pipeline-editor-topbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 0 16px;
+  height: 44px;
+  background: var(--pipeline-toolbar-bg);
+  border-bottom: 1px solid var(--pipeline-divider);
   flex-shrink: 0;
+  gap: 8px;
 }
 
-.pipeline-editor-toolbar .ant-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.pipeline-editor-topbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
-/* ─── Body: canvas + right panel ─────────────────────────────────── */
+/* ─── Body: canvas + optional right panel ───────────────────────── */
 .pipeline-editor-body {
   display: flex;
   flex: 1;
@@ -36,7 +120,24 @@
   min-height: 0;
 }
 
-/* ─── Flow wrapper (canvas) ────────────────────────────────────────── */
+/* ─── Canvas column: 上方流程图 + 底部数据浏览 ───────────────── */
+.pipeline-flow-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* 截断内部 resize 信号，防止 ReactFlow ResizeObserver 循环 */
+}
+
+.pipeline-flow-main {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+/* legacy: 旧类名保留以免外部引用断裂 */
 .pipeline-flow-wrapper {
   flex: 1;
   position: relative;
@@ -44,28 +145,90 @@
   overflow: hidden;
 }
 
-/* ─── Node detail panel (right sidebar) ───────────────────────────── */
+/* ─── 画布底部数据浏览（单击节点） ───────────────────────────── */
+.pipeline-canvas-preview {
+  flex-shrink: 0;
+  height: 280px;
+  background: #fff;
+  border-top: 1px solid var(--pipeline-divider);
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.pipeline-canvas-preview--empty {
+  justify-content: center;
+  align-items: center;
+}
+
+.pipeline-canvas-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.pipeline-canvas-preview-title {
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-canvas-preview-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pipeline-canvas-preview-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* 固定高度切断渲染后高度变化触发的 ResizeObserver 连锁 */
+  height: 236px;
+}
+
+.pipeline-canvas-preview-loading {
+  text-align: center;
+  padding: 24px;
+}
+
+.pipeline-canvas-preview .preview-row--stripe td {
+  background: #f9fafb !important;
+}
+
+/* ─── Right-side config panel ──────────────────────────────────── */
 .node-detail-panel {
-  width: 380px;
+  width: var(--pipeline-panel-w);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-left: 1px solid #e8e8e8;
+  background: var(--pipeline-panel-bg);
+  border-left: 1px solid var(--pipeline-panel-border);
   overflow: hidden;
 }
 
 .node-detail-panel-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  justify-content: center;
+  padding: 12px 44px 12px 16px;
   border-bottom: 1px solid #f0f0f0;
   background: #fafafa;
   flex-shrink: 0;
 }
 
-.node-detail-panel-tabs {
+.node-detail-panel-tabs,
+.node-detail-panel-body {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -89,22 +252,191 @@
   padding: 0;
 }
 
-/* ─── Node card styles ───────────────────────────────────────────── */
-.pipeline-node-card {
-  background: #fff;
+/* Empty state (no node selected) */
+.node-detail-panel--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 24px 16px;
+}
+
+/* Header title row + absolute actions */
+.node-detail-panel-header-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-align: center;
+  max-width: calc(100% - 8px);
+}
+
+.node-detail-panel-header-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Tab body: vertical rhythm, content centered */
+.node-detail-panel-content {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.node-detail-panel-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.node-detail-panel-intro-desc {
+  display: block;
+  max-width: 280px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.node-detail-panel-alert {
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+  text-align: left;
+}
+
+.node-detail-panel-alert .ant-alert-message {
+  text-align: left;
+}
+
+.node-detail-panel-alert-inner {
+  text-align: left;
+}
+
+.node-detail-panel-upstream-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  margin-top: 6px;
+}
+
+/* Form: labels + controls visually centered (matches pipeline accent style) */
+.node-detail-form {
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+}
+
+.node-detail-form.ant-form-vertical .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.node-detail-form.ant-form-vertical .ant-form-item-label > label {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  color: #4b5563;
+  font-weight: 500;
+  text-align: left;
+}
+
+.node-detail-form .ant-form-item-control-input {
+  text-align: left;
+}
+
+.node-detail-form .ant-input,
+.node-detail-form .ant-input-affix-wrapper,
+.node-detail-form .ant-select .ant-select-selector {
+  text-align: left;
+}
+
+.node-detail-form .ant-select-selection-item,
+.node-detail-form .ant-select-selection-placeholder {
+  text-align: left;
+}
+
+/* Readonly / code blocks inside form: keep readable */
+.node-detail-form .ant-alert,
+.node-detail-form .ant-card,
+.node-detail-form table {
+  text-align: left;
+}
+
+.node-detail-form .ant-alert .ant-alert-message,
+.node-detail-form .ant-card-body {
+  text-align: left;
+}
+
+.node-detail-panel-nodeid {
+  margin-top: 16px;
+  padding: 10px 14px;
+  width: 100%;
+  max-width: 320px;
+  background: #f3f4f6;
+  border: 1px solid var(--pipeline-divider);
   border-radius: 8px;
-  padding: 12px 14px;
+  text-align: center;
+}
+
+.node-detail-panel-nodeid code {
+  word-break: break-all;
+}
+
+.node-detail-panel-content.node-detail-panel-content--preview {
+  align-items: stretch;
+}
+
+.node-detail-panel-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.node-detail-panel-preview-loading {
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.node-detail-panel-content--preview .ant-empty {
+  margin: 24px auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   NODE CARD — Coze-style
+   ══════════════════════════════════════════════════════════════════ */
+
+.pipeline-node-card {
+  background: var(--pipeline-card-bg);
+  border-radius: var(--pipeline-card-radius);
+  border: 1px solid var(--pipeline-card-border);
+  box-shadow: var(--pipeline-card-shadow);
   min-width: 240px;
-  max-width: 300px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border-left: 4px solid #6366F1;
-  transition: box-shadow 0.2s, transform 0.2s;
+  max-width: 296px;
   cursor: grab;
   user-select: none;
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+  position: relative;
 }
 
 .pipeline-node-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--pipeline-card-shadow-h);
+  border-color: #c9cfd8;
   transform: translateY(-1px);
 }
 
@@ -112,15 +444,25 @@
   cursor: grabbing;
 }
 
-.pipeline-node-card.type-source { border-left-color: #6366F1; }
-.pipeline-node-card.type-filter { border-left-color: #0EA5E9; }
-.pipeline-node-card.type-aggregate { border-left-color: #22C55E; }
-.pipeline-node-card.type-join { border-left-color: #8B5CF6; }
-.pipeline-node-card.type-column_select { border-left-color: #F59E0B; }
-.pipeline-node-card.type-output { border-left-color: #F97316; }
-.pipeline-node-card.type-transform { border-left-color: #52c41a; }
-.pipeline-node-card.type-merge { border-left-color: #fa8c16; }
+/* Selected state */
+.pipeline-node-card.selected,
+.pipeline-node-card:hover.selected {
+  box-shadow: var(--pipeline-card-shadow-sel);
+  border-color: var(--pipeline-accent-primary);
+}
 
+/* Error / validation state */
+.pipeline-node-card.pipeline-node-card--error {
+  border-color: var(--pipeline-accent-danger) !important;
+  box-shadow: 0 0 0 2px #fee2e2;
+}
+
+/* ─── Card body padding ──────────────────────────────────────────── */
+.pipeline-node-card-body {
+  padding: 10px 12px 8px;
+}
+
+/* ─── Header row ────────────────────────────────────────────────── */
 .pipeline-node-card-header {
   display: flex;
   align-items: center;
@@ -128,44 +470,139 @@
   margin-bottom: 8px;
 }
 
+/* Type icon badge (small rounded square) */
+.pipeline-node-card-icon {
+  width: var(--pipeline-icon-size);
+  height: var(--pipeline-icon-size);
+  border-radius: var(--pipeline-icon-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
 .pipeline-node-card-name {
   font-size: 13px;
   font-weight: 600;
-  color: #262626;
+  color: #111827;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+  line-height: 1.3;
 }
 
+/* Type badge pill */
 .pipeline-node-card-type {
   font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 8px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--pipeline-chip-radius);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 16px;
+}
+
+/* ─── Section labels (输入 / 输出) ─────────────────────────────── */
+.pipeline-node-section {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+/* ─── Upstream chips (输入) ─────────────────────────────────────── */
+.pipeline-node-card-upstreams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+  min-height: 0;
+}
+
+.pipeline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--pipeline-chip-bg);
+  color: var(--pipeline-chip-text);
+  border: 1px solid var(--pipeline-chip-border);
+  border-radius: var(--pipeline-chip-radius);
+  font-size: var(--pipeline-chip-font);
   font-weight: 500;
+  padding: 2px 8px;
+  line-height: 16px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline-chip--upstream {
+  background: var(--pipeline-upstream-bg);
+  color: var(--pipeline-upstream-text);
+}
+
+.pipeline-chip--placeholder {
+  background: transparent;
+  border: 1px dashed var(--pipeline-divider);
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.pipeline-chip-icon {
+  font-size: 10px;
   flex-shrink: 0;
 }
 
+/* ─── Summary chips (config summary, 输出) ─────────────────────── */
 .pipeline-node-card-summary {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 6px;
-  flex-wrap: wrap;
-  min-height: 18px;
+  min-height: 0;
 }
 
+/* Coze-style plain chip (overrides Ant Tag semantic colours) */
+.pipeline-chip-plain {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--pipeline-chip-bg);
+  color: var(--pipeline-chip-text);
+  border: 1px solid transparent;
+  border-radius: var(--pipeline-chip-radius);
+  font-size: var(--pipeline-chip-font);
+  font-weight: 500;
+  padding: 2px 8px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.pipeline-chip-plain--muted {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+/* ─── Preview area ──────────────────────────────────────────────── */
 .pipeline-node-card-preview {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--pipeline-divider);
   padding-top: 6px;
   margin-top: 2px;
 }
 
 .pipeline-node-card-sql {
   font-size: 10px;
-  color: #8c8c8c;
-  background: #fafafa;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #6b7280;
+  background: #f9fafb;
   border-radius: 4px;
   padding: 3px 7px;
   overflow: hidden;
@@ -175,82 +612,354 @@
   margin-bottom: 6px;
 }
 
-/* ─── React Flow overrides ───────────────────────────────────────── */
-.react-flow__node {
+/* ══════════════════════════════════════════════════════════════════
+   REACT FLOW OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Canvas background dots */
+.pipeline-editor-container .react-flow__background {
+  background-color: var(--pipeline-canvas-bg);
+}
+
+.pipeline-editor-container .react-flow__background pattern circle {
+  fill: var(--pipeline-dot-color);
+}
+
+/* Controls */
+.pipeline-editor-container .react-flow__controls {
+  background: var(--pipeline-ctrl-bg);
+  border: 1px solid var(--pipeline-ctrl-border);
   border-radius: 8px;
+  box-shadow: var(--pipeline-ctrl-shadow);
+  overflow: hidden;
 }
 
-.react-flow__edge-path {
-  stroke: #8c8c8c;
-  stroke-width: 2;
+.pipeline-editor-container .react-flow__controls-button {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--pipeline-divider);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  transition: background 0.15s;
 }
 
-.react-flow__edge.selected .react-flow__edge-path {
-  stroke: #6366F1;
-  stroke-width: 3;
+.pipeline-editor-container .react-flow__controls-button:last-child {
+  border-bottom: none;
 }
 
-.react-flow__edge.animated path {
-  stroke-dasharray: 5;
-  animation: dashdraw 0.5s linear infinite;
+.pipeline-editor-container .react-flow__controls-button:hover {
+  background: #f3f4f6;
+  color: var(--pipeline-accent-primary);
 }
 
-@keyframes dashdraw {
-  from { stroke-dashoffset: 10; }
-  to { stroke-dashoffset: 0; }
+.pipeline-editor-container .react-flow__controls-button svg {
+  fill: currentColor;
+  max-width: 14px;
+  max-height: 14px;
 }
 
-.react-flow__handle {
-  width: 10px;
-  height: 10px;
-  border: 2px solid #fff;
+/* MiniMap */
+.pipeline-editor-container .react-flow__minimap {
+  background: var(--pipeline-ctrl-bg);
+  border: 1px solid var(--pipeline-ctrl-border);
+  border-radius: 8px;
+  box-shadow: var(--pipeline-ctrl-shadow);
+  overflow: hidden;
 }
 
-.react-flow__handle-top {
-  background: #6366F1;
+.pipeline-editor-container .react-flow__minimap-mask {
+  fill: rgba(79, 70, 229, 0.08);
 }
 
-.react-flow__handle-bottom {
-  background: #6366F1;
+/* React Flow node wrapper reset (our card handles everything) */
+.pipeline-editor-container .react-flow__node {
+  border-radius: 0;
 }
 
-.react-flow__background {
-  background-color: #f5f7fa;
+/* ─── Handles — left (target) & right (source) ─────────────────── */
+.pipeline-editor-container .react-flow__handle {
+  width: var(--pipeline-handle-size);
+  height: var(--pipeline-handle-size);
+  background: var(--pipeline-handle-color);
+  border: var(--pipeline-handle-border);
+  border-radius: 50%;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.react-flow__panel {
-  margin: 12px;
+.pipeline-editor-container .react-flow__handle:hover {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
 }
 
-/* ─── Preview row ─────────────────────────────────────────────────── */
-.preview-row:hover td {
-  background: #f0f7ff !important;
+.pipeline-editor-container .react-flow__handle-left {
+  left: -5px;
 }
 
-/* ─── Add node menu styles ────────────────────────────────────────── */
+.pipeline-editor-container .react-flow__handle-right {
+  right: -5px;
+}
+
+/* ─── Edges ─────────────────────────────────────────────────────── */
+.pipeline-editor-container .react-flow__edge-path {
+  stroke: var(--pipeline-edge-color);
+  stroke-width: var(--pipeline-edge-width);
+  transition: stroke 0.15s, stroke-width 0.15s;
+}
+
+.pipeline-editor-container .react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--pipeline-edge-color-hover);
+  stroke-width: calc(var(--pipeline-edge-width) + 0.5px);
+}
+
+.pipeline-editor-container .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--pipeline-edge-color-sel);
+  stroke-width: var(--pipeline-edge-width-sel);
+}
+
+/* Animated dashed edges */
+.pipeline-editor-container .react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--pipeline-edge-anim-color);
+  stroke-dasharray: 6;
+  animation: pipeline-dash 0.6s linear infinite;
+}
+
+@keyframes pipeline-dash {
+  from { stroke-dashoffset: 12; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Connection line while dragging */
+.pipeline-editor-container .react-flow__connection-path {
+  stroke: var(--pipeline-conn-color);
+  stroke-width: var(--pipeline-conn-width);
+}
+
+/* ─── Default node (when no custom type matches) ────────────────── */
+.pipeline-editor-container .react-flow__node-default {
+  background: #fff;
+  border: 1px solid var(--pipeline-card-border);
+  border-radius: var(--pipeline-card-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #374151;
+  box-shadow: var(--pipeline-card-shadow);
+}
+
+/* ─── Panel wrapper ─────────────────────────────────────────────── */
+.pipeline-editor-container .react-flow__panel {
+  margin: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BOTTOM PILL TOOLBAR (Coze-style)
+   ══════════════════════════════════════════════════════════════════ */
+
+.pipeline-bottom-pill {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--pipeline-pill-bg);
+  border-radius: var(--pipeline-pill-radius);
+  box-shadow: var(--pipeline-pill-shadow);
+  border: 1px solid var(--pipeline-divider);
+  padding: 4px 8px;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.pipeline-bottom-pill-section {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pipeline-bottom-pill-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--pipeline-divider);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Pill action buttons — icon-only for zoom/fit, text for main ops */
+.pipeline-bottom-pill .ant-btn {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--pipeline-pill-btn-radius);
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pipeline-bottom-pill .ant-btn:hover {
+  background: #f3f4f6;
+  color: var(--pipeline-accent-primary);
+}
+
+.pipeline-bottom-pill .ant-btn--primary {
+  background: var(--pipeline-accent-primary);
+  color: #fff;
+  border: none;
+}
+
+.pipeline-bottom-pill .ant-btn--primary:hover {
+  background: #4338ca;
+  color: #fff;
+}
+
+.pipeline-bottom-pill .ant-btn--success {
+  background: var(--pipeline-accent-success);
+  color: #fff;
+  border: none;
+}
+
+.pipeline-bottom-pill .ant-btn--success:hover {
+  background: #059669;
+  color: #fff;
+}
+
+.pipeline-bottom-pill .ant-btn--danger {
+  color: var(--pipeline-accent-danger);
+}
+
+.pipeline-bottom-pill .ant-btn--danger:hover {
+  background: #fee2e2;
+  color: var(--pipeline-accent-danger);
+}
+
+.pipeline-bottom-pill .ant-btn--icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* ─── Add-node dropdown inside the pill ─────────────────────────── */
+.pipeline-bottom-pill .ant-dropdown-trigger {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--pipeline-pill-btn-radius);
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pipeline-bottom-pill .ant-dropdown-trigger:hover {
+  background: #f3f4f6;
+  color: var(--pipeline-accent-primary);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ADD NODE MENU (palette)
+   ══════════════════════════════════════════════════════════════════ */
+
 .pipeline-node-palette {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
   background: #fff;
-  border-radius: 8px;
-  min-width: 140px;
+  border-radius: 10px;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--pipeline-divider);
 }
 
-.pipeline-node-palette-title {
-  font-size: 12px;
-  color: #8c8c8c;
-  margin-bottom: 4px;
-  font-weight: 500;
+.pipeline-node-palette-section {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #9ca3af;
+  padding: 0 4px;
+  margin-top: 2px;
+}
+
+.pipeline-node-palette-section:first-child {
+  margin-top: 0;
 }
 
 .pipeline-add-btn {
   width: 100%;
   justify-content: flex-start;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 6px;
+  height: 32px;
+  font-size: 12px;
+  color: #374151;
+  padding: 0 8px;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
 }
 
-/* ─── Filter/aggregate condition card hover ────────────────────────── */
+.pipeline-add-btn:hover {
+  background: #f1f3f9;
+  color: var(--pipeline-accent-primary);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PREVIEW TABLE
+   ══════════════════════════════════════════════════════════════════ */
+
+.preview-row:hover td {
+  background: #eef2ff !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   READ-ONLY TOOLBAR
+   ══════════════════════════════════════════════════════════════════ */
+
+.pipeline-readonly-bar {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 44px;
+  background: var(--pipeline-toolbar-bg);
+  border-bottom: 1px solid var(--pipeline-divider);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.pipeline-readonly-bar .ant-btn {
+  font-size: 12px;
+}
+
+/* ─── CompactNodePreview chip override ──────────────────────────── */
+.pipeline-editor-container .pipeline-node-card .ant-tag {
+  border-radius: 4px;
+  font-size: 9px;
+  padding: 0 4px;
+  line-height: 14px;
+  border: none;
+  font-weight: 500;
+}
+
+/* ─── Filter/aggregate condition card ─────────────────────────── */
 .ant-card-small > .ant-card-body {
   padding: 8px 10px;
 }

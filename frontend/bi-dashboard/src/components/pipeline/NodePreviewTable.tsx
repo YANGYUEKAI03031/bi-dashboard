@@ -1,6 +1,6 @@
 /**
  * NodePreviewTable - Renders preview data for a pipeline node.
- * Used inside the NodeDetailPanel Preview tab.
+ * 画布底部浏览区与节点内紧凑预览共用。
  * Supports both compact (3-row) and full paginated modes.
  */
 import React, { useState } from 'react';
@@ -21,6 +21,10 @@ interface NodePreviewTableProps {
   pageSize?: number;
   /** Whether to show pagination controls */
   showPagination?: boolean;
+  /** Zebra striping (画布底部浏览模式) */
+  striped?: boolean;
+  /** 仅显示这些列（顺序与数组一致）；不传则显示全部 */
+  displayColumnKeys?: string[];
 }
 
 function formatCellValue(value: unknown): React.ReactNode {
@@ -41,8 +45,16 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   compact = false,
   pageSize = 10,
   showPagination = true,
+  striped = false,
+  displayColumnKeys,
 }) => {
   const [page, setPage] = useState(1);
+
+  const columnsOrdered = React.useMemo(() => {
+    if (!data?.columns?.length) return [];
+    if (!displayColumnKeys?.length) return data.columns;
+    return displayColumnKeys.filter((c) => data.columns.includes(c));
+  }, [data, displayColumnKeys]);
 
   if (!data || data.columns.length === 0) {
     return (
@@ -57,14 +69,17 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   const startIdx = (page - 1) * pageSize;
   const pagedRows = compact ? displayRows : data.rows.slice(startIdx, startIdx + pageSize);
 
-  const columns: ColumnsType<Record<string, unknown>> = data.columns.map(col => ({
+  const colList = columnsOrdered.length ? columnsOrdered : data.columns;
+
+  const columns: ColumnsType<Record<string, unknown>> = colList.map(col => ({
     title: (
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {data.columnTypes && data.columnTypes[data.columns.indexOf(col)] && (
+        {data.columnTypes && data.columnTypes[data.columns.indexOf(col)] !== undefined && (
           (() => {
-            const typeInfo = getDataTypeInfo(data.columnTypes?.[data.columns.indexOf(col)] || '');
+            const ti = data.columns.indexOf(col);
+            const typeInfo = getDataTypeInfo(data.columnTypes?.[ti] || '');
             return (
-              <Tooltip title={data.columnTypes?.[data.columns.indexOf(col)]}>
+              <Tooltip title={data.columnTypes?.[ti]}>
                 <Tag
                   style={{
                     background: typeInfo.bg,
@@ -108,13 +123,16 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
         columns={columns}
         dataSource={pagedRows.map((row, i) => ({ ...row, key: startIdx + i }))}
         pagination={!compact && showPagination ? false : false}
-        scroll={{ x: data.columns.length * 140 }}
+        scroll={{ x: colList.length * 140 }}
         style={{
           borderRadius: 6,
-          overflow: 'hidden',
           border: '1px solid #f0f0f0',
         }}
-        rowClassName={() => 'preview-row'}
+        rowClassName={(_, index) => {
+          const base = 'preview-row';
+          if (striped && index % 2 === 1) return `${base} preview-row--stripe`;
+          return base;
+        }}
       />
       {!compact && showPagination && data.rows.length > pageSize && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
@@ -146,9 +164,9 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
             icon={<DownloadOutlined />}
             onClick={() => {
               const csv = [
-                data.columns.join(','),
+                colList.join(','),
                 ...data.rows.map(row =>
-                  data.columns.map(c => {
+                  colList.map(c => {
                     const v = row[c];
                     if (v === null || v === undefined) return '';
                     const s = String(v);

@@ -1,19 +1,17 @@
 /**
- * NodeDetailPanel - Right-side configuration panel for pipeline nodes.
- * Replaces the old edit modal. Shows Config / Preview tabs.
- * Click a node on the canvas to open this panel.
+ * NodeDetailPanel - 右侧节点配置面板（数据预览在画布底部，见 PipelineCanvasPreviewPanel）。
+ * 双击节点打开；单击仅更新底部预览。
  */
 import React, { useState, useCallback } from 'react';
 import {
-  Tabs, Form, Input, Select, Button, Space, Divider,
-  Tag, Empty, Typography, Alert, Spin, message, Tooltip,
+  Form, Input, Select, Button, Space, Divider,
+  Tag, Empty, Typography, Alert, message, Tooltip,
 } from 'antd';
 import {
-  CloseOutlined, DeleteOutlined, ReloadOutlined,
-  EyeOutlined, InfoCircleOutlined,
+  CloseOutlined, DeleteOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
-import type { TabsProps } from 'antd';
-import { GraphNode, GraphEdge } from '../../utils/graphUtils';
+import { GraphNode } from '../../utils/graphUtils';
 import { PipelineNode } from '../../services/pipelineService';
 import { getNodeTypeDef, NODE_TYPE_REGISTRY } from '../../utils/nodeTypeRegistry';
 import { SourceNodeConfig } from './visual-nodes/SourceNodeConfig';
@@ -22,29 +20,17 @@ import { AggregateNodeConfig } from './visual-nodes/AggregateNodeConfig';
 import { JoinNodeConfig } from './visual-nodes/JoinNodeConfig';
 import { ColumnSelectConfig } from './visual-nodes/ColumnSelectConfig';
 import { OutputNodeConfig } from './visual-nodes/OutputNodeConfig';
-import { NodePreviewTable } from './NodePreviewTable';
-import { useNodePreview } from '../../hooks/useNodePreview';
 
 const { Text } = Typography;
 
 interface NodeDetailPanelProps {
-  /** The node currently selected on the canvas */
   selectedNode: GraphNode | null;
-  /** All nodes in the graph (for upstream resolution) */
   allNodes: GraphNode[];
-  /** All edges in the graph */
-  allEdges: GraphEdge[];
-  /** Pipeline-level data source ID (for source nodes) */
   pipelineDataSourceId?: number | null;
-  /** Callback when node config is updated */
   onNodeUpdate: (updatedNode: GraphNode) => void;
-  /** Callback when node is deleted */
   onNodeDelete: (nodeId: string) => void;
-  /** Callback when panel is closed */
   onClose: () => void;
-  /** Whether panel is visible */
   open: boolean;
-  /** Whether the editor is read-only */
   readOnly?: boolean;
 }
 
@@ -57,7 +43,6 @@ function getUpstreamNodes(node: GraphNode, allNodes: GraphNode[]): GraphNode[] {
 export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   selectedNode,
   allNodes,
-  allEdges,
   pipelineDataSourceId,
   onNodeUpdate,
   onNodeDelete,
@@ -65,11 +50,9 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   open,
   readOnly = false,
 }) => {
-  const [activeTab, setActiveTab] = useState('config');
   const [form] = Form.useForm();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Sync form when selected node changes
   React.useEffect(() => {
     if (selectedNode && open) {
       const pn = selectedNode.data.pipelineNode as PipelineNode;
@@ -86,24 +69,12 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const nodeDef = pipelineNode ? getNodeTypeDef(pipelineNode.type) : null;
   const upstreams = selectedNode ? getUpstreamNodes(selectedNode, allNodes) : [];
 
-  const { previewData, previewLoading, previewError, loadPreview } = useNodePreview();
-
-  // Auto-load preview when node changes
-  React.useEffect(() => {
-    if (selectedNode && open && nodeDef?.hasPreview) {
-      loadPreview({
-        node: selectedNode,
-        allNodes,
-        allEdges,
-        pipelineDataSourceId: pipelineDataSourceId ?? undefined,
-      });
-    }
-  }, [selectedNode?.id, open, allEdges, allNodes, loadPreview, nodeDef?.hasPreview, pipelineDataSourceId, selectedNode]);
-
   const handleFormChange = useCallback(() => {
     if (!selectedNode || readOnly) return;
     const values = form.getFieldsValue();
     const pn = selectedNode.data.pipelineNode as Record<string, unknown>;
+    const prevCfg = (pn.config as Record<string, unknown>) || {};
+    const formCfg = (values.config as Record<string, unknown>) || {};
     onNodeUpdate({
       ...selectedNode,
       data: {
@@ -111,8 +82,8 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         pipelineNode: {
           ...pn,
           name: values.name,
-          type: values.type,
-          config: values.config || {},
+          type: (values.type ?? pn.type) as string,
+          config: { ...formCfg, ...prevCfg },
         },
       },
     });
@@ -126,33 +97,56 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
   if (!selectedNode) {
     return (
-      <div
-        style={{
-          width: 360,
-          flexShrink: 0,
-          borderLeft: '1px solid #e8e8e8',
-          background: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+      <div className="node-detail-panel node-detail-panel--empty">
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="点击画布中的节点进行配置"
+          description="双击画布中的节点打开配置"
         />
       </div>
     );
   }
 
-  const tabItems: TabsProps['items'] = [
-    {
-      key: 'config',
-      label: '配置',
-      children: (
-        <div style={{ padding: '0 0 16px' }}>
-          {/** Node type badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+  return (
+    <div className="node-detail-panel">
+      <div className="node-detail-panel-header">
+        <div className="node-detail-panel-header-title">
+          {nodeDef && (
+            <span style={{ color: nodeDef.color, fontSize: 18 }}>
+              {nodeDef.icon}
+            </span>
+          )}
+          <Text strong style={{ fontSize: 14 }}>
+            {pipelineNode?.name || '未命名节点'}
+          </Text>
+        </div>
+        <div className="node-detail-panel-header-actions">
+          <Space size={4}>
+            {!readOnly && (
+              <Tooltip title="删除节点">
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    if (!confirmDelete) {
+                      setConfirmDelete(true);
+                      message.warning('再点一次确认删除');
+                    } else {
+                      handleDelete();
+                    }
+                  }}
+                />
+              </Tooltip>
+            )}
+            <Tooltip title="关闭面板">
+              <Button size="small" icon={<CloseOutlined />} onClick={onClose} />
+            </Tooltip>
+          </Space>
+        </div>
+      </div>
+      <div className="node-detail-panel-body">
+        <div className="node-detail-panel-content">
+          <div className="node-detail-panel-intro">
             {nodeDef && (
               <Tag
                 icon={nodeDef.icon as React.ReactElement}
@@ -161,23 +155,23 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 {nodeDef.label}
               </Tag>
             )}
-            <Text type="secondary" style={{ fontSize: 12 }}>
+            <Text type="secondary" className="node-detail-panel-intro-desc">
               {nodeDef?.description}
             </Text>
           </div>
 
-          {/** Upstream info */}
           {upstreams.length > 0 && (
             <Alert
               type="info"
               showIcon
               icon={<InfoCircleOutlined />}
+              className="node-detail-panel-alert"
               message={
-                <div>
+                <div className="node-detail-panel-alert-inner">
                   <Text style={{ fontSize: 12 }}>
                     上游节点（{upstreams.length}个）：
                   </Text>
-                  <div style={{ marginTop: 4 }}>
+                  <div className="node-detail-panel-upstream-tags">
                     {upstreams.map(up => {
                       const upPn = up.data.pipelineNode as PipelineNode;
                       const upDef = getNodeTypeDef(upPn.type);
@@ -199,6 +193,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             layout="vertical"
             onValuesChange={handleFormChange}
             size="small"
+            className="node-detail-form"
           >
             <Form.Item
               name="name"
@@ -208,10 +203,9 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               <Input placeholder="给节点起个名字" />
             </Form.Item>
 
-            {/** Type selector */}
             {!readOnly && (
               <Form.Item
-                name={['config', 'nodeType']}
+                name="type"
                 label="节点类型"
               >
                 <Select size="small">
@@ -226,7 +220,6 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
             <Divider style={{ margin: '12px 0' }} />
 
-            {/** Render type-specific config */}
             {pipelineNode?.type === 'source' && (
               <SourceNodeConfig
                 node={selectedNode}
@@ -289,119 +282,12 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             )}
           </Form>
 
-          {/** Node ID */}
-          <div style={{ marginTop: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4 }}>
+          <div className="node-detail-panel-nodeid">
             <Text type="secondary" style={{ fontSize: 11 }}>
               节点ID: <code style={{ fontSize: 11 }}>{selectedNode.id}</code>
             </Text>
           </div>
         </div>
-      ),
-    },
-    {
-      key: 'preview',
-      label: (
-        <span>
-          <EyeOutlined /> 预览
-          {previewData && (
-            <Tag style={{ marginLeft: 4, fontSize: 10 }}>{previewData.rows.length}</Tag>
-          )}
-        </span>
-      ),
-      children: (
-        <div style={{ padding: '0 0 16px' }}>
-          {nodeDef?.hasPreview ? (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <Button
-                  size="small"
-                  icon={<ReloadOutlined />}
-                  loading={previewLoading}
-                  onClick={() => loadPreview({
-                    node: selectedNode,
-                    allNodes,
-                    allEdges,
-                    pipelineDataSourceId: pipelineDataSourceId ?? undefined,
-                  })}
-                >
-                  刷新预览
-                </Button>
-                <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                  {previewData ? `共 ${previewData.rows.length} 行` : ''}
-                </Text>
-              </div>
-              {previewError && (
-                <Alert
-                  type="error"
-                  message="预览失败"
-                  description={previewError}
-                  style={{ marginBottom: 12 }}
-                />
-              )}
-              {previewLoading && (
-                <div style={{ textAlign: 'center', padding: 32 }}>
-                  <Spin /> <br />
-                  <Text type="secondary" style={{ fontSize: 12 }}>正在加载预览数据…</Text>
-                </div>
-              )}
-              {!previewLoading && !previewError && previewData && (
-                <NodePreviewTable data={previewData} compact={false} />
-              )}
-              {!previewLoading && !previewError && !previewData && (
-                <Empty description="配置节点后可预览数据" />
-              )}
-            </>
-          ) : (
-            <Empty description="此节点类型不支持预览" />
-          )}
-        </div>
-      ),
-    },
-  ];
-
-  return (
-    <div className="node-detail-panel">
-      <div className="node-detail-panel-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {nodeDef && (
-            <span style={{ color: nodeDef.color, fontSize: 18 }}>
-              {nodeDef.icon}
-            </span>
-          )}
-          <Text strong style={{ fontSize: 14 }}>
-            {pipelineNode?.name || '未命名节点'}
-          </Text>
-        </div>
-        <Space size={4}>
-          {!readOnly && (
-            <Tooltip title="删除节点">
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => {
-                  if (!confirmDelete) {
-                    setConfirmDelete(true);
-                    message.warning('再点一次确认删除');
-                  } else {
-                    handleDelete();
-                  }
-                }}
-              />
-            </Tooltip>
-          )}
-          <Tooltip title="关闭面板">
-            <Button size="small" icon={<CloseOutlined />} onClick={onClose} />
-          </Tooltip>
-        </Space>
-      </div>
-      <div className="node-detail-panel-tabs">
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={tabItems}
-          size="small"
-        />
       </div>
     </div>
   );
