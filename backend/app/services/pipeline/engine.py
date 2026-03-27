@@ -642,11 +642,56 @@ class PipelineEngine:
         return f" WHERE {sep.join(clauses)}"
 
     @staticmethod
+    def _apply_row_filter(sql: str, config: Dict[str, Any]) -> str:
+        """
+        若 config 中含 rowFilterConditions，对已有 sql 包装 SELECT * FROM (...) WHERE ...
+        等效于在下游前插入一个 filter 节点。
+        """
+        if not sql:
+            return ""
+        conditions = config.get("rowFilterConditions", [])
+        if not conditions:
+            return sql
+        logic = config.get("rowFilterLogic", "AND")
+        where = PipelineEngine._build_filter_sql(sql, conditions, logic)
+        if not where:
+            return sql
+        return f"SELECT * FROM ({sql}) AS _r{where}"
+
+    @staticmethod
+    def _apply_column_projection(sql: str, config: Dict[str, Any]) -> str:
+        """
+        若 config 中含 outputColumnKeys，外层投影这些列。
+        列名优先用 outputColumnKeys 中保存的原始列名；
+        若含 renameMap 也支持别名映射。
+        """
+        if not sql:
+            return ""
+        output_keys: List[str] = config.get("outputColumnKeys", [])
+        if not output_keys:
+            return sql
+        # 支持 renameMap: { newName: oldName }
+        rename_map: Dict[str, str] = config.get("renameMap", {})
+        safe_cols: List[str] = []
+        for col in output_keys:
+            old_name = rename_map.get(col, col)
+            if col != old_name:
+                safe_cols.append(f"{PipelineEngine._safe_identifier(old_name)} AS {PipelineEngine._safe_identifier(col)}")
+            else:
+                safe_cols.append(PipelineEngine._safe_identifier(col))
+        if not safe_cols:
+            return sql
+        cols_str = ", ".join(safe_cols)
+        return f"SELECT {cols_str} FROM ({sql}) AS _p"
+
+    @staticmethod
     def build_node_sql(
         node_type: str,
         config: Dict[str, Any],
         upstream_refs: Optional[List[Tuple[str, str]]] = None,
         # upstream_refs: List[Tuple[table_or_sql, alias]] for multi-input nodes
+        apply_limit: bool = True,
+        limit: int = 100,
     ) -> Tuple[str, List[str]]:
         """
         根据节点类型和可视化配置生成 SELECT SQL。
@@ -654,12 +699,13 @@ class PipelineEngine:
         Returns:
             (sql, list_of_column_names)
         """
+        _limit_clause = f" LIMIT {limit}" if apply_limit else ""
+
         table_name = config.get("tableName", "")
-        limit = 100
 
         if node_type == "source":
             tbl = PipelineEngine._safe_identifier(table_name) if table_name else "unknown_table"
-            return f"SELECT * FROM {tbl} LIMIT {limit}", []
+            return f"SELECT * FROM {tbl}{_limit_clause}", []
 
         if node_type == "filter":
             conditions = config.get("conditions", [])
@@ -667,7 +713,7 @@ class PipelineEngine:
             if upstream_refs:
                 ref, alias = upstream_refs[0]
                 where = PipelineEngine._build_filter_sql(ref, conditions, logic)
-                return f"SELECT * FROM ({ref}) AS t{where} LIMIT {limit}", []
+                return f"SELECT * FROM ({ref}) AS t{where}{_limit_clause}", []
             return "", []
 
         if node_type == "aggregate":
@@ -676,7 +722,7 @@ class PipelineEngine:
             if upstream_refs:
                 ref, _ = upstream_refs[0]
                 if not aggregations:
-                    return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+                    return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
                 def _agg_alias(agg):
                     fn = agg.get("func", "count")
                     col = agg.get("column", "x")
@@ -690,7 +736,7 @@ class PipelineEngine:
                 group_str = ""
                 if group_by:
                     group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in group_by)}"
-                return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str} LIMIT {limit}", []
+                return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str}{_limit_clause}", []
 
         if node_type == "join":
             join_type = config.get("joinType", "inner")
@@ -710,10 +756,10 @@ class PipelineEngine:
                         for k in join_keys
                     )
                     return (
-                        f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON {on_clause} LIMIT {limit}",
+                        f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON {on_clause}{_limit_clause}",
                         [],
                     )
-                return f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON 1=0 LIMIT {limit}", []
+                return f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON 1=0{_limit_clause}", []
             return "", []
 
         if node_type == "column_select":
@@ -721,7 +767,7 @@ class PipelineEngine:
             if upstream_refs:
                 ref, _ = upstream_refs[0]
                 if not selected:
-                    return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+                    return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
                 cols = [
                     (
                         f"{PipelineEngine._safe_identifier(sc.get('from', ''))} AS {PipelineEngine._safe_identifier(sc.get('to', sc.get('from', '')))}"
@@ -731,36 +777,154 @@ class PipelineEngine:
                     for sc in selected
                     if sc.get("from")
                 ]
-                return f"SELECT {', '.join(cols)} FROM ({ref}) AS t LIMIT {limit}", []
+                return f"SELECT {', '.join(cols)} FROM ({ref}) AS t{_limit_clause}", []
 
         if node_type == "output":
             # Output 节点预览上游数据
             if upstream_refs:
                 ref, _ = upstream_refs[0]
-                return f"SELECT * FROM ({ref}) AS t LIMIT {limit}", []
+                return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
 
         return "", []
+
+    @staticmethod
+    def build_chained_sql(
+        focus_node_id: str,
+        graph_nodes: Dict[str, Dict[str, Any]],
+        graph_edges: List[Dict[str, str]],
+        limit: int = 100,
+    ) -> str:
+        """
+        从 focus_node_id 出发，沿上游折叠整个子图，生成一条嵌套 SELECT SQL。
+
+        仅在最外层加 LIMIT，内层子查询均不加 LIMIT（避免先截断再过滤导致数据丢失）。
+
+        Args:
+            focus_node_id: 要预览的节点 ID
+            graph_nodes:   {node_id: {"type": str, "config": dict, "upstream": List[str]}}
+            graph_edges:   [{"source": up_id, "target": down_id}, ...]
+            limit:         最外层 LIMIT
+
+        Returns:
+            最终可执行的 SELECT SQL 字符串；出错时返回 ""
+        """
+        if not focus_node_id or focus_node_id not in graph_nodes:
+            return ""
+
+        # 1. 构建入边表 {down_id: [up_ids]}
+        incoming: Dict[str, List[str]] = {}
+        for e in graph_edges:
+            src, tgt = e.get("source", ""), e.get("target", "")
+            if src and tgt:
+                incoming.setdefault(tgt, []).append(src)
+
+        # 2. 反向 BFS：从 focus 沿入边收集所有祖先
+        visited: Dict[str, bool] = {focus_node_id: True}
+        queue = [focus_node_id]
+        while queue:
+            cur = queue.pop(0)
+            for up_id in incoming.get(cur, []):
+                if up_id not in visited:
+                    visited[up_id] = True
+                    queue.append(up_id)
+
+        # 3. 拓扑排序（visited 集合内），源点入度 0 排在前
+        in_degree: Dict[str, int] = {nid: 0 for nid in visited}
+        adj: Dict[str, List[str]] = {nid: [] for nid in visited}   # up -> [downs]
+        for e in graph_edges:
+            src, tgt = e.get("source", ""), e.get("target", "")
+            if src in visited and tgt in visited:
+                in_degree[tgt] += 1
+                adj[src].append(tgt)
+
+        # Kahn 算法
+        sorted_ids: List[str] = []
+        zero_in = [nid for nid in visited if in_degree[nid] == 0]
+        while zero_in:
+            zero_in.sort()
+            nid = zero_in.pop(0)
+            sorted_ids.append(nid)
+            for nb in adj[nid]:
+                in_degree[nb] -= 1
+                if in_degree[nb] == 0:
+                    zero_in.append(nb)
+
+        if len(sorted_ids) != len(visited):
+            logger.warning(f"图存在环，无法完成拓扑排序（focus={focus_node_id}）")
+            return ""
+
+        # 4. 逐节点生成 SQL，维护 node_id -> sql
+        node_sqls: Dict[str, str] = {}
+        for nid in sorted_ids:
+            node = graph_nodes.get(nid, {})
+            ntype = node.get("type", "")
+            nconfig = node.get("config", {})
+            nupstream = node.get("upstream", [])
+
+            # 收集有效上游 ref（仅 visited 集合内）
+            valid_ups = [u for u in nupstream if u in visited and u in node_sqls]
+            refs: List[Tuple[str, str]] = []
+            for u in valid_ups:
+                if u not in refs:
+                    refs.append((node_sqls[u], u))
+
+            # 生成当前节点核心 SQL（内层子查询不加 LIMIT）
+            is_focus = (nid == focus_node_id)
+            core_sql, _ = PipelineEngine.build_node_sql(
+                ntype, nconfig, refs if refs else None, apply_limit=False, limit=limit
+            )
+
+            # 对当前节点 config 应用行筛选包装（等效于在下游前插 filter 节点）
+            wrapped_sql = PipelineEngine._apply_row_filter(core_sql, nconfig)
+
+            # 对当前节点 config 应用列投影包装
+            wrapped_sql = PipelineEngine._apply_column_projection(wrapped_sql, nconfig)
+
+            # 仅最外层（focus 节点）加 LIMIT
+            if is_focus and wrapped_sql:
+                wrapped_sql = f"{wrapped_sql} LIMIT {limit}"
+
+            node_sqls[nid] = wrapped_sql
+
+        return node_sqls.get(focus_node_id, "")
 
     async def preview_node(
         self,
         node_type: str,
         config: Dict[str, Any],
         limit: int = 100,
+        graph_nodes: Optional[Dict[str, Dict[str, Any]]] = None,
+        graph_edges: Optional[List[Dict[str, str]]] = None,
+        focus_node_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         对单个节点执行实时预览（不保存到临时表）。
 
         Args:
-            node_type: 节点类型
-            config: 节点可视化配置
-            limit: 预览行数
+            node_type:       节点类型
+            config:          节点可视化配置
+            limit:           预览行数
+            graph_nodes:     可选，全图节点（开启链式折叠模式）
+            graph_edges:     可选，全图边
+            focus_node_id:   可选，链式模式下当前要预览的节点 ID
 
         Returns:
             {"columns": [...], "column_types": [...], "rows": [...], "total": int,
              "has_more": bool, "sql_generated": str}
         """
         try:
-            sql, _ = self.build_node_sql(node_type, config)
+            # 链式折叠模式（连线预览）
+            if graph_nodes and graph_edges and focus_node_id:
+                sql = PipelineEngine.build_chained_sql(
+                    focus_node_id,
+                    graph_nodes,
+                    graph_edges,
+                    limit,
+                )
+            else:
+                # 单节点模式（兼容旧调用）
+                sql, _ = self.build_node_sql(node_type, config, apply_limit=True, limit=limit)
+
             if not sql:
                 return {
                     "columns": [],

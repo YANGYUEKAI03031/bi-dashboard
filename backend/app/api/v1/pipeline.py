@@ -651,14 +651,44 @@ async def preview_node(
 
     用于无代码编辑器中，用户配置节点后实时查看预览效果。
     不依赖已保存的管道，直接从业务数据源拉取。
+
+    支持两种模式：
+    - 单节点模式（不传 graph_nodes）：仅预览当前节点，不依赖上游。
+    - 链式折叠模式（传入 graph_nodes / graph_edges / focus_node_id）：
+      后端沿上游折叠子图，生成嵌套 SELECT，可预览连线场景。
     """
     try:
         db_model, engine = await _get_data_source_engine(db, request.source_data_source_id)
+
+        # 构建图节点字典（用于折叠）
+        graph_nodes_dict: Optional[Dict[str, Dict[str, Any]]] = None
+        if request.graph_nodes is not None:
+            graph_nodes_dict = {}
+            for gn in request.graph_nodes:
+                # 每个 GraphNodeSchema 有 id / type / config
+                graph_nodes_dict[gn.id] = {
+                    "type": gn.type,
+                    "config": gn.config,
+                    "upstream": [],   # upstream 从边推导
+                }
+            # 从边信息补充 upstream
+            if request.graph_edges:
+                for e in request.graph_edges:
+                    tgt = e.target
+                    src = e.source
+                    if tgt in (graph_nodes_dict or {}) and src:
+                        if "upstream" not in graph_nodes_dict[tgt]:
+                            graph_nodes_dict[tgt]["upstream"] = []
+                        graph_nodes_dict[tgt]["upstream"].append(src)
+
         previewer = PipelineEngine(session=db, data_source_engine=engine, data_source_id=request.source_data_source_id)
         result = await previewer.preview_node(
             node_type=request.node_type,
             config=request.config or {},
             limit=request.limit,
+            graph_nodes=graph_nodes_dict,
+            graph_edges=[e.model_dump() for e in request.graph_edges] if request.graph_edges else None,
+            focus_node_id=request.focus_node_id,
         )
         return NodePreviewResponse(**result)
     except ValueError as e:

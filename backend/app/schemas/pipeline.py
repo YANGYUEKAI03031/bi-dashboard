@@ -228,12 +228,35 @@ class PipelineStatsResponse(BaseModel):
     last_execution: Optional[datetime]
 
 
+class GraphEdgeSchema(BaseModel):
+    """图中单条边"""
+    source: str = Field(..., description="源节点 ID")
+    target: str = Field(..., description="目标节点 ID")
+
+
+class GraphNodeSchema(BaseModel):
+    """图中单个节点（最小字段，仅用于预览折叠）"""
+    id: str
+    type: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
 class NodePreviewRequest(BaseModel):
     """节点预览请求 - 用于无代码编辑器的实时预览"""
     node_type: str = Field(..., description="节点类型: source | filter | aggregate | join | column_select | output")
     config: Dict[str, Any] = Field(default_factory=dict, description="节点可视化配置 JSON")
     source_data_source_id: int = Field(..., description="管道级业务数据源 ID")
-    # 可选的已完成上游节点预览（用于 join 等多输入节点）
+    # 图结构：用于链式折叠上游子查询
+    graph_nodes: Optional[List[GraphNodeSchema]] = Field(
+        default=None, description="图中所有节点（可选，不传则退化为单节点预览）"
+    )
+    graph_edges: Optional[List[GraphEdgeSchema]] = Field(
+        default=None, description="图中所有边（可选）"
+    )
+    focus_node_id: Optional[str] = Field(
+        default=None, description="当前要预览的节点 ID（用于图折叠模式）"
+    )
+    # 兼容旧调用：若只传 node_type + config 则走单节点模式
     upstream_previews: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         description="上游节点预览结果列表，每个元素含 node_id, columns, rows"

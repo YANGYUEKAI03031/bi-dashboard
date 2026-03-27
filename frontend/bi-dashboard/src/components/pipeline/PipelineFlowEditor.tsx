@@ -25,10 +25,9 @@ import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  ImportOutlined, FilterOutlined, BarChartOutlined, SwapOutlined,
+  ImportOutlined, BarChartOutlined, SwapOutlined,
   AppstoreOutlined, ExportOutlined, DownOutlined,
   DatabaseOutlined, ArrowRightOutlined, HolderOutlined,
-  ColumnWidthOutlined,
 } from '@ant-design/icons';
 import './PipelineFlowEditor.css';
 import { PipelineNode, PipelineService } from '../../services/pipelineService';
@@ -306,16 +305,6 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
       label: <span className="pipeline-node-palette-section">数据处理</span>,
       children: [
         {
-          key: 'filter',
-          label: (
-            <Space style={{ fontSize: 12 }}>
-              <FilterOutlined style={{ color: NODE_TYPE_REGISTRY.filter.color }} />
-              过滤行
-            </Space>
-          ),
-          onClick: () => onAdd('filter'),
-        },
-        {
           key: 'aggregate',
           label: (
             <Space style={{ fontSize: 12 }}>
@@ -334,16 +323,6 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
             </Space>
           ),
           onClick: () => onAdd('join'),
-        },
-        {
-          key: 'column_select',
-          label: (
-            <Space style={{ fontSize: 12 }}>
-              <ColumnWidthOutlined style={{ color: NODE_TYPE_REGISTRY.column_select.color }} />
-              选择列
-            </Space>
-          ),
-          onClick: () => onAdd('column_select'),
         },
         {
           key: 'transform',
@@ -1202,6 +1181,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
             allNodes={nodes as unknown as GraphNode[]}
             allEdges={edges as unknown as GraphEdge[]}
             pipelineDataSourceId={pipelineDataSourceId}
+            onNodeUpdate={handlePanelNodeUpdate}
           />
         </div>
 

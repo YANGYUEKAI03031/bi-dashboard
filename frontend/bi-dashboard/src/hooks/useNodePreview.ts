@@ -1,6 +1,7 @@
 /**
  * useNodePreview - Hook for fetching preview data for a pipeline node.
  * Handles debouncing, caching, and error states.
+ * Supports both single-node and chained (graph-collapse) preview modes.
  */
 import { useState, useCallback, useRef } from 'react';
 import { GraphNode, GraphEdge } from '../utils/graphUtils';
@@ -28,46 +29,64 @@ interface LoadPreviewParams {
 export function useNodePreview() {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cacheRef = useRef<Record<string, PreviewData>>({});
 
   const loadPreview = useCallback(async (params: LoadPreviewParams, immediate = false) => {
-    const { node, pipelineDataSourceId, limit = 100 } = params;
+    const { node, allNodes, allEdges, pipelineDataSourceId, limit = 100 } = params;
     if (!pipelineDataSourceId) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setPreviewLoading(false);
-      setPreviewError(null);
       setPreviewData(null);
       return;
     }
 
-    const cacheKey = `${node.id}-${JSON.stringify(node.data.pipelineNode)}`;
+    const pipelineNode = node.data.pipelineNode as PipelineNode;
+    const cacheKey = `${node.id}-${JSON.stringify(pipelineNode)}`;
     if (!immediate && cacheRef.current[cacheKey]) {
       setPreviewLoading(false);
-      setPreviewError(null);
       setPreviewData(cacheRef.current[cacheKey]);
       return;
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setPreviewLoading(true);
-    setPreviewError(null);
     debounceRef.current = setTimeout(async () => {
       try {
         const token = AuthService.getAuthToken();
+
+        // 构建图结构，供后端折叠上游子查询
+        const graph_nodes = allNodes.map((n: GraphNode) => {
+          const pn = n.data.pipelineNode as PipelineNode;
+          return {
+            id: n.id,
+            type: pn.type,
+            config: pn.config || {},
+          };
+        });
+        const graph_edges = allEdges.map((e: GraphEdge) => ({
+          source: e.source,
+          target: e.target,
+        }));
+
+        const body = {
+          node_type: pipelineNode.type,
+          config: pipelineNode.config || {},
+          source_data_source_id: pipelineDataSourceId,
+          limit,
+          // 链式折叠模式：传全图结构 + focus_id
+          graph_nodes,
+          graph_edges,
+          focus_node_id: node.id,
+        };
+
         const response = await fetch(`${API_BASE_URL}/pipeline/preview`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            node_type: (node.data.pipelineNode as PipelineNode).type,
-            config: (node.data.pipelineNode as PipelineNode).config || {},
-            source_data_source_id: pipelineDataSourceId,
-            limit,
-          }),
+          body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -87,8 +106,6 @@ export function useNodePreview() {
         cacheRef.current[cacheKey] = result;
         setPreviewData(result);
       } catch (_err: unknown) {
-        // 预览失败不弹红条，统一在面板层显示「暂无数据」
-        setPreviewError(null);
         setPreviewData(null);
       } finally {
         setPreviewLoading(false);
@@ -100,7 +117,6 @@ export function useNodePreview() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setPreviewLoading(false);
     setPreviewData(null);
-    setPreviewError(null);
   }, []);
 
   return { previewData, previewLoading, loadPreview, clearPreview };
