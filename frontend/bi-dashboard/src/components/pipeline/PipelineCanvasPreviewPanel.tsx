@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip,
+  Input, Tooltip, Alert,
 } from 'antd';
 import {
   ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
@@ -230,7 +230,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   pipelineDataSourceId,
   onNodeUpdate,
 }) => {
-  const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview();
+  const { previewData, previewLoading, previewError, loadPreview, clearPreview } = useNodePreview();
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([]);
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -253,6 +253,18 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     return `${ids}|${es}`;
   }, [allNodes, allEdges]);
 
+  const allNodesDataSig = useMemo(
+    () =>
+      allNodes
+        .map((n) => {
+          const pn = n.data.pipelineNode as PipelineNode;
+          return `${n.id}:${pn.type}:${JSON.stringify(pn.config ?? {})}:${pn.sql ?? ''}`;
+        })
+        .sort()
+        .join('\n'),
+    [allNodes]
+  );
+
   useEffect(() => {
     if (!previewNode || !nodeDef?.hasPreview) {
       clearPreview();
@@ -274,27 +286,48 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     previewConfigKey,
     pipelineNode?.type,
     graphTopologySig,
+    allNodesDataSig,
     resolvedDsId,
     nodeDef?.hasPreview,
     loadPreview,
     clearPreview,
   ]);
 
-  const columnsSig = previewData?.columns?.join('\0') ?? '';
-
-  useEffect(() => {
-    if (!previewData?.columns?.length) return;
-    setVisibleColumnKeys([...previewData.columns]);
-  }, [previewNode?.id, columnsSig]);
-
   /** 节点 config 中的筛选/列选配置（由本组件写入，供后端折叠 SQL 时使用） */
   const savedRowConditions = ((pipelineNode?.config as Record<string, unknown>)?.rowFilterConditions as Condition[]) || [];
   const savedRowLogic = ((pipelineNode?.config as Record<string, unknown>)?.rowFilterLogic as string) || 'AND';
-
-  const [localConditions, setLocalConditions] = useState<Condition[]>(
-    savedRowConditions.length > 0 ? savedRowConditions : [{ id: 'cond_0', column: '', operator: '', value: '' }]
+  const savedOutputKeys = useMemo(
+    () => ((pipelineNode?.config as Record<string, unknown>)?.outputColumnKeys as string[]) || [],
+    [previewConfigKey]
   );
-  const [localLogic, setLocalLogic] = useState<string>(savedRowLogic);
+
+  const [localConditions, setLocalConditions] = useState<Condition[]>([
+    { id: 'cond_0', column: '', operator: '', value: '' },
+  ]);
+  const [localLogic, setLocalLogic] = useState<string>('AND');
+
+  useEffect(() => {
+    if (!previewNode) return;
+    const conds = [...savedRowConditions];
+    setLocalConditions(conds.length > 0 ? conds : [{ id: 'cond_0', column: '', operator: '', value: '' }]);
+    setLocalLogic(savedRowLogic || 'AND');
+  }, [previewNode?.id, previewConfigKey]);
+
+  useEffect(() => {
+    setFilterOpen(false);
+  }, [previewNode?.id]);
+
+  const columnsSig = previewData?.columns?.join('\0') ?? '';
+
+  useEffect(() => {
+    if (!previewNode) return;
+    if (savedOutputKeys.length > 0) {
+      setVisibleColumnKeys([...savedOutputKeys]);
+      return;
+    }
+    if (!previewData?.columns?.length) return;
+    setVisibleColumnKeys([...previewData.columns]);
+  }, [previewNode?.id, previewConfigKey, columnsSig]);
 
   /** 列选变更：同步写入节点 config.outputColumnKeys 并触发 onNodeUpdate */
   const handleColumnSelect = (keys: string[]) => {
@@ -339,7 +372,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   };
 
   const showTable = !previewLoading && previewData && previewData.columns.length > 0;
-  const showNoData = !previewLoading && !previewData;
+  const showNoData = !previewLoading && !previewData && !previewError;
   const showLoading = previewLoading && !previewData;
 
   if (!previewNode) {
@@ -443,6 +476,10 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
           </Button>
         </div>
       </div>
+
+      {previewError && (
+        <Alert type="error" message={previewError} showIcon style={{ margin: '8px 12px' }} />
+      )}
 
       {showLoading && (
         <div className="pipeline-canvas-preview-loading">

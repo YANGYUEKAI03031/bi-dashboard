@@ -4,7 +4,7 @@
  * Supports both single-node and chained (graph-collapse) preview modes.
  */
 import { useState, useCallback, useRef } from 'react';
-import { GraphNode, GraphEdge } from '../utils/graphUtils';
+import { GraphNode, GraphEdge, buildEdgesFromUpstream } from '../utils/graphUtils';
 import { PipelineNode } from '../services/pipelineService';
 import { API_BASE_URL } from '../config/apiBaseUrl';
 import { AuthService } from '../services/authService';
@@ -29,6 +29,7 @@ interface LoadPreviewParams {
 export function useNodePreview() {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cacheRef = useRef<Record<string, PreviewData>>({});
 
@@ -38,6 +39,7 @@ export function useNodePreview() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setPreviewLoading(false);
       setPreviewData(null);
+      setPreviewError(null);
       return;
     }
 
@@ -46,28 +48,35 @@ export function useNodePreview() {
     if (!immediate && cacheRef.current[cacheKey]) {
       setPreviewLoading(false);
       setPreviewData(cacheRef.current[cacheKey]);
+      setPreviewError(null);
       return;
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setPreviewLoading(true);
+    setPreviewError(null);
     debounceRef.current = setTimeout(async () => {
       try {
         const token = AuthService.getAuthToken();
 
         // 构建图结构，供后端折叠上游子查询
+        // 源节点的表名在 config.tableName，也可能仅在节点顶层 sql（SELECT * FROM `t`）中
         const graph_nodes = allNodes.map((n: GraphNode) => {
           const pn = n.data.pipelineNode as PipelineNode;
+          const baseCfg =
+            pn.config && typeof pn.config === 'object' ? { ...pn.config } : {};
+          if (typeof pn.sql === 'string' && pn.sql.trim()) {
+            baseCfg.sql = pn.sql;
+          }
           return {
             id: n.id,
             type: pn.type,
-            config: pn.config || {},
+            config: baseCfg,
           };
         });
-        const graph_edges = allEdges.map((e: GraphEdge) => ({
-          source: e.source,
-          target: e.target,
-        }));
+        const graph_edges = allEdges.length > 0
+          ? allEdges.map((e: GraphEdge) => ({ source: e.source, target: e.target }))
+          : buildEdgesFromUpstream(allNodes).map((e) => ({ source: e.source, target: e.target }));
 
         const body = {
           node_type: pipelineNode.type,
@@ -91,7 +100,14 @@ export function useNodePreview() {
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({ detail: '预览请求失败' }));
-          throw new Error(err.detail || '预览请求失败');
+          const detail = err.detail;
+          const msg =
+            typeof detail === 'string'
+              ? detail
+              : Array.isArray(detail)
+                ? detail.map((x: { msg?: string }) => x?.msg || '').filter(Boolean).join('; ')
+                : '预览请求失败';
+          throw new Error(msg || '预览请求失败');
         }
 
         const data = await response.json();
@@ -105,8 +121,10 @@ export function useNodePreview() {
         };
         cacheRef.current[cacheKey] = result;
         setPreviewData(result);
-      } catch (_err: unknown) {
+        setPreviewError(null);
+      } catch (err: unknown) {
         setPreviewData(null);
+        setPreviewError(err instanceof Error ? err.message : '预览加载失败');
       } finally {
         setPreviewLoading(false);
       }
@@ -117,7 +135,8 @@ export function useNodePreview() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setPreviewLoading(false);
     setPreviewData(null);
+    setPreviewError(null);
   }, []);
 
-  return { previewData, previewLoading, loadPreview, clearPreview };
+  return { previewData, previewLoading, previewError, loadPreview, clearPreview };
 }

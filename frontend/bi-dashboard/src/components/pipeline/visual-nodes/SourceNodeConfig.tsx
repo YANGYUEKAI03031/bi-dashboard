@@ -32,6 +32,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
   onChange,
   readOnly = false,
 }) => {
+  const form = Form.useFormInstance();
   const [allDataSources, setAllDataSources] = useState<DataSourceOption[]>([]);
   const [tables, setTables] = useState<{ name: string; columns?: Array<{ name: string; type: string }> }[]>([]);
   const [loadingTables, setLoadingTables] = useState(false);
@@ -125,6 +126,8 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       },
     };
     setTableColumns([]);
+    const pnAfter = node.data.pipelineNode as PipelineNode;
+    form.setFieldsValue({ config: (pnAfter.config as Record<string, unknown>) || {} });
     onChange();
   };
 
@@ -145,6 +148,8 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       },
     };
     setTableColumns([]);
+    const pnAfter = node.data.pipelineNode as PipelineNode;
+    form.setFieldsValue({ config: (pnAfter.config as Record<string, unknown>) || {} });
     onChange();
   };
 
@@ -162,6 +167,8 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
         },
       },
     };
+    const pnAfterInc = node.data.pipelineNode as PipelineNode;
+    form.setFieldsValue({ config: (pnAfterInc.config as Record<string, unknown>) || {} });
     onChange();
   };
 

@@ -27,6 +27,12 @@ from app.services.pipeline.temp_table_manager import TempTableManager
 
 logger = logging.getLogger(__name__)
 
+# 与前端 nodeTypeRegistry LEGACY_TYPE_MAP 一致：预览 SQL 生成用规范类型
+_PIPELINE_NODE_TYPE_CANON = {
+    "transform": "filter",
+    "merge": "join",
+}
+
 
 class PipelineEngine:
     """
@@ -608,7 +614,10 @@ class PipelineEngine:
             return ""
         clauses = []
         for cond in conditions:
-            col = PipelineEngine._safe_identifier(str(cond.get("column", "")))
+            col_name = str(cond.get("column", "") or "").strip()
+            if not col_name:
+                continue
+            col = PipelineEngine._safe_identifier(col_name)
             op = str(cond.get("operator", "eq"))
             val = str(cond.get("value", ""))
             if op == "eq":
@@ -635,11 +644,46 @@ class PipelineEngine:
                 clauses.append(f"{col} IS NOT NULL")
             elif op == "in":
                 items = ", ".join(f"'{v.strip()}'" for v in val.split(",") if v.strip())
+                if not items:
+                    continue
                 clauses.append(f"{col} IN ({items})")
         if not clauses:
             return ""
         sep = f" {logic} "
         return f" WHERE {sep.join(clauses)}"
+
+    @staticmethod
+    def _aggregation_sql_fragment(agg: Dict[str, Any]) -> Optional[str]:
+        """单条聚合配置 -> SELECT 片段；列无效时返回 None（避免生成非法 SQL）。"""
+        fn = str(agg.get("func", "count") or "count").lower().strip()
+        col_raw = agg.get("column")
+        col = str(col_raw).strip() if col_raw is not None else ""
+        alias_raw = agg.get("alias")
+        alias = str(alias_raw).strip() if alias_raw else ""
+        if not alias:
+            alias = f"{fn}_{col}" if col else f"{fn}_col"
+
+        if fn == "count_distinct":
+            if not col:
+                return None
+            return (
+                f"COUNT(DISTINCT {PipelineEngine._safe_identifier(col)}) "
+                f"AS {PipelineEngine._safe_identifier(alias)}"
+            )
+        if fn == "count":
+            if not col or col == "*":
+                return f"COUNT(*) AS {PipelineEngine._safe_identifier(alias)}"
+            return f"COUNT({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
+
+        if not col:
+            return None
+        sql_fn = {
+            "sum": "SUM",
+            "avg": "AVG",
+            "max": "MAX",
+            "min": "MIN",
+        }.get(fn, fn.upper())
+        return f"{sql_fn}({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
 
     @staticmethod
     def _apply_row_filter(sql: str, config: Dict[str, Any]) -> str:
@@ -685,6 +729,26 @@ class PipelineEngine:
         return f"SELECT {cols_str} FROM ({sql}) AS _p"
 
     @staticmethod
+    def _canonical_pipeline_node_type(node_type: str) -> str:
+        if not node_type:
+            return node_type
+        return _PIPELINE_NODE_TYPE_CANON.get(node_type, node_type)
+
+    @staticmethod
+    def _source_table_name(config: Dict[str, Any]) -> str:
+        """解析源表名：config.tableName / table_name，或节点 sql 字段中的 FROM `tbl`。"""
+        for key in ("tableName", "table_name"):
+            v = config.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        sql = config.get("sql")
+        if isinstance(sql, str) and sql.strip():
+            m = re.search(r"FROM\s+[`\"]?([a-zA-Z0-9_]+)[`\"]?", sql, re.IGNORECASE)
+            if m:
+                return m.group(1)
+        return ""
+
+    @staticmethod
     def build_node_sql(
         node_type: str,
         config: Dict[str, Any],
@@ -699,9 +763,10 @@ class PipelineEngine:
         Returns:
             (sql, list_of_column_names)
         """
+        node_type = PipelineEngine._canonical_pipeline_node_type(node_type)
         _limit_clause = f" LIMIT {limit}" if apply_limit else ""
 
-        table_name = config.get("tableName", "")
+        table_name = PipelineEngine._source_table_name(config)
 
         if node_type == "source":
             tbl = PipelineEngine._safe_identifier(table_name) if table_name else "unknown_table"
@@ -717,25 +782,26 @@ class PipelineEngine:
             return "", []
 
         if node_type == "aggregate":
-            group_by = config.get("groupBy", [])
-            aggregations = config.get("aggregations", [])
+            group_by = config.get("groupBy", []) or []
+            raw_aggs = config.get("aggregations", []) or []
             if upstream_refs:
                 ref, _ = upstream_refs[0]
-                if not aggregations:
+                agg_parts: List[str] = []
+                for a in raw_aggs:
+                    if isinstance(a, dict):
+                        frag = PipelineEngine._aggregation_sql_fragment(a)
+                        if frag:
+                            agg_parts.append(frag)
+                if not agg_parts:
                     return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
-                def _agg_alias(agg):
-                    fn = agg.get("func", "count")
-                    col = agg.get("column", "x")
-                    alias = agg.get("alias", f"{fn}_{col}")
-                    return f"{fn.upper()}({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
-
+                gb = [str(c).strip() for c in group_by if str(c).strip()]
                 select_parts = [
-                    *[PipelineEngine._safe_identifier(c) for c in group_by],
-                    *[_agg_alias(agg) for agg in aggregations],
+                    *[PipelineEngine._safe_identifier(c) for c in gb],
+                    *agg_parts,
                 ]
                 group_str = ""
-                if group_by:
-                    group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in group_by)}"
+                if gb:
+                    group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in gb)}"
                 return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str}{_limit_clause}", []
 
         if node_type == "join":
@@ -913,12 +979,12 @@ class PipelineEngine:
              "has_more": bool, "sql_generated": str}
         """
         try:
-            # 链式折叠模式（连线预览）
-            if graph_nodes and graph_edges and focus_node_id:
+            # 链式折叠模式：只要带了全图与 focus 就走折叠（edges 可为空列表）
+            if graph_nodes is not None and focus_node_id:
                 sql = PipelineEngine.build_chained_sql(
                     focus_node_id,
                     graph_nodes,
-                    graph_edges,
+                    graph_edges or [],
                     limit,
                 )
             else:

@@ -861,16 +861,15 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   const { fitView } = useReactFlow();
   const nextIdRef = useRef(initialNodes.length + 1);
 
-  // Sync edges from upstream whenever initialNodes (from props) changes
+  // 每次 nodes 变化时同步 edges（覆盖 ReactFlow 状态与节点 upstream 字段），
+  // 确保链式预览时后端拿到完整图结构
   useEffect(() => {
     const graphNodes = nodes as unknown as GraphNode[];
     if (graphNodes.length === 0) return;
     const upstreamEdges = buildEdgesFromUpstream(graphNodes);
-    if (upstreamEdges.length > 0) {
-      setEdges(upstreamEdges);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setEdges(upstreamEdges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes]);
 
   // Inject allNodes into each node's data so cards can resolve upstream names
   const enrichedNodes = useMemo(() => {
@@ -898,28 +897,8 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
         return;
       }
 
-      const newEdge: Edge = {
-        id: `${params.source}-${params.target}`,
-        source: params.source,
-        target: params.target,
-      };
-
-      const testEdges: GraphEdge[] = [...(edges as unknown as GraphEdge[]), {
-        id: newEdge.id,
-        source: newEdge.source,
-        target: newEdge.target,
-      }];
-      const testNodes: GraphNode[] = [...(nodes as unknown as GraphNode[]), {
-        id: '__temp__',
-        position: { x: 0, y: 0 },
-        data: { pipelineNode: {} },
-      }];
-      if (detectCycle(testNodes, testEdges)) {
-        message.error('不能创建循环依赖');
-        return;
-      }
-
-      const updatedNodes = (nodes as unknown as GraphNode[]).map(n => {
+      // 预先计算连线后的 upstream，用于循环检测（与实际 edges 计算方式一致）
+      const testNodes: GraphNode[] = (nodes as unknown as GraphNode[]).map(n => {
         if (n.id === params.target) {
           const pn = n.data.pipelineNode as Record<string, unknown>;
           const upstream = (pn.upstream as string[]) || [];
@@ -930,23 +909,37 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
                 ...n.data,
                 pipelineNode: { ...pn, upstream: [...upstream, params.source] },
               },
-            } as unknown as Node;
+            };
           }
         }
         return n;
       });
+      const testEdges = buildEdgesFromUpstream(testNodes);
+      if (detectCycle(testNodes, testEdges)) {
+        message.error('不能创建循环依赖');
+        return;
+      }
 
-      setEdges([...edges, newEdge]);
-      setNodes(updatedNodes);
+      const syncedNodes = testNodes;
+      const syncedEdges = testEdges;
+      setNodes(syncedNodes);
+      setEdges(syncedEdges);
     },
-    [nodes, edges, setNodes, setEdges]
+    [nodes, setNodes, setEdges]
   );
 
   /** 单击：选中节点并在画布底部加载数据预览；不打开右侧配置 */
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
     if (!readOnly) setPanelOpen(false);
-  }, [readOnly]);
+    // 选中节点时同步 edges，保证预览拿到完整图结构（handleConnect 后、
+    // 拖线后等场景 edges 可能还未与 upstream 完全对齐）
+    const graphNodes = nodes as unknown as GraphNode[];
+    if (graphNodes.length > 0) {
+      const upstreamEdges = buildEdgesFromUpstream(graphNodes);
+      setEdges(upstreamEdges);
+    }
+  }, [nodes, readOnly]);
 
   /** 双击：打开右侧配置面板 */
   const handleNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -958,7 +951,14 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setPanelOpen(false);
-  }, []);
+    // 关闭面板时同步 edges（可能连线后上游变了但 ReactFlow edges 状态未更新，
+    // 导致链式预览时后端收不到完整图结构）
+    const graphNodes = nodes as unknown as GraphNode[];
+    if (graphNodes.length > 0) {
+      const upstreamEdges = buildEdgesFromUpstream(graphNodes);
+      setEdges(upstreamEdges);
+    }
+  }, [nodes, setEdges]);
 
   const handleNodesDelete = useCallback(() => {
     const toDelete = (nodes as unknown as GraphNode[])
@@ -968,32 +968,35 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       message.warning('请先选中要删除的节点');
       return;
     }
-    toDelete.forEach(id => {
-      const filteredNodes = (nodes as unknown as GraphNode[]).filter(n => n.id !== id);
-      const filteredEdges = (edges as unknown as GraphEdge[]).filter(e => e.source !== id && e.target !== id);
-      const cleaned = filteredNodes.map(n => {
+    // 一次性过滤：移除待删除节点，并清理其余节点的 upstream 引用
+    const deletedSet = new Set(toDelete);
+    const cleanedNodes = (nodes as unknown as GraphNode[])
+      .filter(n => !deletedSet.has(n.id))
+      .map(n => {
         const pn = n.data.pipelineNode as Record<string, unknown>;
         const upstream = (pn.upstream as string[]) || [];
-        if (upstream.includes(id)) {
+        const filtered = upstream.filter((u: string) => !deletedSet.has(u));
+        if (filtered.length !== upstream.length) {
           return {
             ...n,
             data: {
               ...n.data,
-              pipelineNode: { ...pn, upstream: upstream.filter((u: string) => u !== id) },
+              pipelineNode: { ...pn, upstream: filtered },
             },
           } as unknown as Node;
         }
         return n;
       });
-      setNodes(cleaned);
-      setEdges(filteredEdges as Edge[]);
-    });
+    // 用统一的 buildEdgesFromUpstream 重新生成 edges
+    const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
+    setNodes(cleanedNodes);
+    setEdges(syncedEdges);
     if (selectedNodeId && toDelete.includes(selectedNodeId)) {
       setPanelOpen(false);
       setSelectedNodeId(null);
     }
     message.success(`已删除 ${toDelete.length} 个节点`);
-  }, [nodes, edges, selectedNodeId, setNodes, setEdges]);
+  }, [nodes, selectedNodeId, setNodes, setEdges]);
 
   const handlePanelNodeUpdate = useCallback((updatedNode: GraphNode) => {
     setNodes(prev => prev.map(n =>
@@ -1004,27 +1007,30 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   }, [setNodes]);
 
   const handlePanelNodeDelete = useCallback((nodeId: string) => {
-    const filteredNodes = (nodes as unknown as GraphNode[]).filter(n => n.id !== nodeId);
-    const filteredEdges = (edges as unknown as GraphEdge[]).filter(e => e.source !== nodeId && e.target !== nodeId);
-    const cleaned = filteredNodes.map(n => {
-      const pn = n.data.pipelineNode as Record<string, unknown>;
-      const upstream = (pn.upstream as string[]) || [];
-      if (upstream.includes(nodeId)) {
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            pipelineNode: { ...pn, upstream: upstream.filter((u: string) => u !== nodeId) },
-          },
-        } as unknown as Node;
-      }
-      return n;
-    });
-    setNodes(cleaned);
-    setEdges(filteredEdges as Edge[]);
+    const deletedSet = new Set([nodeId]);
+    const cleanedNodes = (nodes as unknown as GraphNode[])
+      .filter(n => n.id !== nodeId)
+      .map(n => {
+        const pn = n.data.pipelineNode as Record<string, unknown>;
+        const upstream = (pn.upstream as string[]) || [];
+        const filtered = upstream.filter((u: string) => !deletedSet.has(u));
+        if (filtered.length !== upstream.length) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              pipelineNode: { ...pn, upstream: filtered },
+            },
+          } as unknown as Node;
+        }
+        return n;
+      });
+    const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
+    setNodes(cleanedNodes);
+    setEdges(syncedEdges);
     setPanelOpen(false);
     setSelectedNodeId(null);
-  }, [nodes, edges, setNodes, setEdges]);
+  }, [nodes, setNodes, setEdges]);
 
   const handleImportFromPipeline = useCallback(
     (importedNodes: GraphNode[], importedEdges: GraphEdge[]) => {
@@ -1193,7 +1199,15 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
             pipelineDataSourceId={pipelineDataSourceId}
             onNodeUpdate={handlePanelNodeUpdate}
             onNodeDelete={handlePanelNodeDelete}
-            onClose={() => { setPanelOpen(false); }}
+            onClose={() => {
+              setPanelOpen(false);
+              // 关闭面板时同步 edges，确保链式预览拿到完整图结构
+              const graphNodes = nodes as unknown as GraphNode[];
+              if (graphNodes.length > 0) {
+                const upstreamEdges = buildEdgesFromUpstream(graphNodes);
+                setEdges(upstreamEdges);
+              }
+            }}
             open={panelOpen}
             readOnly={readOnly}
           />
