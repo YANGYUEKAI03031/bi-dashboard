@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import { GraphNode } from '../../utils/graphUtils';
 import { PipelineNode } from '../../services/pipelineService';
-import { getNodeTypeDef, NODE_TYPE_REGISTRY } from '../../utils/nodeTypeRegistry';
+import { getNodeTypeDef, getEditorSelectableNodeTypeDefs } from '../../utils/nodeTypeRegistry';
 import { SourceNodeConfig } from './visual-nodes/SourceNodeConfig';
 import { FilterNodeConfig } from './visual-nodes/FilterNodeConfig';
 import { AggregateNodeConfig } from './visual-nodes/AggregateNodeConfig';
@@ -209,7 +209,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 label="节点类型"
               >
                 <Select size="small">
-                  {Object.values(NODE_TYPE_REGISTRY).map(def => (
+                  {getEditorSelectableNodeTypeDefs(pipelineNode?.type).map(def => (
                     <Select.Option key={def.type} value={def.type}>
                       {def.icon} {def.label}
                     </Select.Option>
@@ -242,6 +242,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 node={selectedNode}
                 upstreamNodes={upstreams}
                 allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 readOnly={readOnly}
               />

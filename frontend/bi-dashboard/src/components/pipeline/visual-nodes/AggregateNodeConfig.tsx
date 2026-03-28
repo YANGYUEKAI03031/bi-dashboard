@@ -1,26 +1,32 @@
 /**
- * AggregateNodeConfig - Visual GROUP BY + aggregation builder for "Summarize Data" nodes.
- * Non-technical users pick columns and aggregate functions via dropdowns.
+ * AggregateNodeConfig - 按列配置分组与汇总的聚合节点设置面板。
+ * 内部请求上游预览仅用于列名/类型，不在侧栏展示样本表（用户可在画布底部预览）。
+ * 按列配置：每行一个上游字段——是否分组 / 汇总方式 / 输出别名；底部为生成 SQL 只读预览。
+ * 配置写回 config.groupBy 与 config.aggregations，与后端引擎协议一致。
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  Select, Input, Button, Divider, Tag, Typography,
-  Alert, Card,
+  Table, Select, Input, Switch, Typography,
+  Alert, Spin, Divider, Tag,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, BarChartOutlined } from '@ant-design/icons';
+import { BarChartOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { getDataTypeInfo } from '../../../utils/nodeTypeRegistry';
+import { useNodePreview } from '../../../hooks/useNodePreview';
+import { resolvePreviewDataSourceId } from '../../../utils/pipelineDataSourceUtils';
+import type { PipelineNode as PNode } from '../../../services/pipelineService';
 
 const { Text } = Typography;
 
-export const AGGREGATE_FUNCTIONS = [
-  { label: '求和 (SUM)', value: 'sum', desc: '将数值相加', types: ['int', 'bigint', 'decimal', 'float', 'double'] },
-  { label: '计数 (COUNT)', value: 'count', desc: '计算行数', types: ['string', 'int', 'bigint', 'decimal', 'float', 'date', 'uuid'] },
-  { label: '去重计数 (COUNT DISTINCT)', value: 'count_distinct', desc: '计算不重复的行数', types: ['string', 'int', 'bigint', 'decimal', 'uuid'] },
-  { label: '平均值 (AVG)', value: 'avg', desc: '计算平均值', types: ['int', 'bigint', 'decimal', 'float', 'double'] },
-  { label: '最大值 (MAX)', value: 'max', desc: '取最大值', types: ['int', 'bigint', 'decimal', 'float', 'date', 'datetime'] },
-  { label: '最小值 (MIN)', value: 'min', desc: '取最小值', types: ['int', 'bigint', 'decimal', 'float', 'date', 'datetime'] },
+const AGGREGATE_FUNCTIONS = [
+  { label: '不汇总', value: '' },
+  { label: '求和 SUM', value: 'sum' },
+  { label: '计数 COUNT', value: 'count' },
+  { label: '去重计数 COUNT DISTINCT', value: 'count_distinct' },
+  { label: '平均值 AVG', value: 'avg' },
+  { label: '最大值 MAX', value: 'max' },
+  { label: '最小值 MIN', value: 'min' },
 ];
 
 interface Aggregation {
@@ -30,10 +36,19 @@ interface Aggregation {
   alias: string;
 }
 
+interface ColState {
+  name: string;
+  type: string;
+  isGrouped: boolean;
+  func: string;
+  alias: string;
+}
+
 interface AggregateNodeConfigProps {
   node: GraphNode;
   upstreamNodes: GraphNode[];
   allNodes: GraphNode[];
+  pipelineDataSourceId?: number | null;
   onChange: () => void;
   readOnly?: boolean;
 }
@@ -41,263 +56,309 @@ interface AggregateNodeConfigProps {
 export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
   node,
   upstreamNodes,
+  allNodes,
+  pipelineDataSourceId,
   onChange,
   readOnly = false,
 }) => {
   const pipelineNode = node.data.pipelineNode as PipelineNode;
   const config = (pipelineNode.config || {}) as Record<string, unknown>;
-  const savedGroupBy = (config.groupBy as string[]) || [];
-  const savedAggregations = (config.aggregations as Aggregation[]) || [];
 
-  const [groupBy, setGroupBy] = useState<string[]>(savedGroupBy);
-  const [aggregations, setAggregations] = useState<Aggregation[]>(
-    savedAggregations.length > 0 ? savedAggregations : [{ id: `agg_${Date.now()}`, column: '', func: 'sum', alias: '' }]
+  // ── 上游预览 ────────────────────────────────────────────────
+  const upstreamNode = upstreamNodes[0] ?? null;
+  const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
+  const upstreamDsId = upstreamPn
+    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
+    : undefined;
+
+  const { previewData, previewLoading, previewError, loadPreview } = useNodePreview();
+
+  const nodesSignature = useMemo(
+    () => JSON.stringify(allNodes.map(n => ({
+      id: n.id,
+      pn: (n.data.pipelineNode as PNode),
+    }))),
+    [allNodes]
   );
 
-  // Placeholder columns (would be loaded from upstream preview in real impl)
-  const columns: Array<{ name: string; type: string }> = [];
+  // 请求上游预览（仅首次加载或上游 id / nodes 签名变化时）
+  const loadKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!upstreamNode || !upstreamDsId) return;
+    const key = `${upstreamNode.id}-${nodesSignature}-${upstreamDsId}`;
+    if (key === loadKeyRef.current) return;
+    loadKeyRef.current = key;
+    loadPreview({
+      node: upstreamNode,
+      allNodes,
+      pipelineDataSourceId: upstreamDsId,
+      limit: 50,
+    }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upstreamNode?.id, nodesSignature, upstreamDsId]);
 
-  const updateConfig = (newGroupBy: string[], newAggs: Aggregation[]) => {
+  // 稳定序列化，避免「每次渲染新 []」导致 useEffect 死循环
+  const groupBySig = useMemo(
+    () => JSON.stringify((config.groupBy as string[]) ?? []),
+    [config.groupBy]
+  );
+  const aggregationsSig = useMemo(
+    () => JSON.stringify((config.aggregations as Aggregation[]) ?? []),
+    [config.aggregations]
+  );
+  const previewColumnsSig = previewData?.columns?.join('\0') ?? '';
+
+  const [cols, setCols] = useState<ColState[]>([]);
+
+  const lastMergedSigRef = useRef<string>('');
+  useEffect(() => {
+    if (!previewData?.columns?.length) return;
+    const sig = `${node.id}|${previewColumnsSig}|${groupBySig}|${aggregationsSig}`;
+    if (sig === lastMergedSigRef.current) return;
+    lastMergedSigRef.current = sig;
+    const gbList = JSON.parse(groupBySig) as string[];
+    const aggList = JSON.parse(aggregationsSig) as Aggregation[];
+    const gbSet = new Set(gbList);
+    const aggByCol = new Map<string, Aggregation>();
+    for (const a of aggList) {
+      if (a.column) aggByCol.set(a.column, a);
+    }
+    const next: ColState[] = previewData.columns.map((col, idx) => {
+      const type = previewData.columnTypes?.[idx] ?? 'string';
+      const savedAgg = aggByCol.get(col);
+      return {
+        name: col,
+        type,
+        isGrouped: gbSet.has(col),
+        func: savedAgg?.func ?? '',
+        alias: savedAgg?.alias ?? '',
+      };
+    });
+    setCols(next);
+  }, [node.id, previewColumnsSig, groupBySig, aggregationsSig, previewData]);
+
+  // ── 写回 groupBy / aggregations（从 node 读当前 config，避免闭包陈旧） ──
+  const flushToConfig = useCallback((newCols: ColState[]) => {
     if (readOnly) return;
+    const newGroupBy = newCols.filter(c => c.isGrouped).map(c => c.name);
+    const newAggs: Aggregation[] = newCols
+      .filter(c => c.func && (!c.isGrouped))
+      .map(c => ({
+        id: `${c.name}_${c.func}`,
+        column: c.name,
+        func: c.func,
+        alias: c.alias || `${c.func}_${c.name}`,
+      }));
+
     const pn = node.data.pipelineNode as Record<string, unknown>;
+    const currentCfg = (pn.config || {}) as Record<string, unknown>;
     node.data = {
       ...node.data,
       pipelineNode: {
         ...pn,
-        config: {
-          ...config,
-          groupBy: newGroupBy,
-          aggregations: newAggs,
-        },
+        config: { ...currentCfg, groupBy: newGroupBy, aggregations: newAggs },
       },
     };
     onChange();
+  }, [readOnly, node, onChange]);
+
+  // ── 列状态变更 ───────────────────────────────────────────────
+  const toggleGroup = (name: string, checked: boolean) => {
+    const next = cols.map(c =>
+      c.name === name ? { ...c, isGrouped: checked, func: checked ? '' : c.func, alias: '' } : c
+    );
+    setCols(next);
+    flushToConfig(next);
   };
 
-  const addAggregation = () => {
-    const newAggs = [
-      ...aggregations,
-      { id: `agg_${Date.now()}`, column: '', func: 'sum', alias: '' },
-    ];
-    setAggregations(newAggs);
-    updateConfig(groupBy, newAggs);
+  const setFunc = (name: string, func: string) => {
+    const next = cols.map(c =>
+      c.name === name
+        ? { ...c, func, isGrouped: false, alias: func ? `${func}_${c.name}` : '' }
+        : c
+    );
+    setCols(next);
+    flushToConfig(next);
   };
 
-  const removeAggregation = (id: string) => {
-    const newAggs = aggregations.filter(a => a.id !== id);
-    if (newAggs.length === 0) {
-      newAggs.push({ id: `agg_${Date.now()}`, column: '', func: 'sum', alias: '' });
-    }
-    setAggregations(newAggs);
-    updateConfig(groupBy, newAggs);
+  const setAlias = (name: string, alias: string) => {
+    const next = cols.map(c => c.name === name ? { ...c, alias } : c);
+    setCols(next);
+    flushToConfig(next);
   };
 
-  const updateAggregation = (id: string, field: keyof Aggregation, value: string) => {
-    const newAggs = aggregations.map(a => {
-      if (a.id !== id) return a;
-      const updated = { ...a, [field]: value };
-      if (field === 'func' && !updated.alias) {
-        updated.alias = `${value}_${updated.column || 'col'}`;
-      }
-      if (field === 'column' && !updated.alias) {
-        updated.alias = `${updated.func}_${value}`;
-      }
-      return updated;
+  // ── 校验：存在分组列时，未选分组的列必须汇总 ────────────────────
+  const hasGroup = cols.some(c => c.isGrouped);
+  const ungroupedWithNoAgg = cols.filter(c => !c.isGrouped && !c.func);
+  const validationError = hasGroup && ungroupedWithNoAgg.length > 0
+    ? `以下 ${ungroupedWithNoAgg.length} 个非分组列未选汇总方式：${ungroupedWithNoAgg.map(c => c.name).join('、')}。SQL 将仅输出分组列，结果可能为空。`
+    : null;
+
+  // ── SQL 预览 ─────────────────────────────────────────────────
+  const sqlPreview = useMemo(() => {
+    const gbCols = cols.filter(c => c.isGrouped).map(c => `\`${c.name}\``);
+    const aggCols = cols.filter(c => c.func && !c.isGrouped).map(c => {
+      const fn = c.func.toUpperCase();
+      const alias = c.alias || `${c.func}_${c.name}`;
+      if (c.func === 'count_distinct') return `COUNT(DISTINCT \`${c.name}\`) AS \`${alias}\``;
+      return `${fn}(\`${c.name}\`) AS \`${alias}\``;
     });
-    setAggregations(newAggs);
-    updateConfig(groupBy, newAggs);
-  };
+    const selectParts = [...gbCols, ...aggCols];
+    if (selectParts.length === 0) return null;
+    const gbStr = gbCols.length > 0 ? ` GROUP BY ${gbCols.join(', ')}` : '';
+    return `SELECT ${selectParts.join(', ')}\nFROM upstream${gbStr}`;
+  }, [cols]);
 
-  const addGroupBy = (col: string) => {
-    if (!col || groupBy.includes(col)) return;
-    const newGroupBy = [...groupBy, col];
-    setGroupBy(newGroupBy);
-    updateConfig(newGroupBy, aggregations);
-  };
-
-  const removeGroupBy = (col: string) => {
-    const newGroupBy = groupBy.filter(c => c !== col);
-    setGroupBy(newGroupBy);
-    updateConfig(newGroupBy, aggregations);
-  };
-
+  // ── 渲染 ─────────────────────────────────────────────────────
   if (upstreamNodes.length === 0) {
     return (
+      <Alert type="info" showIcon message="请先连接上游节点" description="聚合节点需要至少一个上游数据源。" style={{ marginBottom: 12 }} />
+    );
+  }
+
+  if (!upstreamDsId) {
+    return (
       <Alert
-        type="info"
-        showIcon
-        message="请先连接上游节点"
-        description="聚合节点需要至少一个上游数据源。"
+        type="warning" showIcon
+        message="无法确定数据源"
+        description="请检查上游数据源节点的数据库配置。"
         style={{ marginBottom: 12 }}
       />
     );
   }
 
-  const validAggs = aggregations.filter(a => a.column && a.func);
-
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <Text strong style={{ fontSize: 13 }}>
-          <BarChartOutlined style={{ marginRight: 6 }} />
-          分组维度（GROUP BY）
-        </Text>
-        <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-          按哪些字段进行分组
-        </Text>
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <Select
-          size="small"
-          placeholder="选择分组字段…"
-          style={{ width: '100%' }}
-          onChange={addGroupBy}
-          disabled={readOnly}
-          value={undefined}
-          allowClear
-          showSearch
-          options={columns
-            .filter(c => !groupBy.includes(c.name))
-            .map(c => {
-              const typeInfo = getDataTypeInfo(c.type);
-              return {
-                label: (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Tag style={{ background: typeInfo.bg, color: typeInfo.text, border: 'none', fontSize: 9, padding: '0 3px' }}>
-                      {typeInfo.label}
-                    </Tag>
-                    {c.name}
-                  </span>
-                ),
-                value: c.name,
-              };
-            })}
-        />
-        {groupBy.length > 0 && (
-          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {groupBy.map(col => (
-              <Tag
-                key={col}
-                closable={!readOnly}
-                onClose={() => removeGroupBy(col)}
-                style={{ background: '#E0F2FE', color: '#0EA5E9', border: 'none' }}
-              >
-                {col}
-              </Tag>
-            ))}
-          </div>
-        )}
-        {groupBy.length === 0 && (
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            不选分组维度 = 对所有数据做汇总（单行结果）
+      {previewError ? (
+        <Alert type="error" message="加载上游列信息失败" description={previewError} style={{ fontSize: 11, marginBottom: 12 }} />
+      ) : null}
+      {previewLoading && !previewData?.columns?.length ? (
+        <div style={{ padding: '12px 0', textAlign: 'center', marginBottom: 12 }}>
+          <Spin size="small" />
+          <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
+            正在加载上游列结构…
           </Text>
-        )}
+        </div>
+      ) : null}
+
+      {/* 按列配置 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 6 }}>
+          <Text strong style={{ fontSize: 13 }}>
+            <BarChartOutlined style={{ marginRight: 6 }} />
+            按列配置
+          </Text>
+          <Tag style={{ fontSize: 10, background: '#F0FDF4', color: '#22C55E', border: 'none' }}>
+            GROUP BY
+          </Tag>
+          <Tag style={{ fontSize: 10, background: '#EDE9FE', color: '#8B5CF6', border: 'none' }}>
+            汇总
+          </Tag>
+          <Tag style={{ fontSize: 10, background: '#FEF3C7', color: '#D97706', border: 'none' }}>
+            别名
+          </Tag>
+        </div>
+
+        {/* 列配置 Table */}
+        <Table
+          size="small"
+          dataSource={cols}
+          rowKey="name"
+          pagination={false}
+          scroll={{ x: 500, y: 300 }}
+          columns={[
+            {
+              title: '字段名',
+              dataIndex: 'name',
+              key: 'name',
+              width: 130,
+              fixed: 'left' as const,
+              render: (name: string, record: ColState) => {
+                const info = getDataTypeInfo(record.type);
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Tag style={{ background: info.bg, color: info.text, border: 'none', fontSize: 9, padding: '0 3px', flexShrink: 0 }}>
+                      {info.label}
+                    </Tag>
+                    <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{name}</span>
+                  </div>
+                );
+              },
+            },
+            {
+              title: '分组 (GROUP BY)',
+              dataIndex: 'isGrouped',
+              key: 'isGrouped',
+              width: 100,
+              align: 'center' as const,
+              render: (isGrouped: boolean, record: ColState) => (
+                <Switch
+                  size="small"
+                  checked={isGrouped}
+                  disabled={readOnly || !!record.func}
+                  onChange={(checked) => toggleGroup(record.name, checked)}
+                  checkedChildren="分组"
+                  unCheckedChildren="—"
+                  style={{ fontSize: 10 }}
+                />
+              ),
+            },
+            {
+              title: '汇总方式',
+              dataIndex: 'func',
+              key: 'func',
+              width: 150,
+              render: (func: string, record: ColState) => (
+                <Select
+                  size="small"
+                  value={func || undefined}
+                  onChange={(val) => setFunc(record.name, val ?? '')}
+                  disabled={readOnly || record.isGrouped}
+                  style={{ width: '100%' }}
+                  showSearch
+                  options={AGGREGATE_FUNCTIONS.map((fn) => ({
+                    label: fn.label,
+                    value: fn.value,
+                  }))}
+                />
+              ),
+            },
+            {
+              title: '输出别名',
+              dataIndex: 'alias',
+              key: 'alias',
+              width: 130,
+              render: (alias: string, record: ColState) => (
+                <Input
+                  size="small"
+                  value={alias}
+                  onChange={(e) => setAlias(record.name, e.target.value)}
+                  disabled={readOnly || !record.func}
+                  placeholder={record.func ? `${record.func}_${record.name}` : '—'}
+                  style={{ fontSize: 11, fontFamily: 'monospace' }}
+                />
+              ),
+            },
+          ]}
+        />
       </div>
 
-      <Divider style={{ margin: '8px 0' }} />
-
-      <div style={{ marginBottom: 12 }}>
-        <Text strong style={{ fontSize: 13 }}>
-          汇总指标（聚合函数）
-        </Text>
-        <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-          {validAggs.length} 个指标
-        </Text>
-      </div>
-
-      {aggregations.map((agg, idx) => (
-        <Card
-          key={agg.id}
-          size="small"
-          style={{ marginBottom: 8 }}
-          bodyStyle={{ padding: '8px 10px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontSize: 11, color: '#8c8c8c', minWidth: 16 }}>#{idx + 1}</Text>
-
-            {/* Column */}
-            <Select
-              size="small"
-              placeholder="选择字段"
-              value={agg.column || undefined}
-              onChange={(val) => updateAggregation(agg.id, 'column', val)}
-              style={{ flex: 1 }}
-              showSearch
-              disabled={readOnly}
-              options={columns.map(c => {
-                const typeInfo = getDataTypeInfo(c.type);
-                return {
-                  label: (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Tag style={{ background: typeInfo.bg, color: typeInfo.text, border: 'none', fontSize: 9, padding: '0 3px' }}>
-                        {typeInfo.label}
-                      </Tag>
-                      {c.name}
-                    </span>
-                  ),
-                  value: c.name,
-                };
-              })}
-            />
-
-            {/* Function */}
-            <Select
-              size="small"
-              value={agg.func}
-              onChange={(val) => updateAggregation(agg.id, 'func', val)}
-              style={{ width: 130 }}
-              disabled={readOnly}
-              options={AGGREGATE_FUNCTIONS.map(fn => ({
-                label: fn.label,
-                value: fn.value,
-              }))}
-            />
-
-            {!readOnly && aggregations.length > 1 && (
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => removeAggregation(agg.id)}
-              />
-            )}
-          </div>
-
-          {/* Alias */}
-          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text type="secondary" style={{ fontSize: 11, minWidth: 16 }}>&nbsp;</Text>
-            <Text type="secondary" style={{ fontSize: 11 }}>输出为：</Text>
-            <Input
-              size="small"
-              placeholder={`结果列名（默认：${agg.func}_${agg.column || 'col'}）`}
-              value={agg.alias}
-              onChange={(e) => updateAggregation(agg.id, 'alias', e.target.value)}
-              style={{ flex: 1, fontFamily: 'monospace' }}
-              disabled={readOnly}
-            />
-          </div>
-        </Card>
-      ))}
-
-      {!readOnly && (
-        <Button
-          type="dashed"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={addAggregation}
-          style={{ width: '100%', marginTop: 4 }}
-        >
-          添加汇总指标
-        </Button>
+      {/* 校验警告 */}
+      {validationError && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<InfoCircleOutlined />}
+          message={validationError}
+          style={{ marginBottom: 10, fontSize: 11 }}
+        />
       )}
 
-      <Divider style={{ margin: '12px 0 8px' }} />
+      <Divider style={{ margin: '0 0 10px' }} />
 
-      {/* SQL preview */}
-      <Text type="secondary" style={{ fontSize: 11 }}>生成的查询：</Text>
+      {/* 区块 C：SQL 预览 */}
+      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>生成的查询：</Text>
       <div style={{
-        marginTop: 4,
         padding: '6px 10px',
         background: '#f5f7fa',
         borderRadius: 4,
@@ -305,23 +366,14 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
         fontSize: 11,
         color: '#595959',
         minHeight: 28,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
       }}>
-        {(() => {
-          if (validAggs.length === 0) return <span style={{ color: '#bfbfbf' }}>（请添加汇总指标）</span>;
-          const selectParts = [
-            ...groupBy.map(c => `\`${c}\``),
-            ...validAggs.map(a => {
-              const fn = a.func.toUpperCase();
-              const alias = a.alias || `${a.func}_${a.column}`;
-              if (a.func === 'count_distinct') {
-                return `COUNT(DISTINCT \`${a.column}\`) AS \`${alias}\``;
-              }
-              return `${fn}(\`${a.column}\`) AS \`${alias}\``;
-            }),
-          ];
-          const groupStr = groupBy.length > 0 ? ` GROUP BY ${groupBy.map(c => `\`${c}\``).join(', ')}` : '';
-          return `SELECT ${selectParts.join(', ')}\nFROM upstream ${groupStr}`;
-        })()}
+        {sqlPreview ? (
+          <span>{sqlPreview}</span>
+        ) : (
+          <span style={{ color: '#bfbfbf' }}>（请先在「按列配置」中选择分组列或汇总方式）</span>
+        )}
       </div>
     </div>
   );

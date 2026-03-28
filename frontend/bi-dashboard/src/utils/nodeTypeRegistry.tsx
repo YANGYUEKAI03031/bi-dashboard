@@ -57,6 +57,29 @@ export interface NodeTypeDefinition {
   allowedUpstreamTypes?: string[];
 }
 
+/**
+ * 新建/切换节点类型时下拉中的顺序（不含已下线的独立「过滤」类型；
+ * 行筛选请用各节点预览面板的筛选，或「数据转换」节点）。
+ */
+export const EDITOR_NODE_TYPE_ORDER: string[] = [
+  'source',
+  'aggregate',
+  'join',
+  'column_select',
+  'output',
+  'transform',
+  'merge',
+];
+
+/** 右侧配置「节点类型」下拉的选项；旧管道中的 filter 节点会额外带上 filter 一项 */
+export function getEditorSelectableNodeTypeDefs(currentType?: string): NodeTypeDefinition[] {
+  const ordered = EDITOR_NODE_TYPE_ORDER.map((k) => NODE_TYPE_REGISTRY[k]).filter(Boolean);
+  if (currentType === 'filter') {
+    return [NODE_TYPE_REGISTRY.filter, ...ordered];
+  }
+  return ordered;
+}
+
 export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
   source: {
     type: 'source',
@@ -72,6 +95,7 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     icon: <DatabaseOutlined />,
     allowedUpstreamTypes: [],
   },
+  /** 已下线：不再在编辑器中新建，仅兼容旧管道 */
   filter: {
     type: 'filter',
     label: '过滤',
@@ -172,8 +196,8 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
   },
 };
 
+/** 仅用于展示/兼容：后端预览 SQL 仍会把 transform 规范为 filter 逻辑 */
 export const LEGACY_TYPE_MAP: Record<string, string> = {
-  transform: 'filter',
   merge: 'join',
 };
 
