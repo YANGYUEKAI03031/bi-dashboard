@@ -19,6 +19,8 @@ import { getNodeTypeDef } from '../../utils/nodeTypeRegistry';
 import { resolvePreviewDataSourceId } from '../../utils/pipelineDataSourceUtils';
 import { NodePreviewTable } from './NodePreviewTable';
 import { useNodePreview } from '../../hooks/useNodePreview';
+import { PREVIEW_COLUMN_DISPLAY_AUTO } from '../../constants/previewColumnDisplay';
+import { getPreviewColumnFormatsFromConfig } from '../../utils/previewDisplayUtils';
 
 const { Text } = Typography;
 
@@ -349,6 +351,41 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     });
   };
 
+  const previewColumnFormats = pipelineNode?.config
+    ? getPreviewColumnFormatsFromConfig(pipelineNode.config)
+    : undefined;
+
+  const handlePreviewColumnFormatChange = (columnKey: string, format: string) => {
+    if (!previewNode || !onNodeUpdate) {
+      return;
+    }
+    const pn = previewNode.data.pipelineNode as Record<string, unknown>;
+    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const prevRaw = cfg.previewColumnFormats;
+    const nextFormats: Record<string, string> = {};
+    if (prevRaw && Object.prototype.toString.call(prevRaw) === '[object Object]') {
+      Object.assign(nextFormats, prevRaw as Record<string, string>);
+    }
+    if (format === PREVIEW_COLUMN_DISPLAY_AUTO) {
+      delete nextFormats[columnKey];
+    } else {
+      nextFormats[columnKey] = format;
+    }
+    const newCfg = { ...cfg };
+    if (Object.keys(nextFormats).length === 0) {
+      delete newCfg.previewColumnFormats;
+    } else {
+      newCfg.previewColumnFormats = nextFormats;
+    }
+    onNodeUpdate({
+      ...previewNode,
+      data: {
+        ...previewNode.data,
+        pipelineNode: { ...pn, config: newCfg },
+      },
+    });
+  };
+
   /** 筛选条件变更 */
   const handleConditionsChange = (cs: Condition[]) => {
     setLocalConditions(cs);
@@ -505,6 +542,8 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             displayColumnKeys={
               visibleColumnKeys.length ? visibleColumnKeys.filter((c) => allCols.includes(c)) : undefined
             }
+            columnFormatOverrides={previewColumnFormats}
+            onColumnFormatChange={onNodeUpdate ? handlePreviewColumnFormatChange : undefined}
           />
         </div>
       )}

@@ -18,7 +18,8 @@ import logging
 import re
 import time
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from sqlalchemy import text, update
 
@@ -26,6 +27,48 @@ from app.models.pipeline import DataPipeline, PipelineExecution
 from app.services.pipeline.temp_table_manager import TempTableManager
 
 logger = logging.getLogger(__name__)
+
+
+def _preview_value_to_column_type(v: Any) -> str:
+    """根据驱动返回的 Python 值推断列类型，与前端 getDataTypeInfo 使用的名称对齐。"""
+    if v is None:
+        return "string"
+    if isinstance(v, bool):
+        return "boolean"
+    if isinstance(v, int) and not isinstance(v, bool):
+        return "int"
+    if isinstance(v, float):
+        return "decimal"
+    if isinstance(v, Decimal):
+        return "decimal"
+    if isinstance(v, datetime):
+        return "datetime"
+    if isinstance(v, date):
+        return "date"
+    if isinstance(v, (bytes, bytearray)):
+        return "string"
+    return "string"
+
+
+def _infer_preview_column_types(rows_raw: List[Any], num_cols: int) -> List[str]:
+    """用前若干行非空单元格推断每列类型；无行或全空时退化为 string。"""
+    if num_cols <= 0:
+        return []
+    if not rows_raw:
+        return ["string"] * num_cols
+    col_types: List[str] = []
+    for i in range(num_cols):
+        picked: Any = None
+        for row in rows_raw[:50]:
+            if len(row) <= i:
+                continue
+            cell = row[i]
+            if cell is not None:
+                picked = cell
+                break
+        col_types.append(_preview_value_to_column_type(picked))
+    return col_types
+
 
 # 与前端 nodeTypeRegistry LEGACY_TYPE_MAP 一致：预览 SQL 生成用规范类型
 _PIPELINE_NODE_TYPE_CANON = {
@@ -1005,9 +1048,7 @@ class PipelineEngine:
                 result = await conn.execute(text(sql))
                 rows_raw = result.fetchall()
                 columns = list(result.keys()) if hasattr(result, "keys") and result.keys() else []
-                col_types = []
-                for col in columns:
-                    col_types.append("string")
+                col_types = _infer_preview_column_types(rows_raw, len(columns))
 
                 data = []
                 for row in rows_raw:
