@@ -4,7 +4,7 @@
  * Supports both single-node and chained (graph-collapse) preview modes.
  */
 import { useState, useCallback, useRef } from 'react';
-import { GraphNode, GraphEdge, buildEdgesFromUpstream } from '../utils/graphUtils';
+import { GraphNode, buildEdgesFromUpstream } from '../utils/graphUtils';
 import { PipelineNode } from '../services/pipelineService';
 import { API_BASE_URL } from '../config/apiBaseUrl';
 import { AuthService } from '../services/authService';
@@ -21,7 +21,6 @@ export interface PreviewData {
 interface LoadPreviewParams {
   node: GraphNode;
   allNodes: GraphNode[];
-  allEdges: GraphEdge[];
   pipelineDataSourceId?: number;
   limit?: number;
 }
@@ -34,7 +33,7 @@ export function useNodePreview() {
   const cacheRef = useRef<Record<string, PreviewData>>({});
 
   const loadPreview = useCallback(async (params: LoadPreviewParams, immediate = false) => {
-    const { node, allNodes, allEdges, pipelineDataSourceId, limit = 100 } = params;
+    const { node, allNodes, pipelineDataSourceId, limit = 100 } = params;
     if (!pipelineDataSourceId) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setPreviewLoading(false);
@@ -74,9 +73,11 @@ export function useNodePreview() {
             config: baseCfg,
           };
         });
-        const graph_edges = allEdges.length > 0
-          ? allEdges.map((e: GraphEdge) => ({ source: e.source, target: e.target }))
-          : buildEdgesFromUpstream(allNodes).map((e) => ({ source: e.source, target: e.target }));
+        // 预览折叠 SQL 以节点 upstream 为准，避免 React Flow edges 与 upstream 短暂不一致时下游无数据
+        const graph_edges = buildEdgesFromUpstream(allNodes).map((e) => ({
+          source: e.source,
+          target: e.target,
+        }));
 
         const body = {
           node_type: pipelineNode.type,

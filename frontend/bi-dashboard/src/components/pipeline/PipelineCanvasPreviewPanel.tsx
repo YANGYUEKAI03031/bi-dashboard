@@ -49,6 +49,8 @@ interface PipelineCanvasPreviewPanelProps {
   allNodes: GraphNode[];
   allEdges: GraphEdge[];
   pipelineDataSourceId?: number | null;
+  /** 画布侧关闭面板 / 连线 / 拖拽后递增，强制预览刷新 */
+  refreshTick?: number;
   /** 节点配置变更时写回画布状态，触发预览重载 */
   onNodeUpdate?: (updatedNode: GraphNode) => void;
 }
@@ -228,6 +230,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   allNodes,
   allEdges,
   pipelineDataSourceId,
+  refreshTick = 0,
   onNodeUpdate,
 }) => {
   const { previewData, previewLoading, previewError, loadPreview, clearPreview } = useNodePreview();
@@ -244,8 +247,8 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
   const previewConfigKey = useMemo(() => {
     if (!previewNode) return '';
-    return JSON.stringify((previewNode.data.pipelineNode as PipelineNode)?.config ?? {});
-  }, [previewNode]);
+    return JSON.stringify((previewNode.data.pipelineNode as PipelineNode)?.config ?? {}) + `:tick:${refreshTick}`;
+  }, [previewNode, refreshTick]);
 
   const graphTopologySig = useMemo(() => {
     const ids = allNodes.map((x) => x.id).sort().join(',');
@@ -258,7 +261,11 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       allNodes
         .map((n) => {
           const pn = n.data.pipelineNode as PipelineNode;
-          return `${n.id}:${pn.type}:${JSON.stringify(pn.config ?? {})}:${pn.sql ?? ''}`;
+          let upstreamSig = '';
+          if (pn.upstream && pn.upstream.length) {
+            upstreamSig = [...pn.upstream].sort().join(',');
+          }
+          return `${n.id}:${pn.type}:${JSON.stringify(pn.config ?? {})}:${pn.sql ?? ''}:up=${upstreamSig}`;
         })
         .sort()
         .join('\n'),
@@ -275,7 +282,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       {
         node: previewNode,
         allNodes,
-        allEdges,
         pipelineDataSourceId: resolvedDsId,
         limit: 100,
       },
@@ -464,7 +470,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
                 {
                   node: previewNode,
                   allNodes,
-                  allEdges,
                   pipelineDataSourceId: resolvedDsId,
                   limit: 100,
                 },

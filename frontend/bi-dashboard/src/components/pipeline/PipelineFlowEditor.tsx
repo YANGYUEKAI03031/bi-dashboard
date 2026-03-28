@@ -854,6 +854,8 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   // Panel state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  /** 关闭面板 / 连线 / 拖拽后递增，强制底部预览刷新 */
+  const [previewRefreshTick, setPreviewRefreshTick] = useState(0);
 
   // Import from pipeline state
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -862,12 +864,13 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   const nextIdRef = useRef(initialNodes.length + 1);
 
   // 每次 nodes 变化时同步 edges（覆盖 ReactFlow 状态与节点 upstream 字段），
-  // 确保链式预览时后端拿到完整图结构
+  // 确保链式预览时后端拿到完整图结构；同时递增 tick 使预览同步刷新
   useEffect(() => {
     const graphNodes = nodes as unknown as GraphNode[];
     if (graphNodes.length === 0) return;
     const upstreamEdges = buildEdgesFromUpstream(graphNodes);
     setEdges(upstreamEdges);
+    setPreviewRefreshTick(t => t + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes]);
 
@@ -924,6 +927,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       const syncedEdges = testEdges;
       setNodes(syncedNodes);
       setEdges(syncedEdges);
+      setPreviewRefreshTick(t => t + 1);
     },
     [nodes, setNodes, setEdges]
   );
@@ -939,6 +943,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       const upstreamEdges = buildEdgesFromUpstream(graphNodes);
       setEdges(upstreamEdges);
     }
+    setPreviewRefreshTick(t => t + 1);
   }, [nodes, readOnly]);
 
   /** 双击：打开右侧配置面板 */
@@ -958,6 +963,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       const upstreamEdges = buildEdgesFromUpstream(graphNodes);
       setEdges(upstreamEdges);
     }
+    setPreviewRefreshTick(t => t + 1);
   }, [nodes, setEdges]);
 
   const handleNodesDelete = useCallback(() => {
@@ -991,6 +997,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
     setNodes(cleanedNodes);
     setEdges(syncedEdges);
+    setPreviewRefreshTick(t => t + 1);
     if (selectedNodeId && toDelete.includes(selectedNodeId)) {
       setPanelOpen(false);
       setSelectedNodeId(null);
@@ -1004,6 +1011,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
         ? { ...n, data: { ...updatedNode.data } }
         : n
     ));
+    setPreviewRefreshTick(t => t + 1);
   }, [setNodes]);
 
   const handlePanelNodeDelete = useCallback((nodeId: string) => {
@@ -1028,6 +1036,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
     setNodes(cleanedNodes);
     setEdges(syncedEdges);
+    setPreviewRefreshTick(t => t + 1);
     setPanelOpen(false);
     setSelectedNodeId(null);
   }, [nodes, setNodes, setEdges]);
@@ -1058,6 +1067,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
 
       setNodes(layouted as unknown as Node[]);
       setEdges(allEdges);
+      setPreviewRefreshTick(t => t + 1);
       setTimeout(() => fitView({ padding: 0.2 }), 50);
       message.success(`已导入 ${importedNodes.length} 个节点`);
     },
@@ -1091,6 +1101,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   const handleAutoLayout = useCallback(() => {
     const layouted = autoLayoutNodes(nodes as unknown as GraphNode[], edges as unknown as GraphEdge[]);
     setNodes(layouted as unknown as Node[]);
+    setPreviewRefreshTick(t => t + 1);
     setTimeout(() => fitView({ padding: 0.2 }), 50);
   }, [nodes, edges, setNodes, fitView]);
 
@@ -1187,6 +1198,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
             allNodes={nodes as unknown as GraphNode[]}
             allEdges={edges as unknown as GraphEdge[]}
             pipelineDataSourceId={pipelineDataSourceId}
+            refreshTick={previewRefreshTick}
             onNodeUpdate={handlePanelNodeUpdate}
           />
         </div>
@@ -1207,6 +1219,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
                 const upstreamEdges = buildEdgesFromUpstream(graphNodes);
                 setEdges(upstreamEdges);
               }
+              setPreviewRefreshTick(t => t + 1);
             }}
             open={panelOpen}
             readOnly={readOnly}
