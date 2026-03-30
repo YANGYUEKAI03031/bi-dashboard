@@ -69,15 +69,6 @@ export interface ExecutionResponse {
   error_message?: string;
   total_rows: number;
   execution_time_ms?: number;
-  current_step_id?: string | null;
-  current_step_rows?: number;
-  step_progress?: Record<string, {
-    status?: string;
-    rows?: number;
-    started_at?: string;
-    completed_at?: string;
-    error?: string;
-  }>;
   logs: Record<string, any>[];
   retention_minutes: number;
   expires_at?: string;

@@ -1,5 +1,5 @@
 // frontend/bi-dashboard/src/pages/PipelineTestPage.tsx
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Card, Button, Table, Modal, Form, Input, Space, Tag, message,
   Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert, Tooltip,
@@ -61,7 +61,6 @@ export const PipelineTestPage: React.FC = () => {
   const [running, setRunning] = useState<number | null>(null);
   const [editorNodes, setEditorNodes] = useState<PipelineNode[]>([]);
   const [editingPipelineId, setEditingPipelineId] = useState<number | null>(null);
-  const [liveTick, setLiveTick] = useState(0);
   const [form] = Form.useForm();
   const [runForm] = Form.useForm();
   /** 拉取画布当前节点（弹窗「创建/保存」时与工具栏「保存」一致，避免父 state 未同步） */
@@ -138,40 +137,14 @@ export const PipelineTestPage: React.FC = () => {
     }
   };
 
-  const loadExecutions = useCallback(async (pipelineId: number) => {
+  const loadExecutions = async (pipelineId: number) => {
     try {
       const res = await PipelineService.getPipelineExecutions(pipelineId, 0, 20);
       setExecutions(res.items);
-      setSelectedExecution((prev) => {
-        if (!prev || prev.pipeline_id !== pipelineId) return prev;
-        const found = res.items.find((e) => e.id === prev.id);
-        return found ?? prev;
-      });
     } catch (error: any) {
       message.error(error.message || '加载执行记录失败');
     }
-  }, []);
-
-  /** 抽屉打开时轮询执行列表，便于 running 状态看到步骤与行数进度 */
-  useEffect(() => {
-    if (!detailDrawerVisible || !selectedPipeline) return undefined;
-    const pid = selectedPipeline.id;
-    void loadExecutions(pid);
-    const t = window.setInterval(() => {
-      loadExecutions(pid);
-    }, 2000);
-    return () => window.clearInterval(t);
-  }, [detailDrawerVisible, selectedPipeline?.id, loadExecutions]);
-
-  /** 有执行中任务时每秒刷新一次界面，用于「已运行时长」展示 */
-  useEffect(() => {
-    const hasRunning =
-      detailDrawerVisible &&
-      executions.some((e) => e.status === 'running' || e.status === 'pending');
-    if (!hasRunning) return undefined;
-    const t = window.setInterval(() => setLiveTick((n) => n + 1), 1000);
-    return () => window.clearInterval(t);
-  }, [detailDrawerVisible, executions]);
+  };
 
   const openDetailDrawer = async (pipeline: PipelineResponse) => {
     setSelectedPipeline(pipeline);
@@ -306,38 +279,13 @@ export const PipelineTestPage: React.FC = () => {
         );
       },
     },
-    {
-      title: '当前步骤',
-      key: 'current_step_id',
-      width: 100,
-      render: (_: unknown, record: ExecutionResponse) => record.current_step_id ?? '-',
-    },
-    {
-      title: '当前步行数',
-      key: 'current_step_rows',
-      width: 100,
-      render: (_: unknown, record: ExecutionResponse) => {
-        if (record.status === 'running' || record.status === 'pending') {
-          return record.current_step_rows ?? 0;
-        }
-        return '-';
-      },
-    },
     { title: '行数', dataIndex: 'total_rows', key: 'total_rows', width: 80 },
     {
       title: '耗时',
       dataIndex: 'execution_time_ms',
       key: 'execution_time_ms',
-      width: 120,
-      render: (ms: number | undefined, record: ExecutionResponse) => {
-        void liveTick;
-        if (ms != null && ms > 0) return `${(ms / 1000).toFixed(2)}s`;
-        if (record.started_at && (record.status === 'running' || record.status === 'pending')) {
-          const sec = (Date.now() - new Date(record.started_at).getTime()) / 1000;
-          return sec >= 0 ? `进行中 ~${sec.toFixed(0)}s` : '-';
-        }
-        return '-';
-      },
+      width: 100,
+      render: (ms?: number) => ms ? `${(ms / 1000).toFixed(2)}s` : '-',
     },
     {
       title: '开始时间',
@@ -681,30 +629,9 @@ export const PipelineTestPage: React.FC = () => {
               )}
             </TabPane>
             {selectedExecution &&
-              ['completed', 'failed', 'running', 'pending', 'cancelled', 'expired'].includes(
-                selectedExecution.status
-              ) && (
+              (selectedExecution.status === 'completed' ||
+                selectedExecution.status === 'failed') && (
               <TabPane tab="执行详情" key="logs">
-                {(selectedExecution.status === 'running' || selectedExecution.status === 'pending') && (
-                  <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 16 }}
-                    message="执行进行中"
-                    description={
-                      <div>
-                        <p style={{ marginBottom: 8 }}>
-                          当前步骤：<strong>{selectedExecution.current_step_id ?? '—'}</strong>
-                          ，本步已写入行数：<strong>{selectedExecution.current_step_rows ?? 0}</strong>
-                          。本页每 2 秒自动刷新列表与日志。
-                        </p>
-                        <p style={{ marginBottom: 0, color: 'rgba(0,0,0,0.65)', fontSize: 12 }}>
-                          若「当前步行数」长时间为 0：常见原因是数据库仍在执行首次大查询，或驱动在缓冲整段结果集后才开始分批读取，并不一定是卡住。可结合数据源慢查询日志排查 SQL。
-                        </p>
-                      </div>
-                    }
-                  />
-                )}
                 {selectedExecution.status === 'failed' && (
                   <Alert
                     type="error"
@@ -724,25 +651,6 @@ export const PipelineTestPage: React.FC = () => {
                     showIcon
                     style={{ marginBottom: 16 }}
                   />
-                )}
-                {selectedExecution.step_progress &&
-                  Object.keys(selectedExecution.step_progress).length > 0 && (
-                  <>
-                    <Divider plain>步骤进度</Divider>
-                    <pre
-                      style={{
-                        maxHeight: 220,
-                        overflow: 'auto',
-                        background: '#f5f5f5',
-                        padding: 12,
-                        borderRadius: 4,
-                        fontSize: 12,
-                        marginBottom: 16,
-                      }}
-                    >
-                      {JSON.stringify(selectedExecution.step_progress, null, 2)}
-                    </pre>
-                  </>
                 )}
                 <Divider plain>
                   日志

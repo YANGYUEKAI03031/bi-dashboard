@@ -159,9 +159,6 @@ class ExecutionResponse(BaseModel):
     error_message: Optional[str]
     total_rows: int
     execution_time_ms: Optional[int]
-    current_step_id: Optional[str] = None
-    current_step_rows: Optional[int] = 0
-    step_progress: Optional[Dict[str, Any]] = None
     logs: List[Dict[str, Any]]
     retention_minutes: int
     expires_at: Optional[datetime]
@@ -180,16 +177,6 @@ class ExecutionResponse(BaseModel):
 
     @validator('result_summary', pre=True)
     def parse_json_dict(cls, v):
-        if isinstance(v, str):
-            import json
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                return None
-        return v
-
-    @validator('step_progress', pre=True)
-    def parse_step_progress(cls, v):
         if isinstance(v, str):
             import json
             try:
