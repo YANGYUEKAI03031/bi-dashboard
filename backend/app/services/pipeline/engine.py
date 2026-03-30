@@ -155,15 +155,14 @@ class PipelineEngine:
                 # 执行执行前清理（如果有）
                 await self._cleanup_old_executions(pipeline.id)
 
-                # 更新执行状态为 running
+                logs.append({"time": datetime.utcnow().isoformat(), "message": "开始执行管道"})
                 await self._update_execution_status(
                     execution.id,
                     "running",
                     temp_table_name=self.temp_manager.temp_table_name,
-                    started_at=datetime.utcnow()
+                    started_at=datetime.utcnow(),
+                    logs=logs,
                 )
-
-                logs.append({"time": datetime.utcnow().isoformat(), "message": "开始执行管道"})
 
                 # 按拓扑序执行节点
                 sorted_nodes = self._topological_sort(nodes)
@@ -186,13 +185,14 @@ class PipelineEngine:
                     node_config = node.get("config", {}) or {}
                     upstream = node.get("upstream")
 
+                    await self.session.refresh(execution)
                     logs.append({
                         "time": datetime.utcnow().isoformat(),
                         "message": f"开始执行节点: {node_name} ({step_id})"
                     })
 
-                    # 初始化步骤进度
-                    step_progress = execution.step_progress or {}
+                    # 初始化步骤进度（须从 DB 合并，避免覆盖其他步骤）
+                    step_progress = dict(execution.step_progress or {})
                     step_progress[step_id] = {
                         "status": "running",
                         "rows": 0,
@@ -202,7 +202,9 @@ class PipelineEngine:
                         execution.id,
                         "running",
                         current_step_id=step_id,
-                        step_progress=step_progress
+                        current_step_rows=0,
+                        step_progress=step_progress,
+                        logs=logs,
                     )
 
                     try:
@@ -302,6 +304,16 @@ class PipelineEngine:
                             "time": datetime.utcnow().isoformat(),
                             "message": f"节点 {node_name} 执行完成，{row_count} 行"
                         })
+
+                        await self._update_execution_status(
+                            execution.id,
+                            "running",
+                            step_progress=step_progress,
+                            logs=logs,
+                            completed_steps=completed_steps,
+                            current_step_id=step_id,
+                            current_step_rows=row_count,
+                        )
 
                         step_idx += 1
 
