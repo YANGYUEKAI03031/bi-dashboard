@@ -89,6 +89,38 @@ export interface StepSchemaResponse {
   schema: { name: string; type: string }[];
 }
 
+export interface ExecutionProgress {
+  execution_id: number;
+  status: string;
+  current_step_id: string | null;
+  current_step_rows: number;
+  total_rows: number | null;
+  step_progress: Record<string, {
+    status: string;
+    rows?: number;
+    started_at?: string;
+    completed_at?: string;
+    error?: string;
+  }>;
+  completed_steps: Record<string, any>[];
+  started_at: string | null;
+  completed_at: string | null;
+  execution_time_ms: number | null;
+  error_message: string | null;
+}
+
+export interface WatermarkInfo {
+  node_id: string;
+  watermark_field: string;
+  last_value: string | null;
+  last_processed_at: string | null;
+}
+
+export interface PipelineWatermarks {
+  pipeline_id: number;
+  watermarks: WatermarkInfo[];
+}
+
 export interface PipelineStats {
   pipeline_id: number;
   total_executions: number;
@@ -306,6 +338,50 @@ export class PipelineService {
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail || '取消执行失败');
+    }
+  }
+
+  static async getExecutionProgress(executionId: number): Promise<ExecutionProgress> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/executions/${executionId}/progress`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '获取执行进度失败');
+    }
+    return response.json();
+  }
+
+  static async getPipelineWatermarks(pipelineId: number): Promise<PipelineWatermarks> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/watermarks`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '获取水位线失败');
+    }
+    return response.json();
+  }
+
+  static async deleteWatermark(pipelineId: number, nodeId: string): Promise<void> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/watermarks/${encodeURIComponent(nodeId)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '删除水位线失败');
     }
   }
 }

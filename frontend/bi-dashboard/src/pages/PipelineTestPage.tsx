@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Card, Button, Table, Modal, Form, Input, Space, Tag, message,
-  Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert
+  Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, PlayCircleOutlined, DeleteOutlined, EyeOutlined,
@@ -264,6 +264,21 @@ export const PipelineTestPage: React.FC = () => {
         </Tag>
       ),
     },
+    {
+      title: '错误原因',
+      dataIndex: 'error_message',
+      key: 'error_message',
+      ellipsis: true,
+      render: (text: string | undefined, record) => {
+        if (!text) return record.status === 'failed' ? '（无详情）' : '-';
+        const short = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+        return (
+          <Tooltip title={<pre style={{ margin: 0, whiteSpace: 'pre-wrap', maxWidth: 480 }}>{text}</pre>}>
+            <span style={{ color: '#cf1322', cursor: 'help' }}>{short}</span>
+          </Tooltip>
+        );
+      },
+    },
     { title: '行数', dataIndex: 'total_rows', key: 'total_rows', width: 80 },
     {
       title: '耗时',
@@ -397,6 +412,7 @@ export const PipelineTestPage: React.FC = () => {
           }}
         >
           <PipelineFlowEditor
+            key={editingPipelineId ?? 'new'}
             ref={flowEditorRef}
             nodes={editorNodes}
             pipelineDataSourceId={pipelineDsFromNodes ?? undefined}
@@ -598,17 +614,60 @@ export const PipelineTestPage: React.FC = () => {
                   rowKey="id"
                   size="small"
                   pagination={{ pageSize: 5 }}
+                  onRow={(record) => ({
+                    onClick: () => setSelectedExecution(record),
+                    style: {
+                      cursor: 'pointer',
+                      ...(selectedExecution?.id === record.id
+                        ? { background: '#e6f4ff' }
+                        : {}),
+                    },
+                  })}
                 />
               ) : (
                 <Alert message="暂无执行记录，请点击「运行」按钮执行管道。" type="info" showIcon />
               )}
             </TabPane>
-            {selectedExecution && selectedExecution.status === 'completed' && (
-              <TabPane tab="执行日志" key="logs">
-                <pre style={{ maxHeight: 500, overflow: 'auto', background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
-                  {JSON.stringify(selectedExecution.logs, null, 2)}
+            {selectedExecution &&
+              (selectedExecution.status === 'completed' ||
+                selectedExecution.status === 'failed') && (
+              <TabPane tab="执行详情" key="logs">
+                {selectedExecution.status === 'failed' && (
+                  <Alert
+                    type="error"
+                    message="执行失败"
+                    description={
+                      <pre
+                        style={{
+                          margin: 0,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          fontSize: 12,
+                        }}
+                      >
+                        {selectedExecution.error_message || '未记录具体错误信息，请查看下方日志。'}
+                      </pre>
+                    }
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                )}
+                <Divider plain>
+                  日志
+                </Divider>
+                <pre
+                  style={{
+                    maxHeight: 500,
+                    overflow: 'auto',
+                    background: '#f5f5f5',
+                    padding: 12,
+                    borderRadius: 4,
+                    fontSize: 12,
+                  }}
+                >
+                  {JSON.stringify(selectedExecution.logs ?? [], null, 2)}
                 </pre>
-                {selectedExecution.result_summary && (
+                {selectedExecution.status === 'completed' && selectedExecution.result_summary && (
                   <>
                     <Divider>结果摘要</Divider>
                     <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>

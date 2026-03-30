@@ -3,14 +3,15 @@
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Form, Select, Alert, Empty, Typography, Tag, Spin, Space, Divider, Button,
+  Form, Select, Alert, Empty, Typography, Tag, Spin, Space, Divider, Button, InputNumber, Collapse,
 } from 'antd';
-import { DatabaseOutlined, ReloadOutlined, TableOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, ReloadOutlined, TableOutlined, SettingOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { DataSourceService } from '../../../services/dataSourceService';
 
 const { Text } = Typography;
+const { Panel } = Collapse;
 
 interface DataSourceOption {
   id: string;
@@ -332,11 +333,115 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
               </Form.Item>
 
               {config.incrementalMode && (
+                <>
+                  <Form.Item
+                    label="增量字段"
+                    name={['config', 'incrementalField']}
+                    extra="选择一个时间戳或自增 ID 字段作为增量标识"
+                    style={{ marginBottom: 8 }}
+                  >
+                    <Select
+                      showSearch
+                      allowClear
+                      placeholder="选择增量字段..."
+                      size="small"
+                      disabled={readOnly}
+                      value={config.incrementalField}
+                      onChange={(v) => {
+                        const pn = node.data.pipelineNode as Record<string, unknown>;
+                        node.data = {
+                          ...node.data,
+                          pipelineNode: {
+                            ...pn,
+                            config: {
+                              ...(pn.config as Record<string, unknown>) || {},
+                              incrementalField: v,
+                            },
+                          },
+                        };
+                        onChange();
+                      }}
+                      options={tableColumns
+                        .filter(col => ['datetime', 'timestamp', 'date', 'int', 'bigint'].includes(col.type.toLowerCase()))
+                        .map(col => ({
+                          label: `${col.name} (${col.type})`,
+                          value: col.name,
+                        }))}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    label="条件类型"
+                    style={{ marginBottom: 8 }}
+                  >
+                    <Select
+                      size="small"
+                      value={config.incrementalType || 'gt'}
+                      onChange={(v) => {
+                        const pn = node.data.pipelineNode as Record<string, unknown>;
+                        node.data = {
+                          ...node.data,
+                          pipelineNode: {
+                            ...pn,
+                            config: {
+                              ...(pn.config as Record<string, unknown>) || {},
+                              incrementalType: v,
+                            },
+                          },
+                        };
+                        onChange();
+                      }}
+                      disabled={readOnly}
+                      options={[
+                        { label: '大于 (>)', value: 'gt' },
+                        { label: '大于等于 (>=)', value: 'gte' },
+                      ]}
+                    />
+                  </Form.Item>
+                </>
+              )}
+
+              <Form.Item
+                label="批量大小"
+                name={['config', 'batchSize']}
+                extra="每批处理的行数，太大可能导致内存问题"
+                style={{ marginTop: 12, marginBottom: 0 }}
+              >
+                <InputNumber
+                  min={100}
+                  max={100000}
+                  step={1000}
+                  size="small"
+                  style={{ width: 120 }}
+                  value={config.batchSize || 5000}
+                  onChange={(v) => {
+                    const pn = node.data.pipelineNode as Record<string, unknown>;
+                    node.data = {
+                      ...node.data,
+                      pipelineNode: {
+                        ...pn,
+                        config: {
+                          ...(pn.config as Record<string, unknown>) || {},
+                          batchSize: v || 5000,
+                        },
+                      },
+                    };
+                    onChange();
+                  }}
+                  disabled={readOnly}
+                />
+              </Form.Item>
+
+              {config.incrementalMode && (
                 <Alert
                   type="info"
                   showIcon
-                  message="增量导入配置"
-                  description="建议为源表配置「更新时间」字段（如 updated_at），管道将只导入该字段值大于上次执行时间的记录。"
+                  message="增量导入已启用"
+                  description={
+                    config.incrementalField
+                      ? `每次执行只导入 ${config.incrementalField} ${config.incrementalType === 'gte' ? '>=' : '>'} 上次最大值的记录`
+                      : '请选择增量字段以启用增量导入'
+                  }
                   style={{ marginTop: 8, fontSize: 11 }}
                 />
               )}

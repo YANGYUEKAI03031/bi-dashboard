@@ -6,6 +6,8 @@
 1. 不生成巨大的 CTE，而是分步执行
 2. 每步结果写入临时表
 3. 支持前端点击节点预览数据
+4. 分批流式处理 - 避免大数据量时卡死
+5. 支持增量更新 - 通过水位线管理
 
 执行流程：
 Step 0: 源 SQL -> 临时表(step_0)
@@ -25,6 +27,7 @@ from sqlalchemy import text, update
 
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.services.pipeline.temp_table_manager import TempTableManager
+from app.services.pipeline.watermark_manager import WatermarkManager
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +109,8 @@ class PipelineEngine:
         self.data_source_engine = data_source_engine
         self.data_source_id = data_source_id
         self.temp_manager: Optional[TempTableManager] = None
+        self.watermark_manager: Optional[WatermarkManager] = None
+        self._default_batch_size = 5000  # 默认批次大小
 
     async def run(
         self,
@@ -141,9 +146,10 @@ class PipelineEngine:
 
             result_summary["total_steps"] = len(nodes)
 
-            # 创建临时表管理器
+            # 创建临时表管理器和水位线管理器
             async with self.data_source_engine.connect() as conn:
                 self.temp_manager = TempTableManager(conn, execution.id)
+                self.watermark_manager = WatermarkManager(self.session)
                 await self.temp_manager.create_temp_table()
 
                 # 执行执行前清理（如果有）
@@ -168,17 +174,36 @@ class PipelineEngine:
                 node_step_map: Dict[str, str] = {}
                 step_idx = 0
 
+                # 获取执行配置
+                exec_config = config or pipeline.config or {}
+                default_batch_size = exec_config.get("batch_size", self._default_batch_size)
+
                 for node in sorted_nodes:
                     node_id = node.get("id") or f"node_{step_idx}"
                     step_id = f"step_{step_idx}"
                     node_name = node.get("name", f"步骤 {step_idx+1}")
                     node_sql = node.get("sql", "")
+                    node_config = node.get("config", {}) or {}
                     upstream = node.get("upstream")
 
                     logs.append({
                         "time": datetime.utcnow().isoformat(),
                         "message": f"开始执行节点: {node_name} ({step_id})"
                     })
+
+                    # 初始化步骤进度
+                    step_progress = execution.step_progress or {}
+                    step_progress[step_id] = {
+                        "status": "running",
+                        "rows": 0,
+                        "started_at": datetime.utcnow().isoformat()
+                    }
+                    await self._update_execution_status(
+                        execution.id,
+                        "running",
+                        current_step_id=step_id,
+                        step_progress=step_progress
+                    )
 
                     try:
                         # 获取上游的 step_id 列表
@@ -204,24 +229,27 @@ class PipelineEngine:
                         if not self._validate_sql(actual_sql):
                             raise ValueError("SQL 语句包含不允许的操作")
 
-                        # 执行查询
-                        query_result = await conn.execute(text(actual_sql))
-                        rows = query_result.fetchall()
-                        columns = list(query_result.keys()) if query_result.keys() else []
+                        # 处理增量更新（仅对 source 节点生效）
+                        is_incremental = node_config.get("incremental", False)
+                        if is_incremental and not upstream_step_ids:  # 仅 source 节点
+                            actual_sql = await self._apply_incremental_condition(
+                                actual_sql,
+                                pipeline.id,
+                                node_id,
+                                node_config
+                            )
 
-                        # 转换为字典列表
-                        data = []
-                        for row in rows:
-                            item = dict(zip(columns, row))
-                            # JSON 序列化友好：date/datetime 统一转 ISO 字符串
-                            for k, v in list(item.items()):
-                                if isinstance(v, (datetime, type(None).__class__)):
-                                    if hasattr(v, 'isoformat'):
-                                        item[k] = v.isoformat()
-                            data.append(item)
+                        # 获取批次大小
+                        batch_size = node_config.get("batch_size", default_batch_size)
 
-                        # 写入临时表
-                        row_count = await self.temp_manager.insert_step_data(step_id, data)
+                        # 分批执行查询
+                        row_count, columns = await self._execute_step_streaming(
+                            conn=conn,
+                            sql=actual_sql,
+                            step_id=step_id,
+                            execution_id=execution.id,
+                            batch_size=batch_size
+                        )
 
                         # 更新 node_id -> step_id 映射
                         node_step_map[node_id] = step_id
@@ -233,8 +261,35 @@ class PipelineEngine:
                             "node_name": node_name,
                             "row_count": row_count,
                             "columns": columns,
-                            "executed_at": datetime.utcnow().isoformat()
+                            "executed_at": datetime.utcnow().isoformat(),
+                            "incremental": is_incremental
                         })
+
+                        # 更新水位线（如果是增量源节点）
+                        if is_incremental and not upstream_step_ids:
+                            incremental_field = node_config.get("incrementalField")
+                            if incremental_field and row_count > 0:
+                                max_value = await self._get_max_value(
+                                    conn, actual_sql, incremental_field
+                                )
+                                if max_value is not None:
+                                    await self.watermark_manager.update_watermark(
+                                        pipeline.id,
+                                        node_id,
+                                        incremental_field,
+                                        str(max_value)
+                                    )
+                                    logs.append({
+                                        "time": datetime.utcnow().isoformat(),
+                                        "message": f"水位线已更新: {incremental_field} = {max_value}"
+                                    })
+
+                        # 更新步骤进度为完成
+                        step_progress[step_id] = {
+                            "status": "completed",
+                            "rows": row_count,
+                            "completed_at": datetime.utcnow().isoformat()
+                        }
 
                         result_summary["step_details"].append({
                             "step_id": step_id,
@@ -259,6 +314,13 @@ class PipelineEngine:
                         })
                         logger.error(error_msg)
 
+                        # 更新步骤进度为失败
+                        step_progress[step_id] = {
+                            "status": "failed",
+                            "error": str(step_error),
+                            "failed_at": datetime.utcnow().isoformat()
+                        }
+
                         # 更新执行状态为失败
                         await self._update_execution_status(
                             execution.id,
@@ -267,6 +329,7 @@ class PipelineEngine:
                             completed_at=datetime.utcnow(),
                             execution_time_ms=int((time.time() - start_time) * 1000),
                             completed_steps=completed_steps,
+                            step_progress=step_progress,
                             logs=logs
                         )
 
@@ -288,6 +351,7 @@ class PipelineEngine:
                     total_rows=total_rows,
                     completed_steps=completed_steps,
                     result_summary=result_summary,
+                    step_progress=step_progress,
                     logs=logs
                 )
 
@@ -313,6 +377,199 @@ class PipelineEngine:
             )
 
             return False, error_msg, result_summary
+
+    async def _execute_step_streaming(
+        self,
+        conn,
+        sql: str,
+        step_id: str,
+        execution_id: int,
+        batch_size: int = 5000
+    ) -> Tuple[int, List[str]]:
+        """
+        分批获取数据并写入临时表
+
+        Args:
+            conn: 数据库连接
+            sql: 要执行的 SQL
+            step_id: 步骤 ID
+            execution_id: 执行记录 ID
+            batch_size: 每批获取的行数
+
+        Returns:
+            (total_rows, columns)
+        """
+        result = await conn.execute(text(sql))
+        columns = list(result.keys()) if hasattr(result, 'keys') and result.keys() else []
+
+        total_rows = 0
+        while True:
+            batch = result.fetchmany(batch_size)
+            if not batch:
+                break
+
+            # 转换为字典列表
+            data = []
+            for row in batch:
+                item = dict(zip(columns, row))
+                # JSON 序列化友好：date/datetime 统一转 ISO 字符串
+                for k, v in list(item.items()):
+                    if hasattr(v, 'isoformat'):
+                        item[k] = v.isoformat()
+                data.append(item)
+
+            # 写入临时表
+            await self.temp_manager.insert_step_data(step_id, data)
+            total_rows += len(batch)
+
+            # 更新进度到数据库
+            await self._update_step_progress(execution_id, step_id, total_rows)
+
+            # 检查是否取消
+            if await self._check_cancelled(execution_id):
+                raise Exception("执行被取消")
+
+        return total_rows, columns
+
+    async def _apply_incremental_condition(
+        self,
+        sql: str,
+        pipeline_id: int,
+        node_id: str,
+        config: Dict[str, Any]
+    ) -> str:
+        """
+        为 SQL 应用增量条件
+
+        Args:
+            sql: 原始 SQL
+            pipeline_id: 管道 ID
+            node_id: 节点 ID
+            config: 节点配置
+
+        Returns:
+            应用了增量条件的 SQL
+        """
+        if not self.watermark_manager:
+            return sql
+
+        # 获取水位线
+        watermark_value = await self.watermark_manager.get_watermark(pipeline_id, node_id)
+        if not watermark_value:
+            # 首次运行，没有水位线，返回原始 SQL（全量）
+            logger.info(f"节点 {node_id} 首次运行，执行全量查询")
+            return sql
+
+        # 获取增量配置
+        incremental_field = config.get("incrementalField")
+        incremental_type = config.get("incrementalType", "gt")
+
+        if not incremental_field:
+            logger.warning(f"节点 {node_id} 启用了增量但未配置增量字段")
+            return sql
+
+        # 构建增量 SQL
+        operator = ">" if incremental_type == "gt" else ">="
+        return self.watermark_manager.build_incremental_sql(
+            sql,
+            incremental_field,
+            watermark_value,
+            operator
+        )
+
+    async def _get_max_value(
+        self,
+        conn,
+        sql: str,
+        field: str
+    ) -> Optional[Any]:
+        """
+        获取查询结果中某个字段的最大值
+
+        Args:
+            conn: 数据库连接
+            sql: 原始 SQL
+            field: 字段名
+
+        Returns:
+            最大值，如果没有数据则返回 None
+        """
+        try:
+            # 安全处理字段名
+            safe_field = f"`{field.replace('`', '')}`"
+            # 构建获取最大值的查询
+            max_sql = f"SELECT MAX({safe_field}) FROM ({sql}) AS _tmp_max"
+            result = await conn.execute(text(max_sql))
+            row = result.fetchone()
+            if row and row[0] is not None:
+                return row[0]
+            return None
+        except Exception as e:
+            logger.error(f"获取最大值失败: {e}")
+            return None
+
+    async def _update_step_progress(
+        self,
+        execution_id: int,
+        step_id: str,
+        rows: int
+    ):
+        """
+        更新步骤进度
+
+        Args:
+            execution_id: 执行记录 ID
+            step_id: 步骤 ID
+            rows: 已处理的行数
+        """
+        try:
+            from sqlalchemy import select
+            from app.models.pipeline import PipelineExecution
+
+            stmt = select(PipelineExecution).where(PipelineExecution.id == execution_id)
+            result = await self.session.execute(stmt)
+            execution = result.scalar_one_or_none()
+
+            if execution:
+                step_progress = execution.step_progress or {}
+                if step_id in step_progress:
+                    step_progress[step_id]["rows"] = rows
+                else:
+                    step_progress[step_id] = {
+                        "status": "running",
+                        "rows": rows
+                    }
+
+                execution.current_step_id = step_id
+                execution.current_step_rows = rows
+                execution.step_progress = step_progress
+
+                await self.session.commit()
+        except Exception as e:
+            logger.error(f"更新步骤进度失败: {e}")
+            # 不抛出异常，避免影响主流程
+
+    async def _check_cancelled(self, execution_id: int) -> bool:
+        """
+        检查执行是否被取消
+
+        Args:
+            execution_id: 执行记录 ID
+
+        Returns:
+            是否被取消
+        """
+        try:
+            from sqlalchemy import select
+            from app.models.pipeline import PipelineExecution
+
+            stmt = select(PipelineExecution.status).where(PipelineExecution.id == execution_id)
+            result = await self.session.execute(stmt)
+            status = result.scalar_one_or_none()
+            return status == "cancelled"
+        except Exception as e:
+            logger.error(f"检查取消状态失败: {e}")
+            return False
 
     def _topological_sort(self, nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
         """

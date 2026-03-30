@@ -44,6 +44,21 @@ interface ColState {
   alias: string;
 }
 
+/** 与后端 PipelineEngine._build_step_sql 配合：持久化用 FROM {prev_table}，预览用 FROM upstream */
+function formatAggregateSql(cols: ColState[], fromLine: string): string | null {
+  const gbCols = cols.filter(c => c.isGrouped).map(c => `\`${c.name}\``);
+  const aggCols = cols.filter(c => c.func && !c.isGrouped).map(c => {
+    const fn = c.func.toUpperCase();
+    const alias = c.alias || `${c.func}_${c.name}`;
+    if (c.func === 'count_distinct') return `COUNT(DISTINCT \`${c.name}\`) AS \`${alias}\``;
+    return `${fn}(\`${c.name}\`) AS \`${alias}\``;
+  });
+  const selectParts = [...gbCols, ...aggCols];
+  if (selectParts.length === 0) return null;
+  const gbStr = gbCols.length > 0 ? ` GROUP BY ${gbCols.join(', ')}` : '';
+  return `SELECT ${selectParts.join(', ')}\n${fromLine}${gbStr}`;
+}
+
 interface AggregateNodeConfigProps {
   node: GraphNode;
   upstreamNodes: GraphNode[];
@@ -110,6 +125,34 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
 
   const [cols, setCols] = useState<ColState[]>([]);
 
+  // ── 写回 groupBy / aggregations + sql（后端校验与执行均要求 node.sql 非空） ──
+  const flushToConfig = useCallback((newCols: ColState[]) => {
+    if (readOnly) return;
+    const newGroupBy = newCols.filter(c => c.isGrouped).map(c => c.name);
+    const newAggs: Aggregation[] = newCols
+      .filter(c => c.func && (!c.isGrouped))
+      .map(c => ({
+        id: `${c.name}_${c.func}`,
+        column: c.name,
+        func: c.func,
+        alias: c.alias || `${c.func}_${c.name}`,
+      }));
+
+    const sqlPersisted = formatAggregateSql(newCols, 'FROM {prev_table}') ?? '';
+
+    const pn = node.data.pipelineNode as Record<string, unknown>;
+    const currentCfg = (pn.config || {}) as Record<string, unknown>;
+    node.data = {
+      ...node.data,
+      pipelineNode: {
+        ...pn,
+        sql: sqlPersisted,
+        config: { ...currentCfg, groupBy: newGroupBy, aggregations: newAggs },
+      },
+    };
+    onChange();
+  }, [readOnly, node, onChange]);
+
   const lastMergedSigRef = useRef<string>('');
   useEffect(() => {
     if (!previewData?.columns?.length) return;
@@ -135,32 +178,10 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
       };
     });
     setCols(next);
-  }, [node.id, previewColumnsSig, groupBySig, aggregationsSig, previewData]);
-
-  // ── 写回 groupBy / aggregations（从 node 读当前 config，避免闭包陈旧） ──
-  const flushToConfig = useCallback((newCols: ColState[]) => {
-    if (readOnly) return;
-    const newGroupBy = newCols.filter(c => c.isGrouped).map(c => c.name);
-    const newAggs: Aggregation[] = newCols
-      .filter(c => c.func && (!c.isGrouped))
-      .map(c => ({
-        id: `${c.name}_${c.func}`,
-        column: c.name,
-        func: c.func,
-        alias: c.alias || `${c.func}_${c.name}`,
-      }));
-
-    const pn = node.data.pipelineNode as Record<string, unknown>;
-    const currentCfg = (pn.config || {}) as Record<string, unknown>;
-    node.data = {
-      ...node.data,
-      pipelineNode: {
-        ...pn,
-        config: { ...currentCfg, groupBy: newGroupBy, aggregations: newAggs },
-      },
-    };
-    onChange();
-  }, [readOnly, node, onChange]);
+    if (!readOnly) {
+      flushToConfig(next);
+    }
+  }, [node.id, previewColumnsSig, groupBySig, aggregationsSig, previewData, readOnly, flushToConfig]);
 
   // ── 列状态变更 ───────────────────────────────────────────────
   const toggleGroup = (name: string, checked: boolean) => {
@@ -194,20 +215,11 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
     ? `以下 ${ungroupedWithNoAgg.length} 个非分组列未选汇总方式：${ungroupedWithNoAgg.map(c => c.name).join('、')}。SQL 将仅输出分组列，结果可能为空。`
     : null;
 
-  // ── SQL 预览 ─────────────────────────────────────────────────
-  const sqlPreview = useMemo(() => {
-    const gbCols = cols.filter(c => c.isGrouped).map(c => `\`${c.name}\``);
-    const aggCols = cols.filter(c => c.func && !c.isGrouped).map(c => {
-      const fn = c.func.toUpperCase();
-      const alias = c.alias || `${c.func}_${c.name}`;
-      if (c.func === 'count_distinct') return `COUNT(DISTINCT \`${c.name}\`) AS \`${alias}\``;
-      return `${fn}(\`${c.name}\`) AS \`${alias}\``;
-    });
-    const selectParts = [...gbCols, ...aggCols];
-    if (selectParts.length === 0) return null;
-    const gbStr = gbCols.length > 0 ? ` GROUP BY ${gbCols.join(', ')}` : '';
-    return `SELECT ${selectParts.join(', ')}\nFROM upstream${gbStr}`;
-  }, [cols]);
+  // ── SQL 预览（展示用 upstream；落库用 {prev_table}，见 flushToConfig） ──
+  const sqlPreview = useMemo(
+    () => formatAggregateSql(cols, 'FROM upstream'),
+    [cols]
+  );
 
   // ── 渲染 ─────────────────────────────────────────────────────
   if (upstreamNodes.length === 0) {

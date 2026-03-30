@@ -29,7 +29,7 @@ from app.schemas.pipeline import (
     PipelineStatsResponse, NodePreviewRequest, NodePreviewResponse
 )
 from app.core.security import get_current_user_id
-from app.models.pipeline import DataPipeline, PipelineExecution
+from app.models.pipeline import DataPipeline, PipelineExecution, PipelineWatermark
 from app.models.visualization import Database
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -244,12 +244,16 @@ async def run_pipeline(
         # 创建执行记录
         execution = await service.create_execution(pipeline_id)
 
-        # 启动后台任务
+        # 后台任务必须用应用库会话读写管道/执行记录；数据源引擎仅用于在业务库执行 SQL
+        source_data_url = (
+            f"mysql+aiomysql://{db_model.username}:{db_model.password}"
+            f"@{db_model.host}:{db_model.port}/{db_model.database_name}"
+        )
         background_tasks.add_task(
             _run_pipeline_background,
             pipeline_id=pipeline_id,
             execution_id=execution.id,
-            db_url=f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+            source_data_url=source_data_url,
         )
 
         return RunPipelineResponse(
@@ -269,61 +273,73 @@ async def run_pipeline(
 async def _run_pipeline_background(
     pipeline_id: int,
     execution_id: int,
-    db_url: str
+    source_data_url: str,
 ):
     """
     后台执行管道的任务
 
-    注意：此函数在后台线程中运行，使用独立的数据库连接
+    注意：应用元数据（data_pipelines / pipeline_executions）在 settings.DATABASE_URL；
+    管道 SQL 在数据源库执行，需单独的引擎。
     """
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
+    from app.core.config import settings
 
-    engine = None
-    async_session = None
+    app_engine = None
+    data_source_engine = None
 
     try:
-        # 创建独立的数据源引擎
-        engine = create_async_engine(
-            db_url,
+        app_engine = create_async_engine(
+            settings.DATABASE_URL,
             pool_size=3,
             max_overflow=5,
             pool_recycle=1800,
             pool_pre_ping=True,
         )
-        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        data_source_engine = create_async_engine(
+            source_data_url,
+            pool_size=3,
+            max_overflow=5,
+            pool_recycle=1800,
+            pool_pre_ping=True,
+        )
+        SessionLocal = sessionmaker(
+            app_engine, class_=AsyncSession, expire_on_commit=False
+        )
 
-        # 创建服务实例
-        async with async_session() as session:
+        async with SessionLocal() as session:
             service = PipelineService(session)
 
-            # 获取管道和执行记录
             pipeline = await service.get_pipeline(pipeline_id)
             execution = await service.get_execution(execution_id)
 
             if not pipeline or not execution:
-                logger.error(f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}")
+                logger.error(
+                    f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}"
+                )
                 return
 
-            # 创建执行引擎
-            pipeline_engine = PipelineEngine(session, engine, pipeline.source_data_source_id)
+            pipeline_engine = PipelineEngine(
+                session, data_source_engine, pipeline.source_data_source_id
+            )
 
-            # 执行管道
             success, error_msg, result_summary = await pipeline_engine.run(
                 pipeline=pipeline,
                 execution=execution,
-                config=pipeline.config
+                config=pipeline.config,
             )
 
-            logger.info(f"管道执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}")
+            logger.info(
+                f"管道执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}"
+            )
 
     except Exception as e:
         logger.error(f"后台执行管道失败: {e}")
     finally:
-        if async_session:
-            await async_session.close()
-        if engine:
-            await engine.dispose()
+        if app_engine:
+            await app_engine.dispose()
+        if data_source_engine:
+            await data_source_engine.dispose()
 
 
 @router.get("/{pipeline_id}/executions", response_model=ExecutionListResponse)
@@ -621,6 +637,71 @@ async def get_execution(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/executions/{execution_id}/progress")
+async def get_execution_progress(
+    execution_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    获取执行进度（用于前端轮询）
+
+    返回当前步骤、已处理行数、各步骤进度详情。
+    """
+    try:
+        from sqlalchemy import select
+
+        # 获取执行记录
+        stmt = select(PipelineExecution).where(PipelineExecution.id == execution_id)
+        result = await db.execute(stmt)
+        execution = result.scalar_one_or_none()
+
+        if not execution:
+            raise HTTPException(status_code=404, detail="执行记录不存在")
+
+        # 获取管道检查权限
+        pipeline_stmt = select(DataPipeline).where(DataPipeline.id == execution.pipeline_id)
+        pipeline_result = await db.execute(pipeline_stmt)
+        pipeline = pipeline_result.scalar_one_or_none()
+
+        if pipeline and not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此执行记录")
+
+        # 计算总进度
+        total_steps = len(execution.completed_steps) if execution.completed_steps else 0
+        step_progress = execution.step_progress or {}
+        current_step = execution.current_step_id
+        current_rows = execution.current_step_rows or 0
+
+        # 估算总行数（从已完成步骤和当前步骤推算）
+        total_rows = execution.total_rows or 0
+        if current_rows > 0:
+            # 如果当前步骤正在运行，使用预估的总进度百分比
+            estimated_total = total_rows if total_rows > 0 else None
+        else:
+            estimated_total = total_rows if total_rows > 0 else None
+
+        return {
+            "execution_id": execution_id,
+            "status": execution.status,
+            "current_step_id": current_step,
+            "current_step_rows": current_rows,
+            "total_rows": estimated_total,
+            "step_progress": step_progress,
+            "completed_steps": execution.completed_steps,
+            "started_at": execution.started_at.isoformat() if execution.started_at else None,
+            "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+            "execution_time_ms": execution.execution_time_ms,
+            "error_message": execution.error_message
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取执行进度API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 节点实时预览（无代码编辑器用）====================
 
 async def _get_data_source_engine(db: AsyncSession, data_source_id: int):
@@ -695,5 +776,108 @@ async def preview_node(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"节点预览API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 水位线管理 ====================
+
+@router.get("/{pipeline_id}/watermarks")
+async def get_pipeline_watermarks(
+    pipeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    获取管道所有节点的水位线
+
+    用于查看增量更新进度。
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此管道")
+
+        # 获取所有水位线
+        wm_stmt = select(PipelineWatermark).where(PipelineWatermark.pipeline_id == pipeline_id)
+        wm_result = await db.execute(wm_stmt)
+        watermarks = wm_result.scalars().all()
+
+        return {
+            "pipeline_id": pipeline_id,
+            "watermarks": [
+                {
+                    "node_id": w.node_id,
+                    "watermark_field": w.watermark_field,
+                    "last_value": w.last_value,
+                    "last_processed_at": w.last_processed_at.isoformat() if w.last_processed_at else None
+                }
+                for w in watermarks
+            ]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取水位线API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{pipeline_id}/watermarks/{node_id}")
+async def delete_watermark(
+    pipeline_id: int,
+    node_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    删除指定节点的水位线
+
+    删除后下次执行将执行全量查询。
+    """
+    try:
+        from sqlalchemy import select, and_
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此管道")
+
+        # 删除水位线
+        wm_stmt = select(PipelineWatermark).where(
+            and_(
+                PipelineWatermark.pipeline_id == pipeline_id,
+                PipelineWatermark.node_id == node_id
+            )
+        )
+        wm_result = await db.execute(wm_stmt)
+        watermark = wm_result.scalar_one_or_none()
+
+        if watermark:
+            await db.delete(watermark)
+            await db.commit()
+
+        return {"message": "水位线已删除，下次执行将执行全量查询"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除水位线API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
