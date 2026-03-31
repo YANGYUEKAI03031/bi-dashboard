@@ -1,5 +1,5 @@
 // frontend/bi-dashboard/src/pages/PipelineTestPage.tsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Card, Button, Table, Modal, Form, Input, Space, Tag, message,
   Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert, Tooltip,
@@ -137,14 +137,31 @@ export const PipelineTestPage: React.FC = () => {
     }
   };
 
-  const loadExecutions = async (pipelineId: number) => {
+  /** 当 detailDrawerVisible 打开时，每 2 秒轮询一次执行列表（便于 running 时看到实时进度） */
+  useEffect(() => {
+    if (!detailDrawerVisible || !selectedPipeline) return;
+    const pid = selectedPipeline.id;
+    const id = window.setInterval(() => {
+      void loadExecutions(pid);
+    }, 2000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailDrawerVisible, selectedPipeline]);
+
+  const loadExecutions = useCallback(async (pipelineId: number) => {
     try {
       const res = await PipelineService.getPipelineExecutions(pipelineId, 0, 20);
       setExecutions(res.items);
+      // 同时更新当前选中执行记录的实时状态（running 时需要刷新）
+      setSelectedExecution((prev) => {
+        if (!prev) return prev;
+        const updated = res.items.find((e) => e.id === prev.id);
+        return updated ?? prev;
+      });
     } catch (error: any) {
       message.error(error.message || '加载执行记录失败');
     }
-  };
+  }, []);
 
   const openDetailDrawer = async (pipeline: PipelineResponse) => {
     setSelectedPipeline(pipeline);
@@ -263,6 +280,21 @@ export const PipelineTestPage: React.FC = () => {
           {status}
         </Tag>
       ),
+    },
+    // running / pending 时显示当前步骤 + 行数提示
+    {
+      title: '进度',
+      key: 'live_progress',
+      width: 180,
+      render: (_: unknown, record: ExecutionResponse) => {
+        if (record.status !== 'running' && record.status !== 'pending') return '—';
+        const sid = record.current_step_id;
+        const rows = record.current_step_rows ?? 0;
+        const hint = sid && record.step_progress?.[sid]?.phase_message;
+        if (sid && rows > 0) return `${sid} · 已写入 ${rows} 行`;
+        if (hint) return `${sid ?? ''} · ${hint}`;
+        return sid ? `${sid} · 查询中…` : '排队中…';
+      },
     },
     {
       title: '错误原因',
@@ -630,8 +662,43 @@ export const PipelineTestPage: React.FC = () => {
             </TabPane>
             {selectedExecution &&
               (selectedExecution.status === 'completed' ||
-                selectedExecution.status === 'failed') && (
+                selectedExecution.status === 'failed' ||
+                selectedExecution.status === 'running' ||
+                selectedExecution.status === 'pending') && (
               <TabPane tab="执行详情" key="logs">
+                {(selectedExecution.status === 'running' || selectedExecution.status === 'pending') && (
+                  <>
+                    <Alert
+                      type="info"
+                      message="执行进行中（每 2 秒自动刷新）"
+                      description={
+                        <span>
+                          当前步骤：<b>{selectedExecution.current_step_id ?? '—'}</b>
+                          {' '}，已写入行数：<b>{selectedExecution.current_step_rows ?? 0}</b>
+                          {' '}。
+                          若长期停在此页面且无行数变化，说明 SQL 查询耗时较长（大数据量 / 缺少索引 / 网络延迟）。
+                        </span>
+                      }
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                    />
+                    <Descriptions column={1} bordered size="small" style={{ marginBottom: 12 }}>
+                      <Descriptions.Item label="当前步骤">{selectedExecution.current_step_id ?? '—'}</Descriptions.Item>
+                      <Descriptions.Item label="已写入行数">{selectedExecution.current_step_rows ?? 0}</Descriptions.Item>
+                      <Descriptions.Item label="阶段">
+                        {(() => {
+                          const sid = selectedExecution.current_step_id;
+                          const sp = sid ? selectedExecution.step_progress?.[sid] : undefined;
+                          return sp?.phase_message || (sp?.rows && sp.rows > 0 ? '正在分批写入临时表' : 'SQL 查询中（请耐心等待）');
+                        })()}
+                      </Descriptions.Item>
+                    </Descriptions>
+                    <Divider plain>各步骤进度（实时）</Divider>
+                    <pre style={{ maxHeight: 240, overflow: 'auto', background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
+                      {JSON.stringify(selectedExecution.step_progress ?? {}, null, 2)}
+                    </pre>
+                  </>
+                )}
                 {selectedExecution.status === 'failed' && (
                   <Alert
                     type="error"

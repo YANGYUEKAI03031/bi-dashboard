@@ -394,12 +394,14 @@ class PipelineService:
             try:
                 async with engine.connect() as conn:
                     temp_manager = TempTableManager(conn, execution_id)
+                    await temp_manager.rebuild_struct_index()
 
-                    # 检查临时表是否存在
+                    # 检查持久表是否存在（JSON 或列式）
                     check_sql = f"""
                     SELECT COUNT(*) FROM information_schema.tables
                     WHERE table_schema = DATABASE()
-                    AND table_name = '{temp_manager.temp_table_name}'
+                    AND (table_name = '{temp_manager.json_table_name}'
+                         OR table_name LIKE 'tmp_pipeline_{execution_id}_%')
                     """
                     result = await conn.execute(check_sql)
                     count = result.scalar()
@@ -407,7 +409,7 @@ class PipelineService:
                     if count == 0:
                         raise ValueError("临时表不存在或已过期")
 
-                    # 获取预览数据
+                    # 获取预览数据（优先从列式表读，无则回退 JSON 表）
                     preview = await temp_manager.query_step_preview(step_id, limit, offset)
                     return preview
 
@@ -486,12 +488,14 @@ class PipelineService:
             try:
                 async with engine.connect() as conn:
                     temp_manager = TempTableManager(conn, execution_id)
+                    await temp_manager.rebuild_struct_index()
 
-                    # 检查临时表是否存在
+                    # 检查持久表是否存在
                     check_sql = f"""
                     SELECT COUNT(*) FROM information_schema.tables
                     WHERE table_schema = DATABASE()
-                    AND table_name = '{temp_manager.temp_table_name}'
+                    AND (table_name = '{temp_manager.json_table_name}'
+                         OR table_name LIKE 'tmp_pipeline_{execution_id}_%')
                     """
                     result = await conn.execute(check_sql)
                     count = result.scalar()

@@ -2,6 +2,30 @@
 import { AuthService } from './authService';
 import { API_BASE_URL } from '../config/apiBaseUrl';
 
+/**
+ * 解析 FastAPI 错误响应：
+ * - 422 验证错误：{ detail: [{ loc, msg, type }] } → "字段 xxx: 错误信息"
+ * - 普通错误：{ detail: "消息文字" } → 原样返回
+ * - 其他：返回 fallback
+ */
+async function parseApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.json();
+    if (data && Array.isArray(data.detail)) {
+      // FastAPI 422 验证错误列表
+      return data.detail
+        .map((err: { loc?: string[]; msg?: string }) => {
+          const loc = (err.loc ?? []).slice(1).join('.'); // 去掉 "body" 前缀
+          return loc ? `${loc}: ${err.msg ?? '格式错误'}` : (err.msg ?? '格式错误');
+        })
+        .join('；');
+    }
+    return (data?.detail as string) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export interface PipelineNode {
   id?: string;
   name: string;
@@ -74,6 +98,20 @@ export interface ExecutionResponse {
   expires_at?: string;
   started_at?: string;
   completed_at?: string;
+  /** 当前执行到的步骤，如 step_0 */
+  current_step_id?: string | null;
+  /** 当前步骤已写入行数（SQL 执行阶段为 0，fetchmany 写入后才有值） */
+  current_step_rows?: number;
+  /** 各步骤进度详情 */
+  step_progress?: Record<string, {
+    status?: string;
+    rows?: number;
+    phase?: string;
+    phase_message?: string;
+    started_at?: string;
+    completed_at?: string;
+    error?: string;
+  }>;
 }
 
 export interface StepPreviewResponse {
@@ -141,8 +179,7 @@ export class PipelineService {
       body: JSON.stringify(pipelineData),
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '创建管道失败');
+      throw new Error(await parseApiError(response, '创建管道失败'));
     }
     return response.json();
   }
@@ -156,8 +193,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取管道列表失败');
+      throw new Error(await parseApiError(response, '获取管道列表失败'));
     }
     return response.json();
   }
@@ -171,8 +207,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取管道详情失败');
+      throw new Error(await parseApiError(response, '获取管道详情失败'));
     }
     return response.json();
   }
@@ -187,8 +222,7 @@ export class PipelineService {
       body: JSON.stringify(updateData),
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '更新管道失败');
+      throw new Error(await parseApiError(response, '更新管道失败'));
     }
     return response.json();
   }
@@ -202,8 +236,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '删除管道失败');
+      throw new Error(await parseApiError(response, '删除管道失败'));
     }
   }
 
@@ -216,8 +249,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '触发管道运行失败');
+      throw new Error(await parseApiError(response, '触发管道运行失败'));
     }
     return response.json();
   }
@@ -231,8 +263,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取执行历史失败');
+      throw new Error(await parseApiError(response, '获取执行历史失败'));
     }
     return response.json();
   }
@@ -246,8 +277,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取执行记录失败');
+      throw new Error(await parseApiError(response, '获取执行记录失败'));
     }
     return response.json();
   }
@@ -261,8 +291,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取最新执行记录失败');
+      throw new Error(await parseApiError(response, '获取最新执行记录失败'));
     }
     return response.json();
   }
@@ -276,8 +305,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取管道统计失败');
+      throw new Error(await parseApiError(response, '获取管道统计失败'));
     }
     return response.json();
   }
@@ -291,8 +319,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '预览步骤数据失败');
+      throw new Error(await parseApiError(response, '预览步骤数据失败'));
     }
     return response.json();
   }
@@ -306,8 +333,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取步骤模式失败');
+      throw new Error(await parseApiError(response, '获取步骤模式失败'));
     }
     return response.json();
   }
@@ -321,8 +347,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取所有步骤失败');
+      throw new Error(await parseApiError(response, '获取所有步骤失败'));
     }
     return response.json();
   }
@@ -336,8 +361,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '取消执行失败');
+      throw new Error(await parseApiError(response, '取消执行失败'));
     }
   }
 
@@ -350,8 +374,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取执行进度失败');
+      throw new Error(await parseApiError(response, '获取执行进度失败'));
     }
     return response.json();
   }
@@ -365,8 +388,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取水位线失败');
+      throw new Error(await parseApiError(response, '获取水位线失败'));
     }
     return response.json();
   }
@@ -380,8 +402,7 @@ export class PipelineService {
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '删除水位线失败');
+      throw new Error(await parseApiError(response, '删除水位线失败'));
     }
   }
 }

@@ -122,18 +122,32 @@ export function buildEdgesFromUpstream(nodes: GraphNode[]): GraphEdge[] {
   return edges;
 }
 
+/** 输出节点占位 SQL，与后端 PipelineEngine 中 {prev_table} 占位协议一致 */
+const OUTPUT_NODE_SQL_PLACEHOLDER = 'SELECT * FROM {prev_table}';
+
 /**
  * React Flow nodes 转换为 PipelineNode[]（用于 API 提交）
+ * 输出节点若仅通过连线得到 upstream、未打开侧栏改表单，则 pipelineNode 可能缺 sql；
+ * 此处补全以满足后端 PipelineNodeCreate.sql 必填。
  */
 export function nodesToPipelineNodes(
   nodes: GraphNode[],
   positions?: Record<string, { x: number; y: number }>
 ): Array<Record<string, unknown>> {
-  return nodes.map((node, idx) => ({
-    ...(node.data.pipelineNode as Record<string, unknown>),
-    order: idx,
-    position: positions?.[node.id] ?? node.position ?? { x: 0, y: 0 },
-  }));
+  return nodes.map((node, idx) => {
+    const raw = node.data.pipelineNode as Record<string, unknown>;
+    const pn: Record<string, unknown> = {
+      ...raw,
+      order: idx,
+      position: positions?.[node.id] ?? node.position ?? { x: 0, y: 0 },
+    };
+    const nodeType = String(pn.type ?? '');
+    const sqlStr = String(pn.sql ?? '').trim();
+    if (nodeType === 'output' && !sqlStr) {
+      pn.sql = OUTPUT_NODE_SQL_PLACEHOLDER;
+    }
+    return pn;
+  });
 }
 
 /**

@@ -150,7 +150,7 @@ class PipelineEngine:
             async with self.data_source_engine.connect() as conn:
                 self.temp_manager = TempTableManager(conn, execution.id)
                 self.watermark_manager = WatermarkManager(self.session)
-                await self.temp_manager.create_temp_table()
+                await self.temp_manager.create_json_temp_table()
 
                 # 执行执行前清理（如果有）
                 await self._cleanup_old_executions(pipeline.id)
@@ -159,7 +159,7 @@ class PipelineEngine:
                 await self._update_execution_status(
                     execution.id,
                     "running",
-                    temp_table_name=self.temp_manager.temp_table_name,
+                    temp_table_name=self.temp_manager.json_table_name,
                     started_at=datetime.utcnow()
                 )
 
@@ -178,6 +178,9 @@ class PipelineEngine:
                 exec_config = config or pipeline.config or {}
                 default_batch_size = exec_config.get("batch_size", self._default_batch_size)
 
+                # 跨步骤累加进度（避免每步从 ORM 重置导致覆盖库中已有步骤）
+                all_step_progress: Dict[str, Any] = dict(execution.step_progress or {})
+
                 for node in sorted_nodes:
                     node_id = node.get("id") or f"node_{step_idx}"
                     step_id = f"step_{step_idx}"
@@ -192,17 +195,19 @@ class PipelineEngine:
                     })
 
                     # 初始化步骤进度
-                    step_progress = execution.step_progress or {}
-                    step_progress[step_id] = {
+                    all_step_progress[step_id] = {
                         "status": "running",
                         "rows": 0,
-                        "started_at": datetime.utcnow().isoformat()
+                        "started_at": datetime.utcnow().isoformat(),
+                        "phase": "querying",
+                        "phase_message": "正在执行 SQL 查询（数据量大时需较长时间）…",
                     }
                     await self._update_execution_status(
                         execution.id,
                         "running",
                         current_step_id=step_id,
-                        step_progress=step_progress
+                        current_step_rows=0,
+                        step_progress=all_step_progress,
                     )
 
                     try:
@@ -218,16 +223,20 @@ class PipelineEngine:
                             # 旧数据兼容：如果没有 upstream，依赖前一个节点
                             upstream_step_ids = [f"step_{step_idx - 1}"]
 
-                        # 构建实际执行的 SQL
+                        # 构建引用上游列式表的 SQL
                         actual_sql = self._build_step_sql(
                             node_sql,
                             upstream_step_ids,
-                            self.temp_manager.temp_table_name
+                            self.temp_manager._struct_tables
                         )
 
                         # 验证 SQL 安全性
                         if not self._validate_sql(actual_sql):
                             raise ValueError("SQL 语句包含不允许的操作")
+
+                        canonical_type = PipelineEngine._canonical_pipeline_node_type(
+                            str(node.get("type") or "")
+                        )
 
                         # 处理增量更新（仅对 source 节点生效）
                         is_incremental = node_config.get("incremental", False)
@@ -239,17 +248,87 @@ class PipelineEngine:
                                 node_config
                             )
 
-                        # 获取批次大小
-                        batch_size = node_config.get("batch_size", default_batch_size)
+                        if canonical_type == "output":
+                            # 输出节点：写入用户配置的目标表，不再写入引擎列式临时表
+                            target_plain = (node_config.get("targetTable") or "").strip()
+                            quoted_tbl = PipelineEngine._validate_and_quote_table_name(target_plain)
+                            if not quoted_tbl:
+                                raise ValueError(
+                                    "输出节点目标表名无效（仅允许字母、数字、下划线，长度 1-64）"
+                                )
+                            write_mode = str(node_config.get("writeMode") or "upsert").lower()
+                            if write_mode not in ("replace", "append", "upsert"):
+                                raise ValueError(
+                                    f"不支持的写入模式: {write_mode}（应为 replace | append | upsert）"
+                                )
+                            select_sql = actual_sql.rstrip().rstrip(";")
 
-                        # 分批执行查询
-                        row_count, columns = await self._execute_step_streaming(
-                            conn=conn,
-                            sql=actual_sql,
-                            step_id=step_id,
-                            execution_id=execution.id,
-                            batch_size=batch_size
-                        )
+                            # 先查出当前库中是否存在目标表
+                            exist_res = await conn.execute(text(
+                                "SELECT COUNT(*) FROM information_schema.TABLES "
+                                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl"
+                            ), {"tbl": target_plain})
+                            table_exists = exist_res.fetchone()[0] > 0
+
+                            if not table_exists:
+                                # 无论选择什么模式，表不存在时先建表
+                                await conn.execute(
+                                    text(f"CREATE TABLE {quoted_tbl} AS {select_sql}")
+                                )
+                                await conn.commit()
+                                logs.append({
+                                    "time": datetime.utcnow().isoformat(),
+                                    "message": f"表 {target_plain} 不存在，已自动创建"
+                                })
+                            elif write_mode == "replace":
+                                await conn.execute(text(f"DROP TABLE IF EXISTS {quoted_tbl}"))
+                                await conn.commit()
+                                await conn.execute(
+                                    text(f"CREATE TABLE {quoted_tbl} AS {select_sql}")
+                                )
+                            elif write_mode == "upsert":
+                                # Upsert：INSERT ... ON DUPLICATE KEY UPDATE（全量更新冲突行）
+                                # 需要上游节点提供唯一键列
+                                unique_key = (node_config.get("uniqueKey") or "").strip()
+                                if not unique_key:
+                                    raise ValueError(
+                                        "Upsert 模式必须指定唯一键列（uniqueKey），请在节点配置中填写"
+                                    )
+                                safe_key = unique_key.replace("`", "").strip()
+                                if not re.match(r"^[a-zA-Z0-9_]{1,64}$", safe_key):
+                                    raise ValueError(
+                                        f"唯一键列名不合法: {unique_key}"
+                                    )
+                                # 获取 SELECT 输出的所有列，构造 UPDATE SET 子句
+                                src_cols = await self._fetch_mysql_table_columns(conn, target_plain)
+                                update_clauses = [
+                                    f"`{c.replace('`', '')}` = VALUES(`{c.replace('`', '')}`)"
+                                    for c in src_cols
+                                ]
+                                upsert_sql = (
+                                    f"INSERT INTO {quoted_tbl} {select_sql} "
+                                    f"ON DUPLICATE KEY UPDATE {', '.join(update_clauses)}"
+                                )
+                                await conn.execute(text(upsert_sql))
+                            else:
+                                # append
+                                await conn.execute(
+                                    text(f"INSERT INTO {quoted_tbl} {select_sql}")
+                                )
+                            await conn.commit()
+                            cnt_res = await conn.execute(
+                                text(f"SELECT COUNT(*) FROM {quoted_tbl}")
+                            )
+                            row_count = cnt_res.fetchone()[0]
+                            columns = await self._fetch_mysql_table_columns(conn, target_plain)
+                        else:
+                            # INSERT...SELECT 直接写入列式临时表（不经过 Python 逐行搬运）
+                            row_count, columns = await self._execute_step_via_insert_select(
+                                conn=conn,
+                                sql=actual_sql,
+                                step_id=step_id,
+                                execution_id=execution.id,
+                            )
 
                         # 更新 node_id -> step_id 映射
                         node_step_map[node_id] = step_id
@@ -269,8 +348,15 @@ class PipelineEngine:
                         if is_incremental and not upstream_step_ids:
                             incremental_field = node_config.get("incrementalField")
                             if incremental_field and row_count > 0:
-                                max_value = await self._get_max_value(
-                                    conn, actual_sql, incremental_field
+                                # 从列式表读取最大值（列式表直接可查）
+                                if step_id in self.temp_manager._struct_tables:
+                                    tbl_name, _ = self.temp_manager._struct_tables[step_id]
+                                    safe_col = f"`{incremental_field.replace('`', '')}`"
+                                    max_sql = f"SELECT MAX({safe_col}) FROM {tbl_name}"
+                                else:
+                                    max_sql = actual_sql
+                                max_value = await self._get_max_value_from_select(
+                                    conn, max_sql
                                 )
                                 if max_value is not None:
                                     await self.watermark_manager.update_watermark(
@@ -285,10 +371,10 @@ class PipelineEngine:
                                     })
 
                         # 更新步骤进度为完成
-                        step_progress[step_id] = {
+                        all_step_progress[step_id] = {
                             "status": "completed",
                             "rows": row_count,
-                            "completed_at": datetime.utcnow().isoformat()
+                            "completed_at": datetime.utcnow().isoformat(),
                         }
 
                         result_summary["step_details"].append({
@@ -315,10 +401,10 @@ class PipelineEngine:
                         logger.error(error_msg)
 
                         # 更新步骤进度为失败
-                        step_progress[step_id] = {
+                        all_step_progress[step_id] = {
                             "status": "failed",
                             "error": str(step_error),
-                            "failed_at": datetime.utcnow().isoformat()
+                            "failed_at": datetime.utcnow().isoformat(),
                         }
 
                         # 更新执行状态为失败
@@ -329,7 +415,7 @@ class PipelineEngine:
                             completed_at=datetime.utcnow(),
                             execution_time_ms=int((time.time() - start_time) * 1000),
                             completed_steps=completed_steps,
-                            step_progress=step_progress,
+                            step_progress=all_step_progress,
                             logs=logs
                         )
 
@@ -351,7 +437,7 @@ class PipelineEngine:
                     total_rows=total_rows,
                     completed_steps=completed_steps,
                     result_summary=result_summary,
-                    step_progress=step_progress,
+                    step_progress=all_step_progress,
                     logs=logs
                 )
 
@@ -359,6 +445,12 @@ class PipelineEngine:
                     "time": datetime.utcnow().isoformat(),
                     "message": f"管道执行完成，总行数: {total_rows}，耗时: {execution_time_ms}ms"
                 })
+
+                # 清理持久表（成功时）
+                try:
+                    await self.temp_manager.cleanup_temp_table()
+                except Exception as cleanup_err:
+                    logger.warning(f"清理持久表失败（不影响结果）: {cleanup_err}")
 
                 return True, "", result_summary
 
@@ -378,58 +470,60 @@ class PipelineEngine:
 
             return False, error_msg, result_summary
 
-    async def _execute_step_streaming(
+        finally:
+            # 无论如何都确保清理持久表
+            if self.temp_manager:
+                try:
+                    await self.temp_manager.cleanup_temp_table()
+                except Exception as cleanup_err:
+                    logger.warning(f"finally: 清理持久表失败: {cleanup_err}")
+
+    async def _execute_step_via_insert_select(
         self,
         conn,
         sql: str,
         step_id: str,
         execution_id: int,
-        batch_size: int = 5000
+        sample_rows: int = 5
     ) -> Tuple[int, List[str]]:
         """
-        分批获取数据并写入临时表
+        通过 INSERT...SELECT 直接写入列式临时表（不走 fetchmany）。
+
+        流程：
+        1. 发现源 SQL 的 schema（列名 + MySQL 类型）
+        2. 创建列式临时表
+        3. INSERT...SELECT 一次性写入
+        4. 用 COUNT(*) 估算进度
+        5. 标记完成
 
         Args:
             conn: 数据库连接
-            sql: 要执行的 SQL
+            sql: 要执行的 SELECT 语句
             step_id: 步骤 ID
             execution_id: 执行记录 ID
-            batch_size: 每批获取的行数
+            sample_rows: schema 发现采样行数
 
         Returns:
             (total_rows, columns)
         """
-        result = await conn.execute(text(sql))
-        columns = list(result.keys()) if hasattr(result, 'keys') and result.keys() else []
+        # 阶段 1: 报告"估算行数"
+        try:
+            est_sql = f"SELECT COUNT(*) FROM ({sql.rstrip().rstrip(';')}) AS _est"
+            est_result = await conn.execute(text(est_sql))
+            est_row = est_result.fetchone()
+            estimated = est_row[0] if est_row else 0
+            await self._update_step_progress(execution_id, step_id, 0, estimated=estimated)
+        except Exception as e:
+            logger.warning(f"估算行数失败: {e}")
+            estimated = 0
 
-        total_rows = 0
-        while True:
-            batch = result.fetchmany(batch_size)
-            if not batch:
-                break
+        # 阶段 2: INSERT...SELECT
+        row_count, columns = await self.temp_manager.insert_via_select(step_id, sql, sample_rows)
 
-            # 转换为字典列表
-            data = []
-            for row in batch:
-                item = dict(zip(columns, row))
-                # JSON 序列化友好：date/datetime 统一转 ISO 字符串
-                for k, v in list(item.items()):
-                    if hasattr(v, 'isoformat'):
-                        item[k] = v.isoformat()
-                data.append(item)
+        # 阶段 3: 完成后更新进度
+        await self._update_step_progress(execution_id, step_id, row_count)
 
-            # 写入临时表
-            await self.temp_manager.insert_step_data(step_id, data)
-            total_rows += len(batch)
-
-            # 更新进度到数据库
-            await self._update_step_progress(execution_id, step_id, total_rows)
-
-            # 检查是否取消
-            if await self._check_cancelled(execution_id):
-                raise Exception("执行被取消")
-
-        return total_rows, columns
+        return row_count, columns
 
     async def _apply_incremental_condition(
         self,
@@ -477,32 +571,29 @@ class PipelineEngine:
             operator
         )
 
-    async def _get_max_value(
+    async def _get_max_value_from_select(
         self,
         conn,
-        sql: str,
-        field: str
+        sql: str
     ) -> Optional[Any]:
         """
-        获取查询结果中某个字段的最大值
+        从 SELECT 查询中取第一行第一列的值（用于水位线）
 
         Args:
             conn: 数据库连接
-            sql: 原始 SQL
-            field: 字段名
+            sql: 直接可执行的 SELECT 语句
 
         Returns:
-            最大值，如果没有数据则返回 None
+            值，没有数据则返回 None
         """
         try:
-            # 安全处理字段名
-            safe_field = f"`{field.replace('`', '')}`"
-            # 构建获取最大值的查询
-            max_sql = f"SELECT MAX({safe_field}) FROM ({sql}) AS _tmp_max"
-            result = await conn.execute(text(max_sql))
+            result = await conn.execute(text(sql))
             row = result.fetchone()
             if row and row[0] is not None:
-                return row[0]
+                val = row[0]
+                if hasattr(val, "isoformat"):
+                    return val.isoformat()
+                return val
             return None
         except Exception as e:
             logger.error(f"获取最大值失败: {e}")
@@ -512,7 +603,8 @@ class PipelineEngine:
         self,
         execution_id: int,
         step_id: str,
-        rows: int
+        rows: int,
+        estimated: int = 0
     ):
         """
         更新步骤进度
@@ -521,6 +613,7 @@ class PipelineEngine:
             execution_id: 执行记录 ID
             step_id: 步骤 ID
             rows: 已处理的行数
+            estimated: 估算总行数（用于显示进度百分比）
         """
         try:
             from sqlalchemy import select
@@ -532,13 +625,32 @@ class PipelineEngine:
 
             if execution:
                 step_progress = execution.step_progress or {}
+                phase_message = ""
+                if rows == 0 and estimated > 0:
+                    phase = "estimating"
+                    phase_message = f"估算中…约 {estimated:,} 行"
+                else:
+                    phase = "writing"
+                    phase_message = f"写入中…{rows:,} 行"
+                    if estimated > 0:
+                        pct = min(100, int(rows / estimated * 100)) if estimated > 0 else 0
+                        phase_message = f"写入中 {pct}%（{rows:,}/{estimated:,} 行）"
+
                 if step_id in step_progress:
                     step_progress[step_id]["rows"] = rows
+                    if estimated > 0:
+                        step_progress[step_id]["estimated"] = estimated
+                    step_progress[step_id]["phase"] = phase
+                    step_progress[step_id]["phase_message"] = phase_message
                 else:
                     step_progress[step_id] = {
                         "status": "running",
-                        "rows": rows
+                        "rows": rows,
+                        "phase": phase,
+                        "phase_message": phase_message,
                     }
+                    if estimated > 0:
+                        step_progress[step_id]["estimated"] = estimated
 
                 execution.current_step_id = step_id
                 execution.current_step_rows = rows
@@ -547,7 +659,6 @@ class PipelineEngine:
                 await self.session.commit()
         except Exception as e:
             logger.error(f"更新步骤进度失败: {e}")
-            # 不抛出异常，避免影响主流程
 
     async def _check_cancelled(self, execution_id: int) -> bool:
         """
@@ -655,13 +766,13 @@ class PipelineEngine:
         self,
         step_sql: str,
         upstream_step_ids: List[str],
-        temp_table_name: str
+        struct_table_map: Dict[str, Tuple[str, List[str]]]
     ) -> str:
         """
         构建实际执行的 SQL
 
         占位符替换规则：
-        - {prev_table}: 替换为第一个上游节点的临时表子查询
+        - {prev_table}: 替换为第一个上游节点的列式临时表
         - {upstream_table_0}, {upstream_table_1}, ...: 按索引引用上游临时表
         - {upstream_table_<step_id>}: 按 step_id 引用上游临时表
         - {prev_step_id}: 替换为第一个上游的 step_id
@@ -669,7 +780,7 @@ class PipelineEngine:
         Args:
             step_sql: 节点配置的 SQL
             upstream_step_ids: 上游节点的 step_id 列表
-            temp_table_name: 临时表名
+            struct_table_map: step_id -> (table_name, columns)
 
         Returns:
             实际执行的 SQL
@@ -679,16 +790,21 @@ class PipelineEngine:
 
         sql = step_sql.strip()
 
-        # 如果没有上游节点（source 节点），直接执行
+        # 没有上游（source 节点），直接执行
         if not upstream_step_ids:
             return sql
 
-        # 构建各上游的临时表引用
+        # 构建各上游的临时表引用（列式表直接引用，JSON 表走子查询）
         upstream_refs: List[str] = []
         for i, sid in enumerate(upstream_step_ids):
-            upstream_refs.append(f"(SELECT data_json FROM {temp_table_name} WHERE step_id = '{sid}')")
+            if sid in struct_table_map:
+                tbl_name, columns = struct_table_map[sid]
+                safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
+                upstream_refs.append(f"(SELECT {safe_cols} FROM {tbl_name}) AS _up{i}")
+            else:
+                upstream_refs.append(f"(SELECT data_json FROM {self.temp_manager.json_table_name} WHERE step_id = '{sid}')")
 
-        # 按索引替换 {upstream_table_0}, {upstream_table_1}, ...
+        # 按索引替换
         for i in range(len(upstream_refs)):
             placeholder = f"{{upstream_table_{i}}}"
             if placeholder in sql:
@@ -708,13 +824,13 @@ class PipelineEngine:
             if placeholder in sql:
                 sql = sql.replace(placeholder, upstream_refs[i])
 
-        # 如果没有占位符，假设 SQL 是完整的 SELECT
+        # 没有占位符时：SQL 本身是 SELECT FROM 列式上游表
         if "{" not in sql:
             first_ref = upstream_refs[0]
             if sql.strip().upper().startswith("SELECT"):
-                sql = f"SELECT * FROM ({sql}) AS prev_data"
+                sql = f"SELECT * FROM ({sql}) AS _n"
             else:
-                sql = f"SELECT * FROM ({sql}) AS prev_data"
+                sql = f"SELECT * FROM ({sql}) AS _n"
 
         return sql
 
@@ -865,6 +981,25 @@ class PipelineEngine:
             if merge_type and merge_type not in ('union', 'left_join', 'right_join', 'full_join'):
                 return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | left_join | right_join | full_join"
 
+            # 输出节点：目标表与写入模式
+            ntype = PipelineEngine._canonical_pipeline_node_type(str(node.get("type") or ""))
+            if ntype == "output":
+                cfg = node.get("config") or {}
+                tt = str(cfg.get("targetTable") or "").strip()
+                if not tt:
+                    return False, f"节点 '{node.get('name', i)}' 为输出节点，请填写目标表名"
+                if not re.match(r"^[a-zA-Z0-9_]{1,64}$", tt):
+                    return False, f"节点 '{node.get('name', i)}' 的目标表名不合法"
+                wm = str(cfg.get("writeMode") or "upsert").lower()
+                if wm not in ("replace", "append", "upsert"):
+                    return False, f"节点 '{node.get('name', i)}' 的 writeMode 必须是 replace | append | upsert"
+                if wm == "upsert":
+                    uk = str(cfg.get("uniqueKey") or "").strip()
+                    if not uk:
+                        return False, f"节点 '{node.get('name', i)}' 为 Upsert 模式，请填写唯一键列（uniqueKey）"
+                    if not re.match(r"^[a-zA-Z0-9_]{1,64}$", uk):
+                        return False, f"节点 '{node.get('name', i)}' 的唯一键列名不合法"
+
         # 拓扑排序检测环
         node_map = {node.get("id") or f"node_{i}": node for i, node in enumerate(nodes)}
         all_node_ids = set(node_map.keys())
@@ -902,6 +1037,26 @@ class PipelineEngine:
     def _safe_identifier(name: str) -> str:
         """安全地包裹表名/列名，避免 SQL 注入"""
         return f"`{name.replace('`', '``')}`"
+
+    @staticmethod
+    def _validate_and_quote_table_name(name: str) -> Optional[str]:
+        """校验 DDL 目标表名并返回反引号包裹标识符；不合法则返回 None。"""
+        if not name or not isinstance(name, str):
+            return None
+        n = name.strip()
+        if not re.match(r"^[a-zA-Z0-9_]{1,64}$", n):
+            return None
+        return PipelineEngine._safe_identifier(n)
+
+    async def _fetch_mysql_table_columns(self, conn, table_name_plain: str) -> List[str]:
+        """从 information_schema 读取当前库下表的列名顺序。"""
+        stmt = text("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl
+            ORDER BY ORDINAL_POSITION
+        """)
+        result = await conn.execute(stmt, {"tbl": table_name_plain})
+        return [row[0] for row in result.fetchall()]
 
     @staticmethod
     def _build_filter_sql(

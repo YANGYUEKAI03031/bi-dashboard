@@ -164,6 +164,10 @@ class ExecutionResponse(BaseModel):
     expires_at: Optional[datetime]
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    # 进度相关字段
+    current_step_id: Optional[str] = None
+    current_step_rows: int = 0
+    step_progress: Optional[Dict[str, Any]] = None
 
     @validator('completed_steps', 'logs', pre=True)
     def parse_json_list(cls, v):
@@ -177,6 +181,16 @@ class ExecutionResponse(BaseModel):
 
     @validator('result_summary', pre=True)
     def parse_json_dict(cls, v):
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
+
+    @validator('step_progress', pre=True)
+    def parse_step_progress(cls, v):
         if isinstance(v, str):
             import json
             try:
