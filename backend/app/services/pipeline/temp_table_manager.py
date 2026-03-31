@@ -402,6 +402,9 @@ class TempTableManager:
             logger.error(f"创建列式表失败: {e}")
             raise
 
+        # 立即注册，即使后续 INSERT...SELECT 失败也能被 cleanup_temp_table 清理
+        self._struct_tables[step_id] = (tbl_name, columns)
+
         # Step 3: INSERT...SELECT（MySQL 内部完成数据搬运）
         safe_sql = sql.rstrip().rstrip(';')
         safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
@@ -417,7 +420,6 @@ class TempTableManager:
             logger.error(f"INSERT...SELECT 失败 (step={step_id}): {e}")
             raise
 
-        self._struct_tables[step_id] = (tbl_name, columns)
         logger.info(f"步骤 {step_id} INSERT...SELECT 完成: {row_count} 行")
         return row_count, columns
 
@@ -493,8 +495,10 @@ class TempTableManager:
 
     async def cleanup_temp_table(self):
         """
-        删除所有临时表（MySQL TEMPORARY TABLE 会话结束自动清理，这里显式清理）
+        删除所有临时表（MySQL TEMPORARY TABLE 会话结束自动清理，这里显式清理）。
+        兜底：扫描 information_schema 清理所有前缀匹配的表，防止异常路径下遗漏。
         """
+        # 1. 先删已注册到 _struct_tables 的表
         for step_id, (tbl_name, _) in list(self._struct_tables.items()):
             try:
                 await self.connection.execute(text(f"DROP TABLE IF EXISTS {tbl_name}"))
@@ -506,6 +510,26 @@ class TempTableManager:
             await self.connection.commit()
         except Exception as e:
             logger.warning(f"提交列式临时表删除失败: {e}")
+
+        # 2. 兜底：扫描所有 tmp_pipeline_{exec_id}_* 表清理（防止异常路径下表已创建但未注册）
+        try:
+            res = await self.connection.execute(text("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                  AND table_name LIKE :pattern
+                  AND table_name NOT LIKE :json_pattern
+            """), {"pattern": f"tmp_pipeline_{self.exec_id}_%", "json_pattern": f"%_json"})
+            orphans = [r[0] for r in res.fetchall()]
+            for tbl in orphans:
+                try:
+                    await self.connection.execute(text(f"DROP TABLE IF EXISTS `{tbl}`"))
+                    logger.info(f"兜底清理孤立临时表: {tbl}")
+                except Exception as e:
+                    logger.warning(f"兜底删除表 {tbl} 失败: {e}")
+            if orphans:
+                await self.connection.commit()
+        except Exception as e:
+            logger.warning(f"兜底扫描临时表失败: {e}")
 
         if not self._json_created:
             return

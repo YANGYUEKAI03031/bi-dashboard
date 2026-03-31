@@ -223,20 +223,21 @@ class PipelineEngine:
                             # 旧数据兼容：如果没有 upstream，依赖前一个节点
                             upstream_step_ids = [f"step_{step_idx - 1}"]
 
-                        # 构建引用上游列式表的 SQL
+                        canonical_type = PipelineEngine._canonical_pipeline_node_type(
+                            str(node.get("type") or "")
+                        )
+
+                        # 构建引用上游列式表的 SQL（关联节点会展开 SELECT *，避免两侧同名列导致 1060）
                         actual_sql = self._build_step_sql(
                             node_sql,
                             upstream_step_ids,
-                            self.temp_manager._struct_tables
+                            self.temp_manager._struct_tables,
+                            canonical_type,
                         )
 
                         # 验证 SQL 安全性
                         if not self._validate_sql(actual_sql):
                             raise ValueError("SQL 语句包含不允许的操作")
-
-                        canonical_type = PipelineEngine._canonical_pipeline_node_type(
-                            str(node.get("type") or "")
-                        )
 
                         # 处理增量更新（仅对 source 节点生效）
                         is_incremental = node_config.get("incremental", False)
@@ -762,11 +763,52 @@ class PipelineEngine:
 
         return [n for n in sorted_nodes if isinstance(n, dict) and n.get("sql")]
 
+    @staticmethod
+    def _join_explicit_select_list(left_cols: List[str], right_cols: List[str]) -> str:
+        """JOIN 结果避免同名列重复：左表全列 + 右表仅左表未出现的列名。"""
+        left_set = set(left_cols)
+        parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+        for c in right_cols:
+            if c not in left_set:
+                parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
+        return ", ".join(parts)
+
+    @staticmethod
+    def _expand_join_select_stars(
+        sql: str,
+        upstream_step_ids: List[str],
+        struct_table_map: Dict[str, Tuple[str, List[str]]],
+    ) -> str:
+        """
+        将关联 SQL 中的 SELECT * 展开为显式列（去重右表与左表同名的列），消除 MySQL 1060。
+        """
+        if len(upstream_step_ids) < 2:
+            return sql
+        lc = struct_table_map.get(upstream_step_ids[0])
+        rc = struct_table_map.get(upstream_step_ids[1])
+        if not lc or not rc:
+            return sql
+        _, left_cols = lc
+        _, right_cols = rc
+        if not left_cols or not right_cols:
+            return sql
+        up = sql.upper()
+        if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
+            return sql
+        sel = PipelineEngine._join_explicit_select_list(left_cols, right_cols)
+        return re.sub(
+            r"SELECT\s+\*\s+FROM\s+",
+            f"SELECT {sel} FROM ",
+            sql,
+            flags=re.IGNORECASE,
+        )
+
     def _build_step_sql(
         self,
         step_sql: str,
         upstream_step_ids: List[str],
-        struct_table_map: Dict[str, Tuple[str, List[str]]]
+        struct_table_map: Dict[str, Tuple[str, List[str]]],
+        node_type: str = "",
     ) -> str:
         """
         构建实际执行的 SQL
@@ -781,6 +823,7 @@ class PipelineEngine:
             step_sql: 节点配置的 SQL
             upstream_step_ids: 上游节点的 step_id 列表
             struct_table_map: step_id -> (table_name, columns)
+            node_type: 规范节点类型（如 join），用于关联节点展开 SELECT *
 
         Returns:
             实际执行的 SQL
@@ -795,6 +838,7 @@ class PipelineEngine:
             return sql
 
         # 构建各上游的临时表引用（列式表直接引用，JSON 表走子查询）
+        # 含统一别名 AS _up{i}，由下游替换时按需去掉以避免与 join SQL 的外层别名冲突。
         upstream_refs: List[str] = []
         for i, sid in enumerate(upstream_step_ids):
             if sid in struct_table_map:
@@ -802,15 +846,17 @@ class PipelineEngine:
                 safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
                 upstream_refs.append(f"(SELECT {safe_cols} FROM {tbl_name}) AS _up{i}")
             else:
-                upstream_refs.append(f"(SELECT data_json FROM {self.temp_manager.json_table_name} WHERE step_id = '{sid}')")
+                upstream_refs.append(f"(SELECT data_json FROM {self.temp_manager.json_table_name} WHERE step_id = '{sid}') AS _up{i}")
 
-        # 按索引替换
+        # 按索引替换（join 类模板已有外层 AS a/b，去掉内层 _up{i} 避免 "AS _up0 AS a"）
         for i in range(len(upstream_refs)):
             placeholder = f"{{upstream_table_{i}}}"
             if placeholder in sql:
-                sql = sql.replace(placeholder, upstream_refs[i])
+                # 去掉 upstream_refs 中的内层别名 (AS _upN)，让外层别名统一生效
+                clean_ref = re.sub(r"\s+AS\s+_\w+$", "", upstream_refs[i])
+                sql = sql.replace(placeholder, clean_ref)
 
-        # 替换 {prev_table} 为第一个上游引用
+        # 替换 {prev_table} 为第一个上游引用（含 AS _up0）
         if "{prev_table}" in sql:
             sql = sql.replace("{prev_table}", upstream_refs[0])
 
@@ -824,7 +870,12 @@ class PipelineEngine:
             if placeholder in sql:
                 sql = sql.replace(placeholder, upstream_refs[i])
 
-        # 没有占位符时：SQL 本身是 SELECT FROM 列式上游表
+        if PipelineEngine._canonical_pipeline_node_type(node_type) == "join":
+            sql = PipelineEngine._expand_join_select_stars(
+                sql, upstream_step_ids, struct_table_map
+            )
+
+        # 没有占位符时：SQL 本身是 SELECT FROM 列式上游表（需要别名）
         if "{" not in sql:
             first_ref = upstream_refs[0]
             if sql.strip().upper().startswith("SELECT"):
