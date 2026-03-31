@@ -746,12 +746,15 @@ async def preview_node(
         if request.graph_nodes is not None:
             graph_nodes_dict = {}
             for gn in request.graph_nodes:
-                # 每个 GraphNodeSchema 有 id / type / config
-                graph_nodes_dict[gn.id] = {
+                # 每个 GraphNodeSchema 有 id / type / config / merge_type
+                node_dict: Dict[str, Any] = {
                     "type": gn.type,
                     "config": gn.config,
                     "upstream": [],   # upstream 从边推导
                 }
+                if gn.merge_type:
+                    node_dict["merge_type"] = gn.merge_type
+                graph_nodes_dict[gn.id] = node_dict
             # 从边信息补充 upstream
             if request.graph_edges:
                 for e in request.graph_edges:

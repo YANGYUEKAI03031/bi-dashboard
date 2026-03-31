@@ -71,6 +71,7 @@ export function useNodePreview() {
             id: n.id,
             type: pn.type,
             config: baseCfg,
+            merge_type: pn.merge_type,
           };
         });
         // 预览折叠 SQL 以节点 upstream 为准，避免 React Flow edges 与 upstream 短暂不一致时下游无数据

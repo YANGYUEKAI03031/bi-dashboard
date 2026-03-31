@@ -19,7 +19,7 @@ import json
 import logging
 import re
 import time
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
@@ -1353,6 +1353,200 @@ class PipelineEngine:
         cols_str = ", ".join(safe_cols)
         return f"SELECT {cols_str} FROM ({sql}) AS _p"
 
+    # ================================================================
+    # 预览用列名推断（用于 JOIN 展开）
+    # ================================================================
+
+    @staticmethod
+    def _preview_infer_output_columns(
+        node_type: str,
+        config: Dict[str, Any],
+        upstream_cols: Optional[List[List[str]]] = None,
+        merge_type: Optional[str] = None,
+    ) -> Optional[List[str]]:
+        """
+        根据节点类型和配置静态推断其输出列名。
+
+        Returns:
+            列名列表（顺序固定）；若无法静态推断（如 source 的 SELECT *），返回 None。
+
+        upstream_cols: 按上游顺序排列的各上游节点的列名列表；用于 JOIN 等多输入节点。
+        """
+        canonical = PipelineEngine._canonical_pipeline_node_type(node_type)
+
+        if canonical == "source":
+            # source 节点无上游，无法推断具体列名
+            return None
+
+        if canonical == "filter":
+            # filter 不改变列，直接透传上游
+            if upstream_cols and upstream_cols[0] is not None:
+                return list(upstream_cols[0])
+            return None
+
+        if canonical == "aggregate":
+            group_by: List[str] = config.get("groupBy", []) or []
+            raw_aggs: List[Any] = config.get("aggregations", []) or []
+            parts: List[str] = []
+            for c in group_by:
+                if c := str(c).strip():
+                    parts.append(c)
+            for a in raw_aggs:
+                if isinstance(a, dict):
+                    alias = str(a.get("alias", "") or a.get("column", "")).strip()
+                    if alias:
+                        parts.append(alias)
+            return parts if parts else None
+
+        if canonical == "column_select":
+            selected: List[Any] = config.get("selectedColumns", []) or []
+            out: List[str] = []
+            for sc in selected:
+                to = str(sc.get("to", sc.get("from", "")) or "").strip()
+                if to:
+                    out.append(to)
+            return out if out else None
+
+        if canonical == "join":
+            # UNION 类型：列数为所有上游列之和（UNION 去重），无法精确推断
+            if merge_type and merge_type.lower() in ("union", "union all"):
+                return None
+            join_type = str(config.get("joinType", "inner")).lower()
+            # full / left_anti / right_anti / symmetric_diff 暂不处理
+            if join_type not in ("inner", "left", "right"):
+                return None
+            if not upstream_cols or len(upstream_cols) < 2:
+                return None
+            left_cols = upstream_cols[0]
+            right_cols = upstream_cols[1]
+            if left_cols is None and right_cols is None:
+                return None
+            if left_cols is not None and right_cols is not None:
+                # 两侧均可推断：全展开（左表全列 + 右表排除 ON 右列）
+                on_right_cols: List[str] = []
+                for k in config.get("joinKeys", []) or []:
+                    if rc := str(k.get("rightCol", "") or "").strip():
+                        on_right_cols.append(rc)
+                on_set = set(on_right_cols)
+                left_set = set(left_cols)
+                out: List[str] = list(left_cols)
+                for c in right_cols:
+                    if c not in left_set and c not in on_set:
+                        out.append(c)
+                return out
+            if left_cols is not None:
+                # 仅左已知：右表用 a.*，列名无法静态确定
+                return None
+            # 仅右已知：左表用 b.*，列名无法静态确定
+            return None
+
+        if canonical == "output":
+            if upstream_cols and upstream_cols[0] is not None:
+                return list(upstream_cols[0])
+            return None
+
+        return None
+
+    @staticmethod
+    def _extract_join_on_right_column_names_from_sql(sql: str) -> List[str]:
+        """
+        从 JOIN 的 ON 子句中提取右表列名（与 _build_step_sql 中逻辑一致，支持 `b`.`中文列`）。
+        """
+        if not sql:
+            return []
+        on_match = re.search(
+            r"\bON\s+(.+?)(?:\s+WHERE|\s+GROUP|\s+HAVING|\s+ORDER|\s+LIMIT|\s+UNION|$)",
+            sql,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not on_match:
+            return []
+        on_expr = on_match.group(1)
+        out: List[str] = []
+        seen: Set[str] = set()
+        # 反引号包裹的列名（含中文）
+        for m in re.finditer(r"b\.`([^`]+)`", on_expr, re.IGNORECASE):
+            c = (m.group(1) or "").strip()
+            if c and c not in seen:
+                seen.add(c)
+                out.append(c)
+        # b.ascii_col（无反引号）
+        for m in re.finditer(r"\bb\.([a-zA-Z0-9_]+)\b", on_expr, re.IGNORECASE):
+            c = (m.group(1) or "").strip()
+            if c and c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
+    @staticmethod
+    def _expand_join_select_for_preview(
+        sql: str,
+        left_cols: Optional[List[str]],
+        right_cols: Optional[List[str]],
+        on_right_cols: Optional[List[str]] = None,
+    ) -> str:
+        """
+        将 JOIN SQL 中的 `SELECT * FROM (...) AS a ... JOIN ... AS b ON ...`
+        替换为显式列列表。
+
+        展开规则（与 _join_explicit_select_list / _build_step_sql 语义一致）：
+        - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列）。
+        - 仅右表列已知：生成 `a.*, b.col1, b.col2, ...`（b.col 排除 ON 右列）。
+        - 仅左表列已知：对称处理。
+        - 两侧均未知：不做替换。
+        """
+        up = sql.upper()
+        if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
+            return sql
+
+        # 检查是否真的是 SELECT * 形态
+        if not re.search(r"^\s*SELECT\s+\*\s+FROM\s*\(", sql, re.IGNORECASE):
+            return sql
+
+        on_set = set(on_right_cols) if on_right_cols else set()
+
+        if left_cols is not None and right_cols is not None:
+            # 两侧列均已知：全展开
+            sel = PipelineEngine._join_explicit_select_list(left_cols, right_cols, on_right_cols)
+            return re.sub(
+                r"SELECT\s+\*\s+FROM\s*\(",
+                f"SELECT {sel} FROM (",
+                sql,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
+        if left_cols is None and right_cols is not None:
+            # 仅右表列已知：a.* + 右表显式列（排除 ON 右列）
+            right_parts: List[str] = []
+            left_set: Set[str] = set()
+            for c in right_cols:
+                if c not in left_set and c not in on_set:
+                    right_parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
+            sel = f"a.*, {', '.join(right_parts)}" if right_parts else "a.*"
+            return re.sub(
+                r"SELECT\s+\*\s+FROM\s*\(",
+                f"SELECT {sel} FROM (",
+                sql,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
+        if left_cols is not None and right_cols is None:
+            # 仅左表列已知：左表显式列 + b.*
+            left_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+            sel = f"{', '.join(left_parts)}, b.*"
+            return re.sub(
+                r"SELECT\s+\*\s+FROM\s*\(",
+                f"SELECT {sel} FROM (",
+                sql,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+
+        # 两侧均未知：不展开
+        return sql
+
     @staticmethod
     def _canonical_pipeline_node_type(node_type: str) -> str:
         if not node_type:
@@ -1599,14 +1793,17 @@ class PipelineEngine:
             logger.warning(f"图存在环，无法完成拓扑排序（focus={focus_node_id}）")
             return ""
 
-        # 4. 逐节点生成 SQL，维护 node_id -> sql
+        # 4. 逐节点生成 SQL，维护 node_id -> sql 与 node_id -> output_columns
+        # node_columns: None 表示无法静态推断（如 source 的 SELECT *）
         node_sqls: Dict[str, str] = {}
+        node_columns: Dict[str, Optional[List[str]]] = {}
+
         for nid in sorted_ids:
             node = graph_nodes.get(nid, {})
             ntype = node.get("type", "")
             nconfig = node.get("config", {})
             nupstream = node.get("upstream", [])
-            nmerge_type = node.get("merge_type")  # 获取 merge 节点的合并类型
+            nmerge_type = node.get("merge_type")
 
             # 收集有效上游 ref（仅 visited 集合内）
             valid_ups = [u for u in nupstream if u in visited and u in node_sqls]
@@ -1615,19 +1812,68 @@ class PipelineEngine:
                 if u not in refs:
                     refs.append((node_sqls[u], u))
 
+            # 收集各上游的输出列（用于 JOIN 展开和下游推断）
+            upstream_cols: List[Optional[List[str]]] = [
+                node_columns.get(u) for u in valid_ups
+            ]
+
+            # INNER JOIN：若仅左表可推断列、右表不可（上游顺序常为「聚合→源表」），
+            # 交换两侧子查询，使「列未知」在 AS a，便于展开为 a.* + b 显式列并排除 ON 右列（与执行语义一致）。
+            canonical_pre = PipelineEngine._canonical_pipeline_node_type(ntype)
+            if (
+                canonical_pre == "join"
+                and len(valid_ups) == 2
+                and len(upstream_cols) == 2
+                and nmerge_type not in ("union", "union all")
+            ):
+                jt_pre = str(nconfig.get("joinType", "inner")).lower()
+                if jt_pre == "inner":
+                    c0, c1 = upstream_cols[0], upstream_cols[1]
+                    if c0 is not None and c1 is None:
+                        valid_ups = [valid_ups[1], valid_ups[0]]
+                        refs = [(node_sqls[u], u) for u in valid_ups]
+                        upstream_cols = [c1, c0]
+
             # 生成当前节点核心 SQL（内层子查询不加 LIMIT）
-            # 传入 merge_type 以正确处理 UNION 类型的 merge 节点
             is_focus = (nid == focus_node_id)
             core_sql, _ = PipelineEngine.build_node_sql(
                 ntype, nconfig, refs if refs else None, apply_limit=False, limit=limit,
                 merge_type=nmerge_type
             )
 
+            # 对 JOIN 节点（inner/left/right）展开 SELECT *，避免 ON 列重复
+            canonical = PipelineEngine._canonical_pipeline_node_type(ntype)
+            if canonical == "join" and core_sql and len(upstream_cols) >= 2:
+                join_type = str(nconfig.get("joinType", "inner")).lower()
+                if join_type in ("inner", "left", "right") and nmerge_type not in ("union", "union all"):
+                    on_right_cols: List[str] = []
+                    for k in nconfig.get("joinKeys", []) or []:
+                        if rc := str(k.get("rightCol", "") or "").strip():
+                            on_right_cols.append(rc)
+                    if not on_right_cols:
+                        on_right_cols = PipelineEngine._extract_join_on_right_column_names_from_sql(core_sql)
+                    core_sql = PipelineEngine._expand_join_select_for_preview(
+                        core_sql,
+                        upstream_cols[0],
+                        upstream_cols[1],
+                        on_right_cols if on_right_cols else None,
+                    )
+
             # 对当前节点 config 应用行筛选包装（等效于在下游前插 filter 节点）
             wrapped_sql = PipelineEngine._apply_row_filter(core_sql, nconfig)
 
             # 对当前节点 config 应用列投影包装
             wrapped_sql = PipelineEngine._apply_column_projection(wrapped_sql, nconfig)
+
+            # 推断当前节点的输出列（用于下游 JOIN 展开）
+            # 注意：若 wrapped_sql 被 _apply_column_projection 投影了，用 outputColumnKeys
+            output_keys: List[str] = nconfig.get("outputColumnKeys", []) or []
+            if output_keys:
+                node_columns[nid] = list(output_keys)
+            else:
+                node_columns[nid] = PipelineEngine._preview_infer_output_columns(
+                    ntype, nconfig, upstream_cols, nmerge_type
+                )
 
             # 仅最外层（focus 节点）加 LIMIT
             if is_focus and wrapped_sql:

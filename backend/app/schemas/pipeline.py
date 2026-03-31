@@ -252,6 +252,7 @@ class GraphNodeSchema(BaseModel):
     id: str
     type: str
     config: Dict[str, Any] = Field(default_factory=dict)
+    merge_type: Optional[str] = Field(default=None, description="merge 节点合并类型: union | left_join | right_join | full_join")
 
 
 class NodePreviewRequest(BaseModel):
