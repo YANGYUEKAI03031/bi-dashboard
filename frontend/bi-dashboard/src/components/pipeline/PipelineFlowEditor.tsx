@@ -214,11 +214,19 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
 
   if (node.type === 'join') {
     const jt = (config.joinType as string) || 'inner';
+    const jtChip =
+      jt === 'left_anti'
+        ? 'LEFT ANTI'
+        : jt === 'right_anti'
+          ? 'RIGHT ANTI'
+          : jt === 'symmetric_diff'
+            ? 'SYM DIFF'
+            : jt.toUpperCase();
     const keys = (config.joinKeys || []) as Array<{ leftCol: string; rightCol: string }>;
     if (keys.length === 0) return null;
     return (
       <div className="pipeline-node-card-summary">
-        {renderChip(jt.toUpperCase(), 'JOIN')}
+        {renderChip(jtChip, 'JOIN')}
         <span className="pipeline-chip-plain pipeline-chip-plain--muted">
           {keys[0]?.leftCol} = {keys[0]?.rightCol}
         </span>

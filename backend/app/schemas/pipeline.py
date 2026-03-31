@@ -78,20 +78,19 @@ class PipelineCreate(BaseModel):
                     if upstream_id not in node_ids:
                         raise ValueError(f"节点 '{node.id}' 的上游节点 '{upstream_id}' 不存在于管道中")
 
-        # 检测环（Kahn 算法简化版）
-        all_upstream = {node.id: set(node.upstream) if node.upstream else set() for node in nodes if node.id}
-        remaining = set(all_upstream.keys())
-        removed_count = 0
+        # 检测环（Kahn 拓扑排序）：每轮移除「所有上游都已不在待处理集合」的节点；仅无上游的节点首轮可删
+        upstream_map = {node.id: list(node.upstream or []) for node in nodes if node.id}
+        remaining = set(upstream_map.keys())
         while remaining:
-            # 找到没有入边的节点
-            has_incoming = any(node_id in ups for ups in all_upstream.values() for node_id in remaining)
-            # 实际上我们需要找的是没有上游依赖的节点
-            zero_in = [nid for nid in remaining if not all_upstream.get(nid)]
-            if not zero_in:
+            ready = [
+                nid
+                for nid in remaining
+                if all(u not in remaining for u in upstream_map.get(nid, []))
+            ]
+            if not ready:
                 raise ValueError(f"管道配置存在循环依赖，环中的节点可能在: {remaining}")
-            for nid in zero_in:
+            for nid in ready:
                 remaining.discard(nid)
-                removed_count += 1
 
         return nodes
 

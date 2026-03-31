@@ -1,3 +1,5 @@
+import { buildJoinPersistedSql, type SymmetricUnionPlanRow } from './pipelineJoinSql';
+
 export interface GraphNode {
   id: string;
   type?: string;
@@ -127,8 +129,8 @@ const OUTPUT_NODE_SQL_PLACEHOLDER = 'SELECT * FROM {prev_table}';
 
 /**
  * React Flow nodes 转换为 PipelineNode[]（用于 API 提交）
- * 输出节点若仅通过连线得到 upstream、未打开侧栏改表单，则 pipelineNode 可能缺 sql；
- * 此处补全以满足后端 PipelineNodeCreate.sql 必填。
+ * 输出 / 关联节点若未写回 sql，此处补全以满足后端 PipelineNodeCreate.sql 必填；
+ * 关联 SQL 须含 {upstream_table_0/1} 供执行引擎替换。
  */
 export function nodesToPipelineNodes(
   nodes: GraphNode[],
@@ -145,6 +147,14 @@ export function nodesToPipelineNodes(
     const sqlStr = String(pn.sql ?? '').trim();
     if (nodeType === 'output' && !sqlStr) {
       pn.sql = OUTPUT_NODE_SQL_PLACEHOLDER;
+    }
+    if (nodeType === 'join' && !sqlStr) {
+      const cfg = (pn.config as Record<string, unknown>) || {};
+      pn.sql = buildJoinPersistedSql(
+        String(cfg.joinType ?? 'inner'),
+        (cfg.joinKeys as Array<{ leftCol?: string; rightCol?: string }>) || [],
+        (cfg.symmetricUnionPlan as SymmetricUnionPlanRow[] | undefined) || undefined
+      );
     }
     return pn;
   });

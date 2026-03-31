@@ -1039,6 +1039,83 @@ class PipelineEngine:
         return f"`{name.replace('`', '``')}`"
 
     @staticmethod
+    def _join_on_equality_sql(left_col: str, right_col: str) -> str:
+        """ON 条件两侧统一 COLLATE，避免 MySQL 1267（utf8mb4_unicode_ci / utf8mb4_0900_ai_ci 混用）。"""
+        la = f"a.{PipelineEngine._safe_identifier(left_col)}"
+        rb = f"b.{PipelineEngine._safe_identifier(right_col)}"
+        coll = "utf8mb4_unicode_ci"
+        return f"{la} COLLATE {coll} = {rb} COLLATE {coll}"
+
+    @staticmethod
+    def _symmetric_diff_union_sql(
+        left_ref: str,
+        right_ref: str,
+        on_clause: str,
+        null_b: str,
+        null_a: str,
+        join_keys: List[Dict[str, Any]],
+        plan: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        """
+        对称差 UNION ALL：两侧 SELECT * 会在 UNION 时因列隐含排序规则不一致触发 1267。
+        用 CAST(... AS CHAR) COLLATE utf8mb4_unicode_ci 统一每列；列顺序/别名由 plan 指定。
+        """
+        coll = "utf8mb4_unicode_ci"
+        rows: List[Dict[str, Any]] = []
+        if plan:
+            for p in plan:
+                if not isinstance(p, dict):
+                    continue
+                out = str(p.get("out") or p.get("alias") or "").strip()
+                lc = str(p.get("L") or p.get("leftCol") or "").strip()
+                rc = str(p.get("R") or p.get("rightCol") or "").strip()
+                if out or lc or rc:
+                    if not out:
+                        out = lc or rc or "col"
+                    rows.append({"out": out, "L": lc, "R": rc})
+        if not rows and join_keys:
+            k0 = join_keys[0]
+            if isinstance(k0, dict):
+                lc = str(k0.get("leftCol", "") or "").strip()
+                rc = str(k0.get("rightCol", "") or "").strip()
+                if lc or rc:
+                    rows.append({"out": lc or rc or "k", "L": lc, "R": rc})
+        if not rows:
+            return (
+                f"SELECT a.* FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_b} "
+                f"UNION ALL "
+                f"SELECT b.* FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
+            )
+
+        def _cast_a(row: Dict[str, Any]) -> str:
+            lc = str(row.get("L") or "").strip()
+            out = str(row.get("out") or lc or "c").strip()
+            safe_out = PipelineEngine._safe_identifier(out)
+            if lc:
+                expr = f"CAST(a.{PipelineEngine._safe_identifier(lc)} AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
+            else:
+                expr = f"CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
+            return f"{expr} AS {safe_out}"
+
+        def _cast_b(row: Dict[str, Any]) -> str:
+            rc = str(row.get("R") or "").strip()
+            out = str(row.get("out") or rc or "c").strip()
+            safe_out = PipelineEngine._safe_identifier(out)
+            if rc:
+                expr = f"CAST(b.{PipelineEngine._safe_identifier(rc)} AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
+            else:
+                expr = f"CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
+            return f"{expr} AS {safe_out}"
+
+        sel_l = ", ".join(_cast_a(r) for r in rows)
+        sel_r = ", ".join(_cast_b(r) for r in rows)
+        return (
+            f"SELECT {sel_l} FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_b} "
+            f"UNION ALL "
+            f"SELECT {sel_r} FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
+        )
+
+    @staticmethod
     def _validate_and_quote_table_name(name: str) -> Optional[str]:
         """校验 DDL 目标表名并返回反引号包裹标识符；不合法则返回 None。"""
         if not name or not isinstance(name, str):
@@ -1262,20 +1339,63 @@ class PipelineEngine:
         if node_type == "join":
             join_type = config.get("joinType", "inner")
             join_keys = config.get("joinKeys", [])
-            jt_sql = {
+            jt_map = {
                 "inner": "INNER JOIN",
                 "left": "LEFT JOIN",
                 "right": "RIGHT JOIN",
-                "full": "FULL JOIN",
-            }.get(join_type, "INNER JOIN")
+            }
+            jt_sql = jt_map.get(join_type, "INNER JOIN")
             if upstream_refs and len(upstream_refs) >= 2:
                 left_ref, _ = upstream_refs[0]
                 right_ref, _ = upstream_refs[1]
                 if join_keys:
-                    on_clause = " AND ".join(
-                        f"a.{PipelineEngine._safe_identifier(k.get('leftCol', ''))} = b.{PipelineEngine._safe_identifier(k.get('rightCol', ''))}"
-                        for k in join_keys
-                    )
+                    on_parts = []
+                    for k in join_keys:
+                        if not isinstance(k, dict):
+                            continue
+                        lc = str(k.get("leftCol", "") or "").strip()
+                        rc = str(k.get("rightCol", "") or "").strip()
+                        if not lc or not rc:
+                            continue
+                        on_parts.append(PipelineEngine._join_on_equality_sql(lc, rc))
+                    if not on_parts:
+                        return f"SELECT * FROM ({left_ref}) AS a INNER JOIN ({right_ref}) AS b ON 1=0{_limit_clause}", []
+                    on_clause = " AND ".join(on_parts)
+                    if join_type == "left_anti":
+                        rk0 = str(join_keys[0].get("rightCol", "") or "").strip()
+                        null_b = f"b.{PipelineEngine._safe_identifier(rk0)} IS NULL" if rk0 else "1=0"
+                        return (
+                            f"SELECT a.* FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_b}{_limit_clause}",
+                            [],
+                        )
+                    if join_type == "right_anti":
+                        lk0 = str(join_keys[0].get("leftCol", "") or "").strip()
+                        null_a = f"a.{PipelineEngine._safe_identifier(lk0)} IS NULL" if lk0 else "1=0"
+                        return (
+                            f"SELECT b.* FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}{_limit_clause}",
+                            [],
+                        )
+                    if join_type == "symmetric_diff":
+                        rk0 = str(join_keys[0].get("rightCol", "") or "").strip()
+                        lk0 = str(join_keys[0].get("leftCol", "") or "").strip()
+                        null_b = f"b.{PipelineEngine._safe_identifier(rk0)} IS NULL" if rk0 else "1=0"
+                        null_a = f"a.{PipelineEngine._safe_identifier(lk0)} IS NULL" if lk0 else "1=0"
+                        plan = config.get("symmetricUnionPlan")
+                        plan_list = plan if isinstance(plan, list) else None
+                        union_sql = PipelineEngine._symmetric_diff_union_sql(
+                            left_ref, right_ref, on_clause, null_b, null_a, join_keys, plan_list
+                        )
+                        return f"{union_sql}{_limit_clause}", []
+                    if join_type == "full":
+                        # MySQL 8.0.31 前无 FULL OUTER JOIN，用 LEFT ∪ 右独有行 模拟
+                        lk0 = str(join_keys[0].get("leftCol", "") or "").strip()
+                        null_a = f"a.{PipelineEngine._safe_identifier(lk0)} IS NULL" if lk0 else "1=0"
+                        fo_sql = (
+                            f"SELECT * FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} "
+                            f"UNION ALL "
+                            f"SELECT * FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
+                        )
+                        return f"{fo_sql}{_limit_clause}", []
                     return (
                         f"SELECT * FROM ({left_ref}) AS a {jt_sql} ({right_ref}) AS b ON {on_clause}{_limit_clause}",
                         [],

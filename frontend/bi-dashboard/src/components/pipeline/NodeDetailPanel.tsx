@@ -251,6 +251,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               <JoinNodeConfig
                 node={selectedNode}
                 allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 readOnly={readOnly}
               />
