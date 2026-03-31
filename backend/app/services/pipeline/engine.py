@@ -226,13 +226,16 @@ class PipelineEngine:
                         canonical_type = PipelineEngine._canonical_pipeline_node_type(
                             str(node.get("type") or "")
                         )
+                        merge_type = node.get("merge_type")  # 获取 merge 节点的合并类型
 
                         # 构建引用上游列式表的 SQL（关联节点会展开 SELECT *，避免两侧同名列导致 1060）
+                        # UNION 类型的 merge 节点不展开 SELECT *
                         actual_sql = self._build_step_sql(
                             node_sql,
                             upstream_step_ids,
                             self.temp_manager._struct_tables,
                             canonical_type,
+                            merge_type,
                         )
 
                         # 验证 SQL 安全性
@@ -764,23 +767,19 @@ class PipelineEngine:
         return [n for n in sorted_nodes if isinstance(n, dict) and n.get("sql")]
 
     @staticmethod
-    def _join_explicit_select_list(left_cols: List[str], right_cols: List[str]) -> str:
-        """JOIN 结果避免同名列重复：左表全列 + 右表仅左表未出现的列名。"""
-        left_set = set(left_cols)
-        parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-        for c in right_cols:
-            if c not in left_set:
-                parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
-        return ", ".join(parts)
-
-    @staticmethod
     def _expand_join_select_stars(
         sql: str,
         upstream_step_ids: List[str],
         struct_table_map: Dict[str, Tuple[str, List[str]]],
+        on_right_cols: Optional[List[str]] = None,
     ) -> str:
         """
-        将关联 SQL 中的 SELECT * 展开为显式列（去重右表与左表同名的列），消除 MySQL 1060。
+        将关联 SQL 中的 SELECT * 展开为显式列。
+
+        LEFT JOIN 语义：结果 = 左表全部列 + 右表不含 ON 右表列的列。
+        例如 ON a.id = b.ref_id → 右表的 ref_id 不出现在结果中（id 已来自左表）。
+
+        若不传 on_right_cols，仅做向后兼容的去重（同名列只保留一个）。
         """
         if len(upstream_step_ids) < 2:
             return sql
@@ -795,7 +794,7 @@ class PipelineEngine:
         up = sql.upper()
         if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
             return sql
-        sel = PipelineEngine._join_explicit_select_list(left_cols, right_cols)
+        sel = PipelineEngine._join_explicit_select_list(left_cols, right_cols, on_right_cols)
         return re.sub(
             r"SELECT\s+\*\s+FROM\s+",
             f"SELECT {sel} FROM ",
@@ -803,12 +802,35 @@ class PipelineEngine:
             flags=re.IGNORECASE,
         )
 
+    @staticmethod
+    def _join_explicit_select_list(
+        left_cols: List[str],
+        right_cols: List[str],
+        on_right_cols: Optional[List[str]] = None,
+    ) -> str:
+        """
+        生成 JOIN 结果的显式列列表。
+
+        LEFT JOIN: 左表全列 + 右表列（排除右表 ON 列，因为左表 ON 列已在结果中）。
+        无 on_right_cols 时：仅去重同名列（左表优先）。
+        """
+        left_set = set(left_cols)
+        on_right_set = set(on_right_cols) if on_right_cols else set()
+        parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+        for c in right_cols:
+            if c not in left_set:
+                # 排除右表 ON 列（左表对应列已在结果中）
+                if c not in on_right_set:
+                    parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
+        return ", ".join(parts)
+
     def _build_step_sql(
         self,
         step_sql: str,
         upstream_step_ids: List[str],
         struct_table_map: Dict[str, Tuple[str, List[str]]],
         node_type: str = "",
+        merge_type: Optional[str] = None,
     ) -> str:
         """
         构建实际执行的 SQL
@@ -824,6 +846,7 @@ class PipelineEngine:
             upstream_step_ids: 上游节点的 step_id 列表
             struct_table_map: step_id -> (table_name, columns)
             node_type: 规范节点类型（如 join），用于关联节点展开 SELECT *
+            merge_type: 合并类型（如 union, left_join 等），union 类型不展开 SELECT *
 
         Returns:
             实际执行的 SQL
@@ -870,9 +893,28 @@ class PipelineEngine:
             if placeholder in sql:
                 sql = sql.replace(placeholder, upstream_refs[i])
 
-        if PipelineEngine._canonical_pipeline_node_type(node_type) == "join":
+        # 对于 JOIN 类型，需要展开 SELECT * 为显式列（避免同名列冲突）
+        # 但对于 UNION 类型的 merge 节点，不展开 SELECT *，因为 UNION 按位置合并列
+        canonical_type = PipelineEngine._canonical_pipeline_node_type(node_type)
+        is_union_merge = merge_type and merge_type.lower() in ("union", "union all")
+        if canonical_type == "join" and not is_union_merge:
+            # 从 ON 子句中提取右表列（如 ON a.id = b.ref_id → ref_id）
+            on_right_cols: List[str] = []
+            on_match = re.search(r"\bON\s+(.+?)(?:\s+WHERE|\s+GROUP|\s+HAVING|\s+ORDER|\s+LIMIT|\s+UNION|$)", sql, re.IGNORECASE | re.DOTALL)
+            if on_match:
+                on_expr = on_match.group(1)
+                # 匹配 b.col 或 "b"."col" 或 `b`.`col`
+                right_col_pattern = re.compile(
+                    r"\b(?:b\.)[`\"']?([a-zA-Z0-9_]+)[`\"']?|"
+                    r"(?:b\) AS b\s*\.\s*([a-zA-Z0-9_]+))",
+                    re.IGNORECASE
+                )
+                # 更直接地匹配 ON a.xxx = b.yyy 中的 b.xxx
+                for m in re.finditer(r"b\.[`\"']?([a-zA-Z0-9_]+)[`\"']?", on_expr, re.IGNORECASE):
+                    if m.group(1):
+                        on_right_cols.append(m.group(1))
             sql = PipelineEngine._expand_join_select_stars(
-                sql, upstream_step_ids, struct_table_map
+                sql, upstream_step_ids, struct_table_map, on_right_cols if on_right_cols else None
             )
 
         # 没有占位符时：SQL 本身是 SELECT FROM 列式上游表（需要别名）
@@ -1339,6 +1381,7 @@ class PipelineEngine:
         # upstream_refs: List[Tuple[table_or_sql, alias]] for multi-input nodes
         apply_limit: bool = True,
         limit: int = 100,
+        merge_type: Optional[str] = None,
     ) -> Tuple[str, List[str]]:
         """
         根据节点类型和可视化配置生成 SELECT SQL。
@@ -1386,6 +1429,17 @@ class PipelineEngine:
                 if gb:
                     group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in gb)}"
                 return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str}{_limit_clause}", []
+
+        # 处理 UNION 类型的 merge 节点（不展开 SELECT *，按位置合并列）
+        if node_type == "join" and merge_type and merge_type.lower() in ("union", "union all"):
+            if upstream_refs and len(upstream_refs) >= 2:
+                union_op = "UNION ALL" if merge_type.lower() == "union all" else "UNION"
+                # 收集所有上游子查询，用 UNION 连接
+                # upstream_refs 中的 ref 是上游节点的 SQL，直接作为子查询
+                select_parts = [f"SELECT * FROM ({ref})" for ref, _ in upstream_refs]
+                union_sql = f"\n{union_op}\n".join(select_parts)
+                return f"{union_sql}{_limit_clause}", []
+            return "", []
 
         if node_type == "join":
             join_type = config.get("joinType", "inner")
@@ -1552,6 +1606,7 @@ class PipelineEngine:
             ntype = node.get("type", "")
             nconfig = node.get("config", {})
             nupstream = node.get("upstream", [])
+            nmerge_type = node.get("merge_type")  # 获取 merge 节点的合并类型
 
             # 收集有效上游 ref（仅 visited 集合内）
             valid_ups = [u for u in nupstream if u in visited and u in node_sqls]
@@ -1561,9 +1616,11 @@ class PipelineEngine:
                     refs.append((node_sqls[u], u))
 
             # 生成当前节点核心 SQL（内层子查询不加 LIMIT）
+            # 传入 merge_type 以正确处理 UNION 类型的 merge 节点
             is_focus = (nid == focus_node_id)
             core_sql, _ = PipelineEngine.build_node_sql(
-                ntype, nconfig, refs if refs else None, apply_limit=False, limit=limit
+                ntype, nconfig, refs if refs else None, apply_limit=False, limit=limit,
+                merge_type=nmerge_type
             )
 
             # 对当前节点 config 应用行筛选包装（等效于在下游前插 filter 节点）
