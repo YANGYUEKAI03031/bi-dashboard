@@ -1927,7 +1927,7 @@ class PipelineEngine:
     def _build_category_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
         """
         分类分组表达式
-        ranges: [{from: 0, to: 1000, label: '低'}, ...]
+        ranges: [{from: 0, to: 1000, label: '低', includeTo: false}, ...]
         default_label: 默认标签
         """
         ranges: List[Dict[str, Any]] = config.get("ranges", [])
@@ -1936,27 +1936,44 @@ class PipelineEngine:
         if not ranges:
             return "NULL"
 
+        # 与字符串/CHAR 投影列比较时，统一转为 DECIMAL，避免区间全不匹配落到默认标签
+        num_col = f"CAST({source_column} AS DECIMAL(38, 10))"
+
         case_parts: List[str] = []
         for item in ranges:
             if isinstance(item, dict):
                 from_val = item.get("from")
                 to_val = item.get("to")
                 label = str(item.get("label", "")).strip()
+                include_to = item.get("includeTo")
+                if include_to is None:
+                    include_to = item.get("include_to", False)
+                include_to = bool(include_to)
 
                 if label:
                     label_escaped = label.replace("'", "''")
                     if from_val is not None and to_val is not None:
-                        case_parts.append(
-                            f"WHEN {source_column} >= {from_val} AND {source_column} < {to_val} THEN '{label_escaped}'"
-                        )
+                        if include_to:
+                            case_parts.append(
+                                f"WHEN {num_col} >= {from_val} AND {num_col} <= {to_val} THEN '{label_escaped}'"
+                            )
+                        else:
+                            case_parts.append(
+                                f"WHEN {num_col} >= {from_val} AND {num_col} < {to_val} THEN '{label_escaped}'"
+                            )
                     elif from_val is not None:
                         case_parts.append(
-                            f"WHEN {source_column} >= {from_val} THEN '{label_escaped}'"
+                            f"WHEN {num_col} >= {from_val} THEN '{label_escaped}'"
                         )
                     elif to_val is not None:
-                        case_parts.append(
-                            f"WHEN {source_column} < {to_val} THEN '{label_escaped}'"
-                        )
+                        if include_to:
+                            case_parts.append(
+                                f"WHEN {num_col} <= {to_val} THEN '{label_escaped}'"
+                            )
+                        else:
+                            case_parts.append(
+                                f"WHEN {num_col} < {to_val} THEN '{label_escaped}'"
+                            )
 
         if not case_parts:
             return "NULL"

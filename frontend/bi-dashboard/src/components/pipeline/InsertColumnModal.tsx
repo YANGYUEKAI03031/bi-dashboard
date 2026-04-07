@@ -2,7 +2,7 @@
  * InsertColumnModal - 插入新列配置弹窗
  * 支持7种方法：计算列、分列、函数、查找替换、排名、分类分组、区间提取
  */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import {
   Modal,
   Tabs,
@@ -19,6 +19,7 @@ import {
   Alert,
   Tooltip,
   Tag,
+  Switch,
 } from 'antd';
 import {
   PlusOutlined,
@@ -59,14 +60,48 @@ export interface InsertColumnModalProps {
   onDelete?: (configId: string) => void;
 }
 
+/** 编辑模式下仅当前 method 带入已保存的 config，供子表单初始化（避免子表单 mount 时用空值覆盖父级 formValues） */
+function initialConfigForMethod(
+  method: InsertedColumnMethod,
+  editConfig?: InsertedColumnConfig,
+): Record<string, unknown> {
+  if (editConfig?.method === method) {
+    return { ...(editConfig.config ?? {}) };
+  }
+  return {};
+}
+
+/** 切换 Tab 再回来时，父级 formValues 里可能仍有 ranges；与 edit 初始合并，避免 destroyInactiveTabPane 卸载后丢区间 */
+function mergeCategoryInitialConfig(
+  editConfig: InsertedColumnConfig | undefined,
+  formValues: Record<string, unknown>,
+): Record<string, unknown> {
+  const base = initialConfigForMethod('category', editConfig);
+  const next: Record<string, unknown> = { ...base };
+  if (Array.isArray(formValues.ranges)) {
+    next.ranges = formValues.ranges;
+  }
+  if (formValues.default_label != null) {
+    next.default_label = formValues.default_label;
+  }
+  return next;
+}
+
 // 计算列配置
 interface CalculationFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
 }
 
-const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChange }) => {
-  const [expression, setExpression] = useState('');
+const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChange, initialConfig }) => {
+  const [expression, setExpression] = useState(() => String(initialConfig?.expression ?? ''));
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    const cfg = initialConfig ?? {};
+    setExpression(String(cfg.expression ?? ''));
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange({ expression });
@@ -86,9 +121,6 @@ const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChan
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名，如: 总价" />
-        </Form.Item>
         <Form.Item label="表达式">
           <TextArea
             value={expression}
@@ -131,15 +163,33 @@ const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChan
 interface SplitFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
+  sourceColumn?: string;
+  onSourceColumnChange?: (col: string) => void;
 }
 
-const SplitForm: React.FC<SplitFormProps> = ({ columns, onValuesChange }) => {
-  const [values, setValues] = useState({
-    split_type: 'delimiter',
-    delimiter: ',',
-    regex: '',
-    position: 1,
+const SplitForm: React.FC<SplitFormProps> = ({
+  columns,
+  onValuesChange,
+  initialConfig,
+  sourceColumn,
+  onSourceColumnChange,
+}) => {
+  const parseSplitState = (cfg: Record<string, unknown>) => ({
+    split_type: String(cfg.split_type ?? 'delimiter'),
+    delimiter: String(cfg.delimiter ?? ','),
+    regex: String(cfg.regex ?? ''),
+    position: typeof cfg.position === 'number' && !Number.isNaN(cfg.position)
+      ? cfg.position
+      : Number(cfg.position) || 1,
   });
+
+  const [values, setValues] = useState(() => parseSplitState(initialConfig ?? {}));
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    setValues(parseSplitState(initialConfig ?? {}));
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange(values);
@@ -155,13 +205,13 @@ const SplitForm: React.FC<SplitFormProps> = ({ columns, onValuesChange }) => {
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名" />
-        </Form.Item>
         <Form.Item label="源列">
           <Select
+            value={sourceColumn || undefined}
+            onChange={(v) => onSourceColumnChange?.(v)}
             options={columns.map((c) => ({ label: c, value: c }))}
             placeholder="选择要分列的列"
+            allowClear
           />
         </Form.Item>
         <Form.Item label="分列方式">
@@ -213,6 +263,9 @@ const SplitForm: React.FC<SplitFormProps> = ({ columns, onValuesChange }) => {
 interface FunctionFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
+  sourceColumn?: string;
+  onSourceColumnChange?: (col: string) => void;
 }
 
 const FUNCTIONS = [
@@ -247,12 +300,30 @@ const FUNCTIONS = [
   ]},
 ];
 
-const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange }) => {
-  const [values, setValues] = useState({
-    function_name: '',
-    arguments: [''],
+function parseFunctionFormState(cfg: Record<string, unknown>) {
+  const rawArgs = cfg.arguments;
+  const arr = Array.isArray(rawArgs) ? rawArgs.map((a) => String(a ?? '')) : [];
+  const args = arr.length > 0 ? arr : [''];
+  return {
+    function_name: String(cfg.function_name ?? ''),
+    arguments: args,
     extraArg: '',
-  });
+  };
+}
+
+const FunctionForm: React.FC<FunctionFormProps> = ({
+  columns,
+  onValuesChange,
+  initialConfig,
+  sourceColumn,
+  onSourceColumnChange,
+}) => {
+  const [values, setValues] = useState(() => parseFunctionFormState(initialConfig ?? {}));
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    setValues(parseFunctionFormState(initialConfig ?? {}));
+  }, [initSig]);
 
   useEffect(() => {
     const args = values.arguments.filter((a) => a !== '');
@@ -284,8 +355,14 @@ const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange }) 
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名" />
+        <Form.Item label="源列（部分函数以列为输入）">
+          <Select
+            value={sourceColumn || undefined}
+            onChange={(v) => onSourceColumnChange?.(v)}
+            options={columns.map((c) => ({ label: c, value: c }))}
+            placeholder="选择源列"
+            allowClear
+          />
         </Form.Item>
         <Form.Item label="函数">
           <Select
@@ -355,6 +432,9 @@ const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange }) 
 interface LookupFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
+  sourceColumn?: string;
+  onSourceColumnChange?: (col: string) => void;
 }
 
 interface LookupItem {
@@ -362,9 +442,37 @@ interface LookupItem {
   value: string;
 }
 
-const LookupForm: React.FC<LookupFormProps> = ({ columns, onValuesChange }) => {
-  const [items, setItems] = useState<LookupItem[]>([{ key: '', value: '' }]);
-  const [defaultValue, setDefaultValue] = useState('');
+function parseLookupState(cfg: Record<string, unknown>): { items: LookupItem[]; defaultValue: string } {
+  const lt = cfg.lookup_table;
+  const rows: LookupItem[] = Array.isArray(lt)
+    ? lt.map((row: unknown) => {
+        const r = row as Record<string, unknown>;
+        return { key: String(r.key ?? ''), value: String(r.value ?? '') };
+      })
+    : [];
+  return {
+    items: rows.length > 0 ? rows : [{ key: '', value: '' }],
+    defaultValue: String(cfg.default_value ?? ''),
+  };
+}
+
+const LookupForm: React.FC<LookupFormProps> = ({
+  columns,
+  onValuesChange,
+  initialConfig,
+  sourceColumn,
+  onSourceColumnChange,
+}) => {
+  const init = parseLookupState(initialConfig ?? {});
+  const [items, setItems] = useState<LookupItem[]>(init.items);
+  const [defaultValue, setDefaultValue] = useState(init.defaultValue);
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    const next = parseLookupState(initialConfig ?? {});
+    setItems(next.items);
+    setDefaultValue(next.defaultValue);
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange({
@@ -399,13 +507,13 @@ const LookupForm: React.FC<LookupFormProps> = ({ columns, onValuesChange }) => {
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名" />
-        </Form.Item>
         <Form.Item label="源列">
           <Select
+            value={sourceColumn || undefined}
+            onChange={(v) => onSourceColumnChange?.(v)}
             options={columns.map((c) => ({ label: c, value: c }))}
             placeholder="选择要查找替换的列"
+            allowClear
           />
         </Form.Item>
         <Form.Item label="映射表">
@@ -477,14 +585,32 @@ const LookupForm: React.FC<LookupFormProps> = ({ columns, onValuesChange }) => {
 interface RankFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
 }
 
-const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange }) => {
-  const [values, setValues] = useState({
-    rank_type: 'ROW_NUMBER',
-    partition_by: [] as string[],
-    order_by: { column: '', direction: 'desc' },
-  });
+function parseRankState(cfg: Record<string, unknown>) {
+  const pb = cfg.partition_by;
+  const partition_by = Array.isArray(pb) ? pb.map(String) : [];
+  const ob = cfg.order_by as Record<string, unknown> | undefined;
+  const order_by =
+    ob && typeof ob === 'object'
+      ? {
+          column: String(ob.column ?? ''),
+          direction: String(ob.direction ?? 'desc') === 'asc' ? 'asc' : 'desc',
+        }
+      : { column: '', direction: 'desc' };
+  const rt = String(cfg.rank_type ?? 'ROW_NUMBER');
+  const rank_type = ['ROW_NUMBER', 'RANK', 'DENSE_RANK'].includes(rt) ? rt : 'ROW_NUMBER';
+  return { rank_type, partition_by, order_by };
+}
+
+const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange, initialConfig }) => {
+  const [values, setValues] = useState(() => parseRankState(initialConfig ?? {}));
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    setValues(parseRankState(initialConfig ?? {}));
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange(values);
@@ -500,9 +626,6 @@ const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange }) => {
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名，如: 排名" />
-        </Form.Item>
         <Form.Item label="排名类型">
           <Select
             value={values.rank_type}
@@ -563,19 +686,57 @@ const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange }) => {
 interface CategoryFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
+  sourceColumn?: string;
+  onSourceColumnChange?: (col: string) => void;
 }
 
 interface RangeItem {
   from: number | null;
   to: number | null;
   label: string;
+  includeTo: boolean; // true: 包含结束值 [from, to]; false: 不包含结束值 [from, to)
 }
 
-const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) => {
-  const [ranges, setRanges] = useState<RangeItem[]>([
-    { from: null, to: null, label: '' },
-  ]);
-  const [defaultLabel, setDefaultLabel] = useState('其他');
+function parseCategoryState(cfg: Record<string, unknown>): {
+  ranges: RangeItem[];
+  defaultLabel: string;
+} {
+  const raw = cfg.ranges;
+  const ranges: RangeItem[] = Array.isArray(raw)
+    ? raw.map((r: unknown) => {
+        const x = r as Record<string, unknown>;
+        return {
+          from: typeof x.from === 'number' ? x.from : x.from != null ? Number(x.from) : null,
+          to: typeof x.to === 'number' ? x.to : x.to != null ? Number(x.to) : null,
+          label: String(x.label ?? ''),
+          includeTo: x.includeTo === true || x.include_to === true,
+        };
+      })
+    : [];
+  return {
+    ranges: ranges.length > 0 ? ranges : [{ from: null, to: null, label: '', includeTo: false }],
+    defaultLabel: String(cfg.default_label ?? '其他'),
+  };
+}
+
+const CategoryForm: React.FC<CategoryFormProps> = ({
+  columns,
+  onValuesChange,
+  initialConfig,
+  sourceColumn,
+  onSourceColumnChange,
+}) => {
+  const init = parseCategoryState(initialConfig ?? {});
+  const [ranges, setRanges] = useState<RangeItem[]>(init.ranges);
+  const [defaultLabel, setDefaultLabel] = useState(init.defaultLabel);
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    const next = parseCategoryState(initialConfig ?? {});
+    setRanges(next.ranges);
+    setDefaultLabel(next.defaultLabel);
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange({
@@ -593,7 +754,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
   };
 
   const addRange = () => {
-    setRanges((prev) => [...prev, { from: null, to: null, label: '' }]);
+    setRanges((prev) => [...prev, { from: null, to: null, label: '', includeTo: false }]);
   };
 
   const removeRange = (index: number) => {
@@ -604,19 +765,19 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
     <div>
       <Alert
         message="分类分组说明"
-        description="将数值划分到不同的类别区间，为每个区间设置标签"
+        description="将数值划分到不同的类别区间，为每个区间设置标签。通过「包含结束值」开关可自由选择结束值是否包含：开启时为 [起始值, 结束值]，关闭时为 [起始值, 结束值)。"
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名，如: 等级" />
-        </Form.Item>
         <Form.Item label="源列 (数值列)">
           <Select
+            value={sourceColumn || undefined}
+            onChange={(v) => onSourceColumnChange?.(v)}
             options={columns.map((c) => ({ label: c, value: c }))}
             placeholder="选择数值列"
+            allowClear
           />
         </Form.Item>
         <Form.Item label="区间配置">
@@ -626,9 +787,9 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
             dataSource={ranges.map((r, i) => ({ ...r, index: i }))}
             columns={[
               {
-                title: '起始值',
+                title: '起始值 (包含)',
                 dataIndex: 'from',
-                width: '25%',
+                width: '20%',
                 render: (_, record) => (
                   <InputNumber
                     value={record.from ?? undefined}
@@ -642,7 +803,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
               {
                 title: '结束值',
                 dataIndex: 'to',
-                width: '25%',
+                width: '20%',
                 render: (_, record) => (
                   <InputNumber
                     value={record.to ?? undefined}
@@ -654,9 +815,23 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
                 ),
               },
               {
+                title: '包含结束值',
+                dataIndex: 'includeTo',
+                width: '15%',
+                render: (_, record) => (
+                  <Switch
+                    checked={record.includeTo}
+                    onChange={(checked) => updateRange(record.index, 'includeTo', checked)}
+                    checkedChildren="包含"
+                    unCheckedChildren="不包含"
+                    size="small"
+                  />
+                ),
+              },
+              {
                 title: '标签',
                 dataIndex: 'label',
-                width: '35%',
+                width: '30%',
                 render: (_, record) => (
                   <Input
                     value={record.label}
@@ -704,14 +879,38 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ columns, onValuesChange }) 
 interface BinFormProps {
   columns: string[];
   onValuesChange: (values: Record<string, unknown>) => void;
+  initialConfig?: Record<string, unknown>;
+  sourceColumn?: string;
+  onSourceColumnChange?: (col: string) => void;
 }
 
-const BinForm: React.FC<BinFormProps> = ({ columns, onValuesChange }) => {
-  const [values, setValues] = useState({
-    bin_type: 'fixed',
-    bin_size: 10,
-    custom_bins: [] as number[],
-  });
+function parseBinState(cfg: Record<string, unknown>) {
+  const bt = String(cfg.bin_type ?? 'fixed');
+  const bin_type = bt === 'custom' ? 'custom' : 'fixed';
+  const bin_size =
+    typeof cfg.bin_size === 'number' && !Number.isNaN(cfg.bin_size)
+      ? cfg.bin_size
+      : Number(cfg.bin_size) || 10;
+  const cb = cfg.custom_bins;
+  const custom_bins = Array.isArray(cb)
+    ? cb.map((n) => Number(n)).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b)
+    : [];
+  return { bin_type, bin_size, custom_bins };
+}
+
+const BinForm: React.FC<BinFormProps> = ({
+  columns,
+  onValuesChange,
+  initialConfig,
+  sourceColumn,
+  onSourceColumnChange,
+}) => {
+  const [values, setValues] = useState(() => parseBinState(initialConfig ?? {}));
+  const initSig = JSON.stringify(initialConfig ?? {});
+
+  useEffect(() => {
+    setValues(parseBinState(initialConfig ?? {}));
+  }, [initSig]);
 
   useEffect(() => {
     onValuesChange(values);
@@ -731,13 +930,13 @@ const BinForm: React.FC<BinFormProps> = ({ columns, onValuesChange }) => {
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="新列名">
-          <Input placeholder="输入新列名，如: 区间" />
-        </Form.Item>
         <Form.Item label="源列 (数值列)">
           <Select
+            value={sourceColumn || undefined}
+            onChange={(v) => onSourceColumnChange?.(v)}
             options={columns.map((c) => ({ label: c, value: c }))}
             placeholder="选择数值列"
+            allowClear
           />
         </Form.Item>
         <Form.Item label="区间类型">
@@ -829,7 +1028,7 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
   const [form] = Form.useForm();
 
   const handleValuesChange = useCallback((values: Record<string, unknown>) => {
-    setFormValues(values);
+    setFormValues((prev) => ({ ...prev, ...values }));
   }, []);
 
   const handleConfirm = useCallback(() => {
@@ -850,90 +1049,162 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
     setSourceColumn(undefined);
     setFormValues({});
     setActiveTab('calculation');
-    form.resetFields();
-  }, [form]);
+  }, []);
 
-  // 当 editConfig 变化时同步表单状态
-  useEffect(() => {
+  // 打开/关闭弹窗或与 editConfig 同步时，在绘制子表单前写入父级状态，避免子表单 mount 用空值覆盖已加载的配置
+  useLayoutEffect(() => {
+    if (!visible) {
+      setNewColumnName('');
+      setSourceColumn(undefined);
+      setFormValues({});
+      setActiveTab('calculation');
+      form.resetFields();
+      return;
+    }
     if (editConfig) {
       setNewColumnName(editConfig.name);
       setSourceColumn(editConfig.sourceColumn);
       setFormValues(editConfig.config ?? {});
       setActiveTab(editConfig.method);
+    } else {
+      setNewColumnName('');
+      setSourceColumn(undefined);
+      setFormValues({});
+      setActiveTab('calculation');
     }
-  }, [editConfig]);
+  }, [visible, editConfig]); // 移除 form 依赖，避免循环更新
 
-  useEffect(() => {
-    if (!visible) {
-      resetForm();
-    }
-  }, [visible]);
+  const categoryRanges = formValues.ranges;
+  const categoryDefaultLabel = formValues.default_label;
+  const categoryFormInitial = useMemo(
+    () =>
+      mergeCategoryInitialConfig(editConfig, {
+        ranges: categoryRanges,
+        default_label: categoryDefaultLabel,
+      }),
+    [editConfig, categoryRanges, categoryDefaultLabel],
+  );
 
-  const tabItems: Array<{ key: InsertedColumnMethod; label: React.ReactNode; children: React.ReactNode }> = useMemo(() => [
-    {
-      key: 'calculation',
-      label: (
-        <span>
-          <CalculatorOutlined /> 计算
-        </span>
-      ),
-      children: <CalculationForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'split',
-      label: (
-        <span>
-          <ScissorOutlined /> 分列
-        </span>
-      ),
-      children: <SplitForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'function',
-      label: (
-        <span>
-          <FunctionOutlined /> 函数
-        </span>
-      ),
-      children: <FunctionForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'lookup',
-      label: (
-        <span>
-          <SwapOutlined /> 查找替换
-        </span>
-      ),
-      children: <LookupForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'rank',
-      label: (
-        <span>
-          <SortAscendingOutlined /> 排名
-        </span>
-      ),
-      children: <RankForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'category',
-      label: (
-        <span>
-          <FolderOutlined /> 分类分组
-        </span>
-      ),
-      children: <CategoryForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-    {
-      key: 'bin',
-      label: (
-        <span>
-          <BarChartOutlined /> 区间提取
-        </span>
-      ),
-      children: <BinForm columns={columns} onValuesChange={handleValuesChange} />,
-    },
-  ], [columns, handleValuesChange]);
+  const tabItems: Array<{ key: InsertedColumnMethod; label: React.ReactNode; children: React.ReactNode }> = useMemo(
+    () => [
+      {
+        key: 'calculation',
+        label: (
+          <span>
+            <CalculatorOutlined /> 计算
+          </span>
+        ),
+        children: (
+          <CalculationForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('calculation', editConfig)}
+          />
+        ),
+      },
+      {
+        key: 'split',
+        label: (
+          <span>
+            <ScissorOutlined /> 分列
+          </span>
+        ),
+        children: (
+          <SplitForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('split', editConfig)}
+            sourceColumn={sourceColumn}
+            onSourceColumnChange={setSourceColumn}
+          />
+        ),
+      },
+      {
+        key: 'function',
+        label: (
+          <span>
+            <FunctionOutlined /> 函数
+          </span>
+        ),
+        children: (
+          <FunctionForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('function', editConfig)}
+            sourceColumn={sourceColumn}
+            onSourceColumnChange={setSourceColumn}
+          />
+        ),
+      },
+      {
+        key: 'lookup',
+        label: (
+          <span>
+            <SwapOutlined /> 查找替换
+          </span>
+        ),
+        children: (
+          <LookupForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('lookup', editConfig)}
+            sourceColumn={sourceColumn}
+            onSourceColumnChange={setSourceColumn}
+          />
+        ),
+      },
+      {
+        key: 'rank',
+        label: (
+          <span>
+            <SortAscendingOutlined /> 排名
+          </span>
+        ),
+        children: (
+          <RankForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('rank', editConfig)}
+          />
+        ),
+      },
+      {
+        key: 'category',
+        label: (
+          <span>
+            <FolderOutlined /> 分类分组
+          </span>
+        ),
+        children: (
+          <CategoryForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={categoryFormInitial}
+            sourceColumn={sourceColumn}
+            onSourceColumnChange={setSourceColumn}
+          />
+        ),
+      },
+      {
+        key: 'bin',
+        label: (
+          <span>
+            <BarChartOutlined /> 区间提取
+          </span>
+        ),
+        children: (
+          <BinForm
+            columns={columns}
+            onValuesChange={handleValuesChange}
+            initialConfig={initialConfigForMethod('bin', editConfig)}
+            sourceColumn={sourceColumn}
+            onSourceColumnChange={setSourceColumn}
+          />
+        ),
+      },
+    ],
+    [columns, handleValuesChange, editConfig, sourceColumn, categoryFormInitial],
+  );
 
   return (
     <Modal
@@ -985,8 +1256,9 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
       <Divider>选择生成方式</Divider>
 
       <Tabs
+        destroyInactiveTabPane
         activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        onChange={(key) => setActiveTab(key as InsertedColumnMethod)}
         items={tabItems}
         tabPosition="left"
         style={{ minHeight: 400 }}
