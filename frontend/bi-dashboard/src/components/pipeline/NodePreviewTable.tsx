@@ -83,15 +83,17 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   const [page, setPage] = useState(1);
   const [contextMenuColumn, setContextMenuColumn] = useState<string | null>(null);
 
+  const hasData = data && data.columns.length > 0;
+
   const columnsOrdered = useMemo(() => {
-    if (!data?.columns?.length) {
+    if (!hasData) {
       return [];
     }
     if (!displayColumnKeys?.length) {
       return data.columns;
     }
     return displayColumnKeys.filter((c) => data.columns.includes(c));
-  }, [data, displayColumnKeys]);
+  }, [hasData, data, displayColumnKeys]);
 
   const insertedColNames = useMemo(() => {
     if (!insertedColumns?.length) return [];
@@ -103,19 +105,19 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
     });
   }, [insertedColumns]);
 
-  if (!data || data.columns.length === 0) {
+  const displayRows = hasData ? (compact ? data.rows.slice(0, 3) : data.rows) : [];
+  const maxPage = Math.max(1, Math.ceil((hasData ? data.rows.length : 0) / pageSize));
+  const startIdx = (page - 1) * pageSize;
+  const pagedRows = compact ? displayRows : (hasData ? data.rows.slice(startIdx, startIdx + pageSize) : []);
+  const colList = columnsOrdered.length ? columnsOrdered : (hasData ? data.columns : []);
+
+  if (!hasData) {
     return (
       <div style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>
         暂无数据
       </div>
     );
   }
-
-  const displayRows = compact ? data.rows.slice(0, 3) : data.rows;
-  const maxPage = Math.max(1, Math.ceil(data.rows.length / pageSize));
-  const startIdx = (page - 1) * pageSize;
-  const pagedRows = compact ? displayRows : data.rows.slice(startIdx, startIdx + pageSize);
-  const colList = columnsOrdered.length ? columnsOrdered : data.columns;
 
   const getContextMenuItems = (column: string): MenuProps['items'] => {
     const items: MenuProps['items'] = [

@@ -2,7 +2,7 @@
  * InsertColumnModal - 插入新列配置弹窗
  * 支持7种方法：计算列、分列、函数、查找替换、排名、分类分组、区间提取
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Modal,
   Tabs,
@@ -40,10 +40,12 @@ export interface InsertedColumnConfig {
   /** 编辑时的唯一标识 */
   id?: string;
   name: string;
-  method: 'calculation' | 'split' | 'function' | 'lookup' | 'rank' | 'category' | 'bin';
+  method: InsertedColumnMethod;
   sourceColumn: string;
   config: Record<string, unknown>;
 }
+
+export type InsertedColumnMethod = 'calculation' | 'split' | 'function' | 'lookup' | 'rank' | 'category' | 'bin';
 
 export interface InsertColumnModalProps {
   visible: boolean;
@@ -820,17 +822,17 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
   onDelete,
 }) => {
   const isEdit = !!editConfig;
-  const [activeTab, setActiveTab] = useState(editConfig?.method ?? 'calculation');
+  const [activeTab, setActiveTab] = useState<InsertedColumnMethod>(editConfig?.method ?? 'calculation');
   const [formValues, setFormValues] = useState<Record<string, unknown>>(editConfig?.config ?? {});
   const [newColumnName, setNewColumnName] = useState(editConfig?.name ?? '');
   const [sourceColumn, setSourceColumn] = useState<string | undefined>(editConfig?.sourceColumn);
   const [form] = Form.useForm();
 
-  const handleValuesChange = (values: Record<string, unknown>) => {
+  const handleValuesChange = useCallback((values: Record<string, unknown>) => {
     setFormValues(values);
-  };
+  }, []);
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     if (!newColumnName.trim()) {
       return;
     }
@@ -841,15 +843,15 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
       sourceColumn: sourceColumn || columns[0] || '',
       config: formValues,
     });
-  };
+  }, [newColumnName, editConfig, activeTab, sourceColumn, columns, formValues, onConfirm]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setNewColumnName('');
     setSourceColumn(undefined);
     setFormValues({});
     setActiveTab('calculation');
     form.resetFields();
-  };
+  }, [form]);
 
   // 当 editConfig 变化时同步表单状态
   useEffect(() => {
@@ -867,7 +869,7 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
     }
   }, [visible]);
 
-  const tabItems = [
+  const tabItems: Array<{ key: InsertedColumnMethod; label: React.ReactNode; children: React.ReactNode }> = useMemo(() => [
     {
       key: 'calculation',
       label: (
@@ -931,7 +933,7 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
       ),
       children: <BinForm columns={columns} onValuesChange={handleValuesChange} />,
     },
-  ];
+  ], [columns, handleValuesChange]);
 
   return (
     <Modal
