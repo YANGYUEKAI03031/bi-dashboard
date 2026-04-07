@@ -282,25 +282,33 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
             flexWrap: 'wrap',
             gap: 6,
             marginBottom: 8,
-            padding: '6px 10px',
-            background: '#F6FFED',
-            border: '1px solid #B7EB8F',
-            borderRadius: 6,
           }}
         >
           <Text type="secondary" style={{ fontSize: 11, marginRight: 4 }}>
             新加列：
           </Text>
           {insertedColNames.map((col) => (
-            <Tag
+            <span
               key={col.name}
-              color="green"
-              style={{ cursor: 'pointer', margin: 0 }}
-              onDoubleClick={() => onEditInsertColumn?.(col)}
-              title="双击编辑此列"
+              onClick={() => onEditInsertColumn?.(col)}
+              title="点击编辑此列"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                border: '1px solid #52c41a',
+                borderRadius: 4,
+                color: '#52c41a',
+                fontSize: 12,
+                cursor: 'pointer',
+                background: 'transparent',
+                userSelect: 'none',
+              }}
             >
+              <PlusOutlined style={{ fontSize: 10 }} />
               {col.name}
-            </Tag>
+            </span>
           ))}
         </div>
       )}
