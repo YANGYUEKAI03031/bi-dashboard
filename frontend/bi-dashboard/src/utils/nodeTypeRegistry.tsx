@@ -9,6 +9,7 @@ import {
   FilterOutlined,
   BarChartOutlined,
   SwapOutlined,
+  ColumnHeightOutlined,
   AppstoreOutlined,
   ExportOutlined,
   HolderOutlined,
@@ -55,6 +56,8 @@ export interface NodeTypeDefinition {
   description: string;
   icon: React.ReactNode;
   allowedUpstreamTypes?: string[];
+  /** 自定义 CSS 类名，用于特定节点类型的样式定制 */
+  cssClass?: string;
 }
 
 /**
@@ -190,16 +193,15 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     tagBg: '#FFE7BA',
     tagColor: '#FA541C',
     hasPreview: true,
-    description: '将多个上游节点合并',
-    icon: <SwapOutlined />,
+    description: '纵向拼接多路数据（UNION / UNION ALL），按列位置对齐',
+    icon: <ColumnHeightOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform', 'merge'],
+    cssClass: 'merge',
   },
 };
 
-/** 仅用于展示/兼容：后端预览 SQL 仍会把 transform 规范为 filter 逻辑 */
-export const LEGACY_TYPE_MAP: Record<string, string> = {
-  merge: 'join',
-};
+/** 仅用于展示/兼容：后端预览 SQL 仍会把 transform 规范为 filter 逻辑（勿把 merge 映射到 join，否则 UI 会错用关联样式） */
+export const LEGACY_TYPE_MAP: Record<string, string> = {};
 
 export function resolveNodeType(type: string): string {
   return LEGACY_TYPE_MAP[type] || type;

@@ -704,6 +704,24 @@
   right: -5px;
 }
 
+/* ─── Merge node handles (top/bottom instead of left/right) ─────── */
+.pipeline-editor-container .react-flow__node-merge .react-flow__handle-left,
+.pipeline-editor-container .react-flow__node-merge .react-flow__handle-right {
+  display: none;
+}
+
+.pipeline-editor-container .react-flow__handle-top {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.pipeline-editor-container .react-flow__handle-bottom {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 /* ─── Edges ─────────────────────────────────────────────────────── */
 .pipeline-editor-container .react-flow__edge-path {
   stroke: var(--pipeline-edge-color);

@@ -17,10 +17,8 @@ const { Panel } = Collapse;
 const { Option } = Select;
 
 const mergeTypeOptions = [
-  { value: 'union', label: 'UNION', desc: '合并两个结果集，自动去重' },
-  { value: 'left_join', label: 'LEFT JOIN', desc: '保留左表全部记录，匹配右表' },
-  { value: 'right_join', label: 'RIGHT JOIN', desc: '保留右表全部记录，匹配左表' },
-  { value: 'full_join', label: 'FULL JOIN', desc: '保留两表全部记录' },
+  { value: 'union_all', label: 'UNION ALL', desc: '纵向拼接所有行，保留重复（效率高）' },
+  { value: 'union', label: 'UNION', desc: '纵向拼接并自动去重' },
 ];
 
 export function MergeNodeDrawer({ visible, sourceNodes, onConfirm, onCancel }: MergeNodeDrawerProps) {
@@ -50,43 +48,25 @@ export function MergeNodeDrawer({ visible, sourceNodes, onConfirm, onCancel }: M
 
   const renderSqlTemplate = () => {
     if (selectedUpstream.length < 2) return null;
-    const [a, b] = selectedUpstream;
 
-    if (mergeType === 'union') {
-      return (
-        <pre style={{ fontSize: 12, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
-          {`SELECT * FROM {upstream_table_${a}}
-UNION ALL
-SELECT * FROM {upstream_table_${b}}`}
-        </pre>
-      );
-    }
-    if (mergeType === 'left_join') {
-      return (
-        <pre style={{ fontSize: 12, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
-          {`SELECT *
-  FROM {upstream_table_${a}} AS a
-  LEFT JOIN {upstream_table_${b}} AS b
-    ON a.id = b.ref_id`}
-        </pre>
-      );
-    }
-    if (mergeType === 'right_join') {
-      return (
-        <pre style={{ fontSize: 12, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
-          {`SELECT *
-  FROM {upstream_table_${a}} AS a
-  RIGHT JOIN {upstream_table_${b}} AS b
-    ON a.ref_id = b.id`}
-        </pre>
-      );
-    }
+    const op = mergeType === 'union_all' ? 'UNION ALL' : 'UNION';
     return (
       <pre style={{ fontSize: 12, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
-        {`SELECT *
-  FROM {upstream_table_${a}} AS a
-  FULL JOIN {upstream_table_${b}} AS b
-    ON a.id = b.ref_id`}
+        {selectedUpstream.map((id, i) => (
+          <span key={id}>
+            {'  '}SELECT * FROM &#123;upstream_table_{i}&#125;
+            {i < selectedUpstream.length - 1 && (
+              <>
+                {'\n'}
+                {op.includes('ALL') ? (
+                  <span style={{ color: '#6366F1' }}>  UNION ALL</span>
+                ) : (
+                  <span style={{ color: '#0EA5E9' }}>  UNION</span>
+                )}
+              </>
+            )}
+          </span>
+        ))}
       </pre>
     );
   };

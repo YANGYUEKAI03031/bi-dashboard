@@ -1,4 +1,5 @@
 import { buildJoinPersistedSql, type SymmetricUnionPlanRow } from './pipelineJoinSql';
+import { buildMergePersistedSql, mergeTypeConfigToBackend, type UnionColumnPlanRow } from './pipelineMergeSql';
 
 export interface GraphNode {
   id: string;
@@ -17,7 +18,7 @@ export interface GraphEdge {
 
 export interface MergeConfig {
   upstream_ids: string[];
-  merge_type: 'union' | 'left_join' | 'right_join' | 'full_join';
+  merge_type: 'union' | 'union_all';
   output_name?: string;
 }
 
@@ -155,6 +156,20 @@ export function nodesToPipelineNodes(
         (cfg.joinKeys as Array<{ leftCol?: string; rightCol?: string }>) || [],
         (cfg.symmetricUnionPlan as SymmetricUnionPlanRow[] | undefined) || undefined
       );
+    }
+    if (nodeType === 'merge') {
+      const cfg = (pn.config as Record<string, unknown>) || {};
+      const ups = (pn.upstream as string[]) || [];
+      const mtCfg = (cfg.merge_type as string) || 'union_all';
+      pn.merge_type = mergeTypeConfigToBackend(mtCfg);
+      if (ups.length >= 2) {
+        const plan = cfg.unionColumnPlan as UnionColumnPlanRow[] | undefined;
+        pn.sql = buildMergePersistedSql(
+          mtCfg === 'union' ? 'union' : 'union_all',
+          ups.length,
+          Array.isArray(plan) && plan.length > 0 ? plan : undefined
+        );
+      }
     }
     return pn;
   });

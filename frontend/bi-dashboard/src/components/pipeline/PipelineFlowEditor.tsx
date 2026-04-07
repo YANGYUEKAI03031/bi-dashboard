@@ -25,7 +25,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  ImportOutlined, BarChartOutlined, SwapOutlined,
+  ImportOutlined, BarChartOutlined, SwapOutlined, ColumnHeightOutlined,
   AppstoreOutlined, ExportOutlined, DownOutlined,
   DatabaseOutlined, ArrowRightOutlined, HolderOutlined,
 } from '@ant-design/icons';
@@ -89,15 +89,27 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
     validationError ? 'pipeline-node-card--error' : '',
   ].filter(Boolean).join(' ');
 
+  // 合并节点使用上下布局的 handle
+  const isMergeNode = pipelineNode.type === 'merge';
+
   return (
     <>
-      {/* Left — target handle */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="target"
-        className="react-flow__handle-left"
-      />
+      {/* 合并节点: target handle 在顶部 */}
+      {isMergeNode ? (
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="target"
+          className="react-flow__handle-top"
+        />
+      ) : (
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="target"
+          className="react-flow__handle-left"
+        />
+      )}
 
       <div className={cardClass}>
         {/* Header */}
@@ -149,13 +161,22 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
         </div>
       </div>
 
-      {/* Right — source handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="source"
-        className="react-flow__handle-right"
-      />
+      {/* 合并节点: source handle 在底部 */}
+      {isMergeNode ? (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="source"
+          className="react-flow__handle-bottom"
+        />
+      ) : (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="source"
+          className="react-flow__handle-right"
+        />
+      )}
     </>
   );
 }
@@ -346,7 +367,7 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
           key: 'merge',
           label: (
             <Space style={{ fontSize: 12 }}>
-              <SwapOutlined style={{ color: NODE_TYPE_REGISTRY.merge?.color ?? '#fa8c16' }} />
+              <ColumnHeightOutlined style={{ color: NODE_TYPE_REGISTRY.merge?.color ?? '#fa8c16' }} />
               合并节点
             </Space>
           ),
@@ -883,11 +904,17 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   }, [nodes]);
 
   // Inject allNodes into each node's data so cards can resolve upstream names
+  // Also add custom className for special node types (e.g., merge nodes with top/bottom handles)
   const enrichedNodes = useMemo(() => {
-    return (nodes as unknown as GraphNode[]).map(n => ({
-      ...n,
-      data: { ...n.data, allNodes: nodes },
-    }));
+    return (nodes as unknown as GraphNode[]).map(n => {
+      const pn = n.data?.pipelineNode as PipelineNode | undefined;
+      const def = getNodeTypeDef(pn?.type || '');
+      return {
+        ...n,
+        className: def.cssClass ? `react-flow__node-${def.cssClass}` : undefined,
+        data: { ...n.data, allNodes: nodes },
+      };
+    });
   }, [nodes]);
 
   const selectedNode = useMemo(

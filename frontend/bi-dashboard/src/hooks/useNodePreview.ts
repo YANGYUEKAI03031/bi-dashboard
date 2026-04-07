@@ -8,6 +8,7 @@ import { GraphNode, buildEdgesFromUpstream } from '../utils/graphUtils';
 import { PipelineNode } from '../services/pipelineService';
 import { API_BASE_URL } from '../config/apiBaseUrl';
 import { AuthService } from '../services/authService';
+import { mergeTypeForPreviewApi } from '../utils/pipelineMergeSql';
 
 export interface PreviewData {
   columns: string[];
@@ -71,7 +72,8 @@ export function useNodePreview() {
             id: n.id,
             type: pn.type,
             config: baseCfg,
-            merge_type: pn.merge_type,
+            // merge_type 可能在 config.merge_type（前端）或顶层（API返回）；统一取一次
+            merge_type: mergeTypeForPreviewApi(pn),
           };
         });
         // 预览折叠 SQL 以节点 upstream 为准，避免 React Flow edges 与 upstream 短暂不一致时下游无数据

@@ -34,7 +34,7 @@ export interface PipelineNode {
   order: number;
   upstream?: string[];
   position?: { x: number; y: number };
-  merge_type?: 'union' | 'left_join' | 'right_join' | 'full_join';
+  merge_type?: 'union' | 'union_all';
   config?: Record<string, any>;
 }
 

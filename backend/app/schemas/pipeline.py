@@ -14,7 +14,10 @@ class PipelineNodeCreate(BaseModel):
     order: int = Field(..., description="执行顺序")
     upstream: Optional[List[str]] = Field(default=None, description="上游节点 ID 列表")
     position: Optional[Dict[str, float]] = Field(default=None, description="画布坐标 {x, y}")
-    merge_type: Optional[str] = Field(default=None, description="合并类型: union | left_join | right_join | full_join")
+    merge_type: Optional[str] = Field(
+        default=None,
+        description="合并类型: union | union all | left_join | right_join | full_join",
+    )
     config: Optional[Dict[str, Any]] = None  # 节点额外配置
 
     @validator('upstream', always=True)
@@ -29,8 +32,9 @@ class PipelineNodeCreate(BaseModel):
 
     @validator('merge_type')
     def validate_merge_type(cls, v):
-        if v is not None and v not in ('union', 'left_join', 'right_join', 'full_join'):
-            raise ValueError("merge_type 必须是 union | left_join | right_join | full_join")
+        allowed = ('union', 'union all', 'left_join', 'right_join', 'full_join')
+        if v is not None and v not in allowed:
+            raise ValueError("merge_type 必须是 union | union all | left_join | right_join | full_join")
         return v
 
 

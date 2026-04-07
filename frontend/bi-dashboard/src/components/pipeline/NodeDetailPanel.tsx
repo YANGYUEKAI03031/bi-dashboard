@@ -20,6 +20,7 @@ import { AggregateNodeConfig } from './visual-nodes/AggregateNodeConfig';
 import { JoinNodeConfig } from './visual-nodes/JoinNodeConfig';
 import { ColumnSelectConfig } from './visual-nodes/ColumnSelectConfig';
 import { OutputNodeConfig } from './visual-nodes/OutputNodeConfig';
+import { MergeNodeConfig } from './visual-nodes/MergeNodeConfig';
 
 const { Text } = Typography;
 
@@ -249,6 +250,15 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             )}
             {pipelineNode?.type === 'join' && (
               <JoinNodeConfig
+                node={selectedNode}
+                allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
+                onChange={handleFormChange}
+                readOnly={readOnly}
+              />
+            )}
+            {pipelineNode?.type === 'merge' && (
+              <MergeNodeConfig
                 node={selectedNode}
                 allNodes={allNodes}
                 pipelineDataSourceId={pipelineDataSourceId}

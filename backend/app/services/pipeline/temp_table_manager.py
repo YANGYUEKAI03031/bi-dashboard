@@ -15,6 +15,7 @@
 """
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -333,8 +334,14 @@ class TempTableManager:
         Returns:
             (columns: List[col_name], col_types: List[ mysql_type ])
         """
-        # 直接执行原 SQL + LIMIT，从 result.keys() 取列信息，无需子查询别名
-        wrapped = f"SELECT * FROM ({sql.rstrip().rstrip(';')}) AS _t LIMIT {sample_rows}"
+        # 对于包含 UNION 的 SQL，不套 SELECT * FROM (...) AS _t，避免
+        # "Every derived table must have its own alias" 错误（UNION 本身已含 derived tables）
+        sql_stripped = sql.rstrip().rstrip(';')
+        has_union = re.search(r'\bUNION\b', sql_stripped, re.IGNORECASE)
+        if has_union:
+            wrapped = f"{sql_stripped} LIMIT {sample_rows}"
+        else:
+            wrapped = f"SELECT * FROM ({sql_stripped}) AS _t LIMIT {sample_rows}"
         try:
             result = await self.connection.execute(text(wrapped))
             columns = list(result.keys()) if result.keys() else []
@@ -352,7 +359,12 @@ class TempTableManager:
             return columns, col_types
         except Exception as e:
             logger.warning(f"Schema 发现失败: {e}，回退为 TEXT 列")
-            result = await self.connection.execute(text(f"SELECT * FROM ({sql.rstrip().rstrip(';')}) AS _t LIMIT 1"))
+            # 回退时同样处理 UNION 情况
+            if has_union:
+                fallback_wrapped = f"{sql_stripped} LIMIT 1"
+            else:
+                fallback_wrapped = f"SELECT * FROM ({sql_stripped}) AS _t LIMIT 1"
+            result = await self.connection.execute(text(fallback_wrapped))
             fallback_cols = list(result.keys()) if result.keys() else []
             return fallback_cols, ["TEXT"] * len(fallback_cols)
 

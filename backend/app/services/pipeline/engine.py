@@ -511,8 +511,14 @@ class PipelineEngine:
             (total_rows, columns)
         """
         # 阶段 1: 报告"估算行数"
+        sql_stripped = sql.rstrip().rstrip(';')
+        has_union = re.search(r'\bUNION\b', sql_stripped, re.IGNORECASE)
+        if has_union:
+            # UNION SQL 本身已是最终结果，直接包装 COUNT，不需要外层子查询
+            est_sql = f"SELECT COUNT(*) FROM ({sql_stripped}) AS _cnt"
+        else:
+            est_sql = f"SELECT COUNT(*) FROM ({sql_stripped}) AS _est"
         try:
-            est_sql = f"SELECT COUNT(*) FROM ({sql.rstrip().rstrip(';')}) AS _est"
             est_result = await conn.execute(text(est_sql))
             est_row = est_result.fetchone()
             estimated = est_row[0] if est_row else 0
@@ -871,13 +877,35 @@ class PipelineEngine:
             else:
                 upstream_refs.append(f"(SELECT data_json FROM {self.temp_manager.json_table_name} WHERE step_id = '{sid}') AS _up{i}")
 
-        # 按索引替换（join 类模板已有外层 AS a/b，去掉内层 _up{i} 避免 "AS _up0 AS a"）
+        canonical_type = PipelineEngine._canonical_pipeline_node_type(node_type)
+        is_union_merge = bool(
+            merge_type and merge_type.lower() in ("union", "union all")
+        )
+        # 占位符替换前的模板快照（用于判断 JOIN 是否在占位符后紧跟 AS a/b）
+        template_for_placeholders = sql
+
+        def _upstream_ref_for_placeholder(placeholder: str, i: int) -> str:
+            """JOIN 模板为 {upstream_table_0} AS a …，子查询不得再带 AS _up；UNION 等为 FROM {upstream_table_0}，须有别名。"""
+            clean = re.sub(r"\s+AS\s+_\w+$", "", upstream_refs[i])
+            if placeholder not in template_for_placeholders:
+                return clean
+            idx = template_for_placeholders.find(placeholder)
+            tail = template_for_placeholders[
+                idx + len(placeholder) : idx + len(placeholder) + 96
+            ]
+            if re.match(r"\s*AS\s+\w+", tail, re.I):
+                return clean
+            if clean.rstrip().endswith(")"):
+                return f"{clean.rstrip()} AS _up{i}"
+            return clean
+
+        # 按索引替换
         for i in range(len(upstream_refs)):
             placeholder = f"{{upstream_table_{i}}}"
             if placeholder in sql:
-                # 去掉 upstream_refs 中的内层别名 (AS _upN)，让外层别名统一生效
-                clean_ref = re.sub(r"\s+AS\s+_\w+$", "", upstream_refs[i])
-                sql = sql.replace(placeholder, clean_ref)
+                sql = sql.replace(
+                    placeholder, _upstream_ref_for_placeholder(placeholder, i)
+                )
 
         # 替换 {prev_table} 为第一个上游引用（含 AS _up0）
         if "{prev_table}" in sql:
@@ -887,16 +915,16 @@ class PipelineEngine:
         if "{prev_step_id}" in sql:
             sql = sql.replace("{prev_step_id}", upstream_step_ids[0])
 
-        # 按 step_id 替换
+        # 按 step_id 替换（与按索引替换同一套别名规则）
         for i, sid in enumerate(upstream_step_ids):
             placeholder = f"{{upstream_table_{sid}}}"
             if placeholder in sql:
-                sql = sql.replace(placeholder, upstream_refs[i])
+                sql = sql.replace(
+                    placeholder, _upstream_ref_for_placeholder(placeholder, i)
+                )
 
         # 对于 JOIN 类型，需要展开 SELECT * 为显式列（避免同名列冲突）
         # 但对于 UNION 类型的 merge 节点，不展开 SELECT *，因为 UNION 按位置合并列
-        canonical_type = PipelineEngine._canonical_pipeline_node_type(node_type)
-        is_union_merge = merge_type and merge_type.lower() in ("union", "union all")
         if canonical_type == "join" and not is_union_merge:
             # 从 ON 子句中提取右表列（如 ON a.id = b.ref_id → ref_id）
             on_right_cols: List[str] = []
@@ -1069,10 +1097,10 @@ class PipelineEngine:
                 if up_id not in all_ids:
                     return False, f"节点 '{node.get('name', i)}' 的上游节点 '{up_id}' 不存在"
 
-            # 检查 merge_type
+            # 检查 merge_type（只允许 union / union all，关联用 join 节点）
             merge_type = node.get("merge_type")
-            if merge_type and merge_type not in ('union', 'left_join', 'right_join', 'full_join'):
-                return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | left_join | right_join | full_join"
+            if merge_type and merge_type not in ('union', 'union all'):
+                return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | union all"
 
             # 输出节点：目标表与写入模式
             ntype = PipelineEngine._canonical_pipeline_node_type(str(node.get("type") or ""))
@@ -1408,8 +1436,18 @@ class PipelineEngine:
             return out if out else None
 
         if canonical == "join":
-            # UNION 类型：列数为所有上游列之和（UNION 去重），无法精确推断
+            # UNION：若有 unionColumnPlan 可推断输出列名
             if merge_type and merge_type.lower() in ("union", "union all"):
+                plan = config.get("unionColumnPlan")
+                if isinstance(plan, list) and plan:
+                    out_names: List[str] = []
+                    for row in plan:
+                        if not isinstance(row, dict):
+                            continue
+                        o = str(row.get("out") or "").strip()
+                        if o:
+                            out_names.append(o)
+                    return out_names if out_names else None
                 return None
             join_type = str(config.get("joinType", "inner")).lower()
             # full / left_anti / right_anti / symmetric_diff 暂不处理
@@ -1568,6 +1606,45 @@ class PipelineEngine:
         return ""
 
     @staticmethod
+    def _union_branches_from_plan(
+        upstream_refs: List[Tuple[str, str]],
+        plan: List[Any],
+    ) -> List[str]:
+        """按前端 unionColumnPlan 为每个上游生成分支 SELECT，列数与别名对齐（缺列用 NULL）。"""
+        null_sql = (
+            "CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci"
+        )
+        branches: List[str] = []
+        for i, (ref, _) in enumerate(upstream_refs):
+            parts: List[str] = []
+            for row in plan:
+                if not isinstance(row, dict):
+                    continue
+                out = str(row.get("out") or "").strip()
+                if not out:
+                    continue
+                cols = row.get("cols")
+                col_list = cols if isinstance(cols, list) else []
+                raw = col_list[i] if i < len(col_list) else None
+                src = str(raw).strip() if raw is not None and str(raw).strip() else ""
+                if src:
+                    parts.append(
+                        f"{PipelineEngine._safe_identifier(src)} AS "
+                        f"{PipelineEngine._safe_identifier(out)}"
+                    )
+                else:
+                    parts.append(
+                        f"{null_sql} AS {PipelineEngine._safe_identifier(out)}"
+                    )
+            if parts:
+                branches.append(
+                    f"SELECT {', '.join(parts)} FROM ({ref}) AS _um{i}"
+                )
+            else:
+                branches.append(f"SELECT * FROM ({ref}) AS _um{i}")
+        return branches
+
+    @staticmethod
     def build_node_sql(
         node_type: str,
         config: Dict[str, Any],
@@ -1624,12 +1701,18 @@ class PipelineEngine:
                     group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in gb)}"
                 return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str}{_limit_clause}", []
 
-        # 处理 UNION 类型的 merge 节点（不展开 SELECT *，按位置合并列）
+        # 处理 UNION 类型的 merge 节点（不展开 SELECT *；有 unionColumnPlan 时按映射对齐列）
         if node_type == "join" and merge_type and merge_type.lower() in ("union", "union all"):
             if upstream_refs and len(upstream_refs) >= 2:
                 union_op = "UNION ALL" if merge_type.lower() == "union all" else "UNION"
-                # 收集所有上游子查询，用 UNION 连接
-                # upstream_refs 中的 ref 是上游节点的 SQL，直接作为子查询
+                plan_raw = config.get("unionColumnPlan")
+                if isinstance(plan_raw, list) and len(plan_raw) > 0:
+                    branches = PipelineEngine._union_branches_from_plan(
+                        upstream_refs, plan_raw
+                    )
+                    if branches:
+                        union_sql = f"\n{union_op}\n".join(branches)
+                        return f"{union_sql}{_limit_clause}", []
                 select_parts = [f"SELECT * FROM ({ref})" for ref, _ in upstream_refs]
                 union_sql = f"\n{union_op}\n".join(select_parts)
                 return f"{union_sql}{_limit_clause}", []
