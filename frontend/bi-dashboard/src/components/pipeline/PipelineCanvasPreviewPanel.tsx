@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip, Alert,
+  Input, Tooltip, Alert, Checkbox, Divider,
 } from 'antd';
 import {
   ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
@@ -239,6 +239,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>([]);
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
 
   const pipelineNode = previewNode?.data?.pipelineNode as PipelineNode | undefined;
   const nodeDef = pipelineNode ? getNodeTypeDef(pipelineNode.type) : null;
@@ -325,30 +326,74 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     setFilterOpen(false);
   }, [previewNode?.id]);
 
-  const columnsSig = previewData?.columns?.join('\0') ?? '';
+  useEffect(() => {
+    setColumnPickerOpen(false);
+  }, [previewNode?.id]);
+
+  const dataCols = previewData?.columns ?? [];
+  const columnCatalog =
+    previewData?.allColumns && previewData.allColumns.length > 0
+      ? previewData.allColumns
+      : dataCols;
 
   useEffect(() => {
     if (!previewNode) return;
-    if (savedOutputKeys.length > 0) {
-      setVisibleColumnKeys([...savedOutputKeys]);
+    const cat =
+      previewData?.allColumns && previewData.allColumns.length > 0
+        ? previewData.allColumns
+        : (previewData?.columns ?? []);
+    if (!cat.length) {
+      setVisibleColumnKeys([]);
       return;
     }
-    if (!previewData?.columns?.length) return;
-    setVisibleColumnKeys([...previewData.columns]);
-  }, [previewNode?.id, previewConfigKey, columnsSig]);
+    if (savedOutputKeys.length > 0) {
+      const filtered = savedOutputKeys.filter((k) => cat.includes(k));
+      setVisibleColumnKeys(filtered.length ? filtered : [...cat]);
+      return;
+    }
+    setVisibleColumnKeys([...cat]);
+  }, [
+    previewNode?.id,
+    previewConfigKey,
+    previewData?.columns?.join('\0'),
+    previewData?.allColumns?.join('\0'),
+    savedOutputKeys,
+  ]);
+
+  const catalogAllSelected =
+    columnCatalog.length > 0 &&
+    visibleColumnKeys.length === columnCatalog.length &&
+    columnCatalog.every((c) => visibleColumnKeys.includes(c));
+  const catalogIndeterminate =
+    visibleColumnKeys.length > 0 &&
+    visibleColumnKeys.length < columnCatalog.length &&
+    !catalogAllSelected;
 
   /** 列选变更：同步写入节点 config.outputColumnKeys 并触发 onNodeUpdate */
   const handleColumnSelect = (keys: string[]) => {
-    if (!previewNode || !onNodeUpdate) return;
+    if (!previewNode) return;
+    const catalog = columnCatalog;
+    if (!catalog.length) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const newCfg = { ...(pn.config as Record<string, unknown> || {}), outputColumnKeys: keys };
-    onNodeUpdate({
-      ...previewNode,
-      data: {
-        ...previewNode.data,
-        pipelineNode: { ...pn, config: newCfg },
-      },
-    });
+    const isAll =
+      keys.length === 0 ||
+      (keys.length === catalog.length && catalog.every((c) => keys.includes(c)));
+    const persisted: string[] = isAll ? [] : [...keys];
+    const nextVisible = isAll ? [...catalog] : [...keys];
+    setVisibleColumnKeys(nextVisible);
+    if (onNodeUpdate) {
+      const newCfg = {
+        ...(pn.config as Record<string, unknown> || {}),
+        outputColumnKeys: persisted,
+      };
+      onNodeUpdate({
+        ...previewNode,
+        data: {
+          ...previewNode.data,
+          pipelineNode: { ...pn, config: newCfg },
+        },
+      });
+    }
   };
 
   const previewColumnFormats = pipelineNode?.config
@@ -438,7 +483,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   }
 
   const title = previewDatasetTitle(previewNode);
-  const allCols = previewData?.columns ?? [];
   const activeFilterCount = localConditions.filter((c) => c.column && c.operator).length;
 
   return (
@@ -448,23 +492,54 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
           {title}
         </Text>
         <div className="pipeline-canvas-preview-toolbar-right">
-          {allCols.length > 0 && (
-            <Select
-              mode="multiple"
-              allowClear
-              maxTagCount={0}
-              placeholder={`列(${visibleColumnKeys.length || allCols.length})`}
-              value={visibleColumnKeys.length ? visibleColumnKeys : allCols}
-              onChange={(keys) => {
-                setVisibleColumnKeys(keys.length ? keys : allCols);
-                handleColumnSelect(keys.length ? keys : allCols);
-              }}
-              options={allCols.map((c) => ({ label: c, value: c }))}
-              style={{ minWidth: 160 }}
-              size="small"
-              showSearch
-              optionFilterProp="label"
-            />
+          {columnCatalog.length > 0 && (
+            <Popover
+              trigger="click"
+              open={columnPickerOpen}
+              onOpenChange={setColumnPickerOpen}
+              title={null}
+              content={
+                <div style={{ width: 220 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <Checkbox
+                      indeterminate={catalogIndeterminate}
+                      checked={catalogAllSelected}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const next = checked ? [...columnCatalog] : [];
+                        handleColumnSelect(next);
+                      }}
+                    >
+                      全选 ({columnCatalog.length})
+                    </Checkbox>
+                  </div>
+                  <Divider style={{ margin: '6px 0' }} />
+                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    {columnCatalog.map((col) => (
+                      <Checkbox
+                        key={col}
+                        checked={visibleColumnKeys.includes(col)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...visibleColumnKeys, col]
+                            : visibleColumnKeys.filter((c) => c !== col);
+                          handleColumnSelect(next);
+                        }}
+                        style={{ display: 'flex', margin: '4px 0' }}
+                      >
+                        {col}
+                      </Checkbox>
+                    ))}
+                  </div>
+                </div>
+              }
+            >
+              <Button size="small" style={{ minWidth: 120 }}>
+                {catalogAllSelected
+                  ? `列 (${columnCatalog.length})`
+                  : `已选 ${visibleColumnKeys.length} / ${columnCatalog.length}`}
+              </Button>
+            </Popover>
           )}
 
           {/* 行筛选入口 */}
@@ -475,7 +550,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             title={null}
             content={
               <FilterEditor
-                columns={allCols}
+                columns={columnCatalog}
                 conditions={localConditions}
                 logic={localLogic}
                 readOnly={!onNodeUpdate}
@@ -540,7 +615,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             compact={false}
             striped
             displayColumnKeys={
-              visibleColumnKeys.length ? visibleColumnKeys.filter((c) => allCols.includes(c)) : undefined
+              visibleColumnKeys.length
+                ? visibleColumnKeys.filter((c) => dataCols.includes(c))
+                : undefined
             }
             columnFormatOverrides={previewColumnFormats}
             onColumnFormatChange={onNodeUpdate ? handlePreviewColumnFormatChange : undefined}

@@ -12,6 +12,8 @@ import { mergeTypeForPreviewApi } from '../utils/pipelineMergeSql';
 
 export interface PreviewData {
   columns: string[];
+  /** 链式预览在列投影前的完整列名（与 columns 可能不同，供列选择器展示） */
+  allColumns?: string[];
   columnTypes?: string[];
   rows: Record<string, unknown>[];
   total: number;
@@ -115,8 +117,10 @@ export function useNodePreview() {
         }
 
         const data = await response.json();
+        const ac = data.all_columns;
         const result: PreviewData = {
           columns: data.columns || [],
+          allColumns: Array.isArray(ac) && ac.length > 0 ? ac : undefined,
           columnTypes: data.column_types || [],
           rows: data.rows || [],
           total: data.total ?? data.rows?.length ?? 0,

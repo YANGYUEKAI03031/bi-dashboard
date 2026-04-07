@@ -290,3 +290,7 @@ class NodePreviewResponse(BaseModel):
     total: int
     has_more: bool
     sql_generated: str = Field(default="", description="实际生成的 SQL（调试用）")
+    all_columns: Optional[List[str]] = Field(
+        default=None,
+        description="链式预览在列投影前 focus 节点的全部列名，供列选择器展示未选列",
+    )

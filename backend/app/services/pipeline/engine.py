@@ -15,6 +15,7 @@ Step 1: 从临时表读取 step_0 -> 执行节点 1 的 SQL -> 临时表(step_1)
 Step 2: 从临时表读取 step_1 -> 执行节点 2 的 SQL -> 临时表(step_2)
 ...以此类推
 """
+import copy
 import json
 import logging
 import re
@@ -1403,7 +1404,11 @@ class PipelineEngine:
         canonical = PipelineEngine._canonical_pipeline_node_type(node_type)
 
         if canonical == "source":
-            # source 节点无上游，无法推断具体列名
+            # 无 outputColumnKeys 时无法推断（SELECT *）；有列选时与预览 JOIN 展开一致
+            keys = config.get("outputColumnKeys", []) or []
+            if isinstance(keys, list) and keys:
+                out = [str(k).strip() for k in keys if str(k).strip()]
+                return out if out else None
             return None
 
         if canonical == "filter":
@@ -1528,8 +1533,8 @@ class PipelineEngine:
         替换为显式列列表。
 
         展开规则（与 _join_explicit_select_list / _build_step_sql 语义一致）：
-        - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列）。
-        - 仅右表列已知：生成 `a.*, b.col1, b.col2, ...`（b.col 排除 ON 右列）。
+        - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列及与左表同名的列）。
+        - 仅右表列已知：`a.*` + 右表列（排除 ON 右列），右表列带 `{列名}_b` 别名以防与 a.* 同名。
         - 仅左表列已知：对称处理。
         - 两侧均未知：不做替换。
         """
@@ -1555,12 +1560,15 @@ class PipelineEngine:
             )
 
         if left_cols is None and right_cols is not None:
-            # 仅右表列已知：a.* + 右表显式列（排除 ON 右列）
+            # 仅右表列已知：a.* + 右表显式列（排除 ON 右列）。
+            # 左表列未知时 a.* 可能已含与右表同名的列（如物理列与聚合别名均叫 sum_星级），
+            # 再写 b.`同名` 会导致派生表 Duplicate column name；右表列用后缀别名保证唯一。
             right_parts: List[str] = []
-            left_set: Set[str] = set()
             for c in right_cols:
-                if c not in left_set and c not in on_set:
-                    right_parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
+                if c not in on_set:
+                    b_expr = f"b.{PipelineEngine._safe_identifier(c)}"
+                    alias = PipelineEngine._safe_identifier(f"{c}_b")
+                    right_parts.append(f"{b_expr} AS {alias}")
             sel = f"a.*, {', '.join(right_parts)}" if right_parts else "a.*"
             return re.sub(
                 r"SELECT\s+\*\s+FROM\s*\(",
@@ -1966,6 +1974,21 @@ class PipelineEngine:
 
         return node_sqls.get(focus_node_id, "")
 
+    @staticmethod
+    def _graph_focus_without_output_column_keys(
+        graph_nodes: Dict[str, Dict[str, Any]],
+        focus_node_id: str,
+    ) -> Dict[str, Dict[str, Any]]:
+        """深拷贝图并在 focus 节点上去掉 outputColumnKeys，用于预览「全列」元数据查询。"""
+        out = copy.deepcopy(graph_nodes)
+        if focus_node_id not in out:
+            return out
+        node = out[focus_node_id]
+        cfg = dict(node.get("config") or {})
+        cfg.pop("outputColumnKeys", None)
+        out[focus_node_id] = {**node, "config": cfg}
+        return out
+
     async def preview_node(
         self,
         node_type: str,
@@ -2027,7 +2050,39 @@ class PipelineEngine:
                             item[k] = v.isoformat()
                     data.append(item)
 
-                return {
+                all_columns: Optional[List[str]] = None
+                if (
+                    graph_nodes is not None
+                    and focus_node_id
+                    and focus_node_id in graph_nodes
+                ):
+                    foc_cfg = graph_nodes[focus_node_id].get("config") or {}
+                    out_keys = foc_cfg.get("outputColumnKeys") or []
+                    if isinstance(out_keys, list) and len(out_keys) > 0:
+                        g_clear = PipelineEngine._graph_focus_without_output_column_keys(
+                            graph_nodes, focus_node_id
+                        )
+                        sql_full = PipelineEngine.build_chained_sql(
+                            focus_node_id,
+                            g_clear,
+                            graph_edges or [],
+                            limit=1,
+                        )
+                        if sql_full and sql_full.strip():
+                            try:
+                                r_meta = await conn.execute(text(sql_full))
+                                all_columns = (
+                                    list(r_meta.keys())
+                                    if hasattr(r_meta, "keys") and r_meta.keys()
+                                    else []
+                                )
+                            except Exception as meta_err:
+                                logger.warning(
+                                    "预览全列名查询失败（列选择 UI 将退化为当前投影列）: %s",
+                                    meta_err,
+                                )
+
+                payload: Dict[str, Any] = {
                     "columns": columns,
                     "column_types": col_types,
                     "rows": data,
@@ -2035,6 +2090,9 @@ class PipelineEngine:
                     "has_more": len(data) >= limit,
                     "sql_generated": sql,
                 }
+                if all_columns is not None:
+                    payload["all_columns"] = all_columns
+                return payload
         except Exception as e:
             logger.error(f"节点预览失败: {e}")
             raise ValueError(f"预览失败: {str(e)}")
