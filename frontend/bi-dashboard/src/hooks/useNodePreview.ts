@@ -136,7 +136,7 @@ export function useNodePreview() {
       } finally {
         setPreviewLoading(false);
       }
-    }, immediate ? 0 : 500);
+    }, immediate ? 0 : 750);
   }, []);
 
   const clearPreview = useCallback(() => {

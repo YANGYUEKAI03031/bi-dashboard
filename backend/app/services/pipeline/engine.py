@@ -831,6 +831,65 @@ class PipelineEngine:
                     parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
         return ", ".join(parts)
 
+    @staticmethod
+    def _join_preview_allowed_sql_columns(
+        join_type: str,
+        left_cols: Optional[List[str]],
+        right_cols: Optional[List[str]],
+        on_right_cols: Optional[List[str]],
+        symmetric_union_plan: Optional[List[Any]] = None,
+    ) -> Optional[Set[str]]:
+        """
+        链式预览中，JOIN 内层子查询在「当前类型 + 列推断」下实际存在的列名集合。
+        用于过滤 config.outputColumnKeys 中已失效的键（例如 Inner 时产生的 sum_星级_b
+        在 Left Anti 下不存在）。
+
+        若无法完整枚举（如 inner/left/right 且仅一侧列可知、另一侧为 a.* / b.*），返回 None
+        表示不按白名单过滤。
+        """
+        jt = (join_type or "inner").lower()
+        on_set = set(on_right_cols) if on_right_cols else set()
+
+        if jt == "left_anti":
+            return set(left_cols) if left_cols is not None else None
+        if jt == "right_anti":
+            return set(right_cols) if right_cols is not None else None
+        if jt == "symmetric_diff":
+            plan = symmetric_union_plan
+            if isinstance(plan, list) and plan:
+                outs: List[str] = []
+                for row in plan:
+                    if isinstance(row, dict):
+                        o = str(row.get("out") or row.get("alias") or "").strip()
+                        if o:
+                            outs.append(o)
+                if outs:
+                    return set(outs)
+            return None
+        # FULL OUTER 两半 UNION 的列与 LEFT JOIN 结果一致，按 left 枚举可投影列
+        if jt == "full":
+            jt = "left"
+        if jt not in ("inner", "left", "right"):
+            return None
+
+        if left_cols is not None and right_cols is not None:
+            left_set = set(left_cols)
+            names: List[str] = list(left_cols)
+            for c in right_cols:
+                if c not in left_set and c not in on_set:
+                    names.append(c)
+            return set(names)
+
+        if left_cols is not None and right_cols is None and jt in ("left", "right") and on_right_cols:
+            # LEFT/RIGHT JOIN：展开为左显式列 + 右表独有列（ON 列排除，加 _b 别名）
+            names = list(left_cols)
+            for c in (right_cols or []):
+                if c not in on_set:
+                    names.append(f"{c}_b")
+            return set(names)
+
+        return None
+
     def _build_step_sql(
         self,
         step_sql: str,
@@ -1357,11 +1416,18 @@ class PipelineEngine:
         return f"SELECT * FROM ({sql}) AS _r{where}"
 
     @staticmethod
-    def _apply_column_projection(sql: str, config: Dict[str, Any]) -> str:
+    def _apply_column_projection(
+        sql: str,
+        config: Dict[str, Any],
+        allowed_sql_columns: Optional[Set[str]] = None,
+    ) -> str:
         """
         若 config 中含 outputColumnKeys，外层投影这些列。
         列名优先用 outputColumnKeys 中保存的原始列名；
         若含 renameMap 也支持别名映射。
+
+        allowed_sql_columns 非空时，只保留「内层结果中确实存在」的列（按 renameMap 映射前的
+        源列名校验），避免 JOIN 类型切换后仍引用旧列名导致 1054。
         """
         if not sql:
             return ""
@@ -1370,13 +1436,22 @@ class PipelineEngine:
             return sql
         # 支持 renameMap: { newName: oldName }
         rename_map: Dict[str, str] = config.get("renameMap", {})
+        keys_use: List[str] = list(output_keys)
+        if allowed_sql_columns is not None:
+            keys_use = [
+                col
+                for col in output_keys
+                if str(rename_map.get(col, col)).strip() in allowed_sql_columns
+            ]
+            if not keys_use:
+                return sql
         safe_cols: List[str] = []
-        for col in output_keys:
+        for col in keys_use:
             old_name = rename_map.get(col, col)
             if col != old_name:
                 safe_cols.append(f"{PipelineEngine._safe_identifier(old_name)} AS {PipelineEngine._safe_identifier(col)}")
             else:
-                safe_cols.append(PipelineEngine._safe_identifier(col))
+                safe_cols.append(PipelineEngine._safe_identifier(old_name))
         if not safe_cols:
             return sql
         cols_str = ", ".join(safe_cols)
@@ -1404,10 +1479,15 @@ class PipelineEngine:
         canonical = PipelineEngine._canonical_pipeline_node_type(node_type)
 
         if canonical == "source":
-            # 无 outputColumnKeys 时无法推断（SELECT *）；有列选时与预览 JOIN 展开一致
+            # 列选优先（与源节点实际投影一致）；否则用表结构缓存，供 JOIN 展开避免 b.* 重名
             keys = config.get("outputColumnKeys", []) or []
             if isinstance(keys, list) and keys:
                 out = [str(k).strip() for k in keys if str(k).strip()]
+                if out:
+                    return out
+            schema = config.get("sourceSchemaColumns", []) or []
+            if isinstance(schema, list) and schema:
+                out = [str(c).strip() for c in schema if str(c).strip()]
                 return out if out else None
             return None
 
@@ -1454,14 +1534,21 @@ class PipelineEngine:
                             out_names.append(o)
                     return out_names if out_names else None
                 return None
-            join_type = str(config.get("joinType", "inner")).lower()
-            # full / left_anti / right_anti / symmetric_diff 暂不处理
-            if join_type not in ("inner", "left", "right"):
-                return None
             if not upstream_cols or len(upstream_cols) < 2:
                 return None
             left_cols = upstream_cols[0]
             right_cols = upstream_cols[1]
+            join_type = str(config.get("joinType", "inner")).lower()
+
+            if join_type == "left_anti":
+                return list(left_cols) if left_cols is not None else None
+            if join_type == "right_anti":
+                return list(right_cols) if right_cols is not None else None
+            if join_type in ("full", "symmetric_diff"):
+                return None
+            if join_type not in ("inner", "left", "right"):
+                return None
+
             if left_cols is None and right_cols is None:
                 return None
             if left_cols is not None and right_cols is not None:
@@ -1527,22 +1614,23 @@ class PipelineEngine:
         left_cols: Optional[List[str]],
         right_cols: Optional[List[str]],
         on_right_cols: Optional[List[str]] = None,
+        join_type: str = "inner",
     ) -> str:
         """
         将 JOIN SQL 中的 `SELECT * FROM (...) AS a ... JOIN ... AS b ON ...`
         替换为显式列列表。
 
-        展开规则（与 _join_explicit_select_list / _build_step_sql 语义一致）：
+        展开规则：
         - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列及与左表同名的列）。
         - 仅右表列已知：`a.*` + 右表列（排除 ON 右列），右表列带 `{列名}_b` 别名以防与 a.* 同名。
-        - 仅左表列已知：对称处理。
+        - 仅左表列已知（LEFT/RIGHT）：左显式列 + 右表独有列（排除 ON 右列加 _b）；INNER 用 b.*。
         - 两侧均未知：不做替换。
         """
         up = sql.upper()
         if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
             return sql
 
-        # 检查是否真的是 SELECT * 形态
+        # 检查是否真的是 SELECT * 形态（必须以 SELECT * FROM ( 开头）
         if not re.search(r"^\s*SELECT\s+\*\s+FROM\s*\(", sql, re.IGNORECASE):
             return sql
 
@@ -1579,9 +1667,23 @@ class PipelineEngine:
             )
 
         if left_cols is not None and right_cols is None:
-            # 仅左表列已知：左表显式列 + b.*
-            left_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-            sel = f"{', '.join(left_parts)}, b.*"
+            # 仅左表列已知：LEFT/RIGHT JOIN 用左显式列 + 右显式列（排除 ON 右列，加 _b 别名），
+            # 因为 b.* 会把 ON 列（如运营）也包进来与 a.运营 重复。
+            # INNER JOIN 可直接用左显式列 + b.*（b.* 中同名列会被 inner 的 _join_explicit_select_list 排除）。
+            if join_type in ("left", "right") and on_right_cols:
+                # 展开为 a.col1, a.col2, ..., 右表独有列（含 ON 列加 _b 别名，但 ON 列本身排除）
+                on_ex_set = set(on_right_cols)
+                sel_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+                for c in (right_cols or []):
+                    if c not in on_ex_set:
+                        sel_parts.append(
+                            f"b.{PipelineEngine._safe_identifier(c)} AS {PipelineEngine._safe_identifier(c)}_b"
+                        )
+                sel = ", ".join(sel_parts)
+            else:
+                # INNER 且右列未知：直接用 b.*
+                left_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+                sel = f"{', '.join(left_parts)}, b.*"
             return re.sub(
                 r"SELECT\s+\*\s+FROM\s*\(",
                 f"SELECT {sel} FROM (",
@@ -1931,6 +2033,13 @@ class PipelineEngine:
                 ntype, nconfig, refs if refs else None, apply_limit=False, limit=limit,
                 merge_type=nmerge_type
             )
+            logger.debug(
+                "build_chained node=%s type=%s core_sql=%s left_cols=%s right_cols=%s",
+                nid, ntype,
+                (core_sql[:200] + "...") if core_sql and len(core_sql) > 200 else (core_sql or "(empty)"),
+                upstream_cols[0] if len(upstream_cols) > 0 else None,
+                upstream_cols[1] if len(upstream_cols) > 1 else None,
+            )
 
             # 对 JOIN 节点（inner/left/right）展开 SELECT *，避免 ON 列重复
             canonical = PipelineEngine._canonical_pipeline_node_type(ntype)
@@ -1948,19 +2057,69 @@ class PipelineEngine:
                         upstream_cols[0],
                         upstream_cols[1],
                         on_right_cols if on_right_cols else None,
+                        join_type=join_type,
                     )
 
             # 对当前节点 config 应用行筛选包装（等效于在下游前插 filter 节点）
             wrapped_sql = PipelineEngine._apply_row_filter(core_sql, nconfig)
 
-            # 对当前节点 config 应用列投影包装
-            wrapped_sql = PipelineEngine._apply_column_projection(wrapped_sql, nconfig)
+            # JOIN：按当前类型与可推断列过滤 outputColumnKeys，避免切换 Anti / Inner 后引用旧列名
+            allowed_proj: Optional[Set[str]] = None
+            skip_proj = False  # 两侧列均未知时跳过列投影，避免 SELECT * + 选无效列 1054
+            if canonical == "join" and len(upstream_cols) >= 2:
+                jt_allow = str(nconfig.get("joinType", "inner")).lower()
+                on_r: List[str] = []
+                for k in nconfig.get("joinKeys", []) or []:
+                    if rc := str(k.get("rightCol", "") or "").strip():
+                        on_r.append(rc)
+                if not on_r:
+                    on_r = PipelineEngine._extract_join_on_right_column_names_from_sql(core_sql)
+                lc0, rc1 = upstream_cols[0], upstream_cols[1]
+                if lc0 is None and rc1 is None:
+                    # 两侧均不可推断，投影无效列会导致 1054
+                    skip_proj = True
+                sym_plan = (
+                    nconfig.get("symmetricUnionPlan")
+                    if jt_allow == "symmetric_diff"
+                    else None
+                )
+                allowed_proj = PipelineEngine._join_preview_allowed_sql_columns(
+                    jt_allow,
+                    lc0,
+                    rc1,
+                    on_r if on_r else None,
+                    sym_plan,
+                )
+                if jt_allow == "symmetric_diff" and allowed_proj is None:
+                    skip_proj = True
+                elif jt_allow == "left_anti" and lc0 is None:
+                    skip_proj = True
+                elif jt_allow == "right_anti" and rc1 is None:
+                    skip_proj = True
+
+            if not skip_proj:
+                wrapped_sql = PipelineEngine._apply_column_projection(
+                    wrapped_sql, nconfig, allowed_proj
+                )
 
             # 推断当前节点的输出列（用于下游 JOIN 展开）
-            # 注意：若 wrapped_sql 被 _apply_column_projection 投影了，用 outputColumnKeys
             output_keys: List[str] = nconfig.get("outputColumnKeys", []) or []
+            rename_nm: Dict[str, str] = dict(nconfig.get("renameMap") or {})
             if output_keys:
-                node_columns[nid] = list(output_keys)
+                if allowed_proj is not None:
+                    eff = [
+                        col
+                        for col in output_keys
+                        if str(rename_nm.get(col, col)).strip() in allowed_proj
+                    ]
+                    node_columns[nid] = eff if eff else PipelineEngine._preview_infer_output_columns(
+                        ntype, nconfig, upstream_cols, nmerge_type
+                    )
+                elif canonical == "join" and len(upstream_cols) >= 2 and upstream_cols[0] is None and upstream_cols[1] is None:
+                    # 两侧均不可推断时设为 None，避免下游引用无效列名（如 sum_级星_b）
+                    node_columns[nid] = None
+                else:
+                    node_columns[nid] = list(output_keys)
             else:
                 node_columns[nid] = PipelineEngine._preview_infer_output_columns(
                     ntype, nconfig, upstream_cols, nmerge_type

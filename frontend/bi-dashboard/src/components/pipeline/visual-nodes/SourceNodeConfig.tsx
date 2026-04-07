@@ -98,7 +98,27 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
     setColsLoading(true);
     DataSourceService.getTableColumns(String(effectiveDsId), selectedTable)
       .then((cols) => {
-        if (!cancelled) setTableColumns(cols);
+        if (cancelled) return;
+        setTableColumns(cols);
+        if (!readOnly && cols.length > 0) {
+          const names = cols.map((c) => c.name).filter(Boolean);
+          const pn = node.data.pipelineNode as Record<string, unknown>;
+          const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
+          const prev = cfg.sourceSchemaColumns as string[] | undefined;
+          const same =
+            Array.isArray(prev) &&
+            prev.length === names.length &&
+            prev.every((n, i) => n === names[i]);
+          if (!same) {
+            cfg.sourceSchemaColumns = names;
+            node.data = {
+              ...node.data,
+              pipelineNode: { ...pn, config: cfg },
+            };
+            form.setFieldsValue({ config: cfg });
+            onChange();
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setTableColumns([]);
@@ -106,8 +126,11 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       .finally(() => {
         if (!cancelled) setColsLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [effectiveDsId, selectedTable]);
+    // 仅随库/表变化拉取结构；不把 node 放入依赖以免 onChange 触发的重渲染反复请求
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveDsId, selectedTable, readOnly]);
 
   const handleDataSourceChange = (dsId: number | undefined) => {
     if (readOnly) return;
@@ -122,6 +145,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
           source_data_source_id: dsId,
           tableName: undefined,
           incrementalMode: false,
+          sourceSchemaColumns: undefined,
         },
         sql: '',
       },
@@ -144,6 +168,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
           ...currentConfig,
           tableName: tableName || undefined,
           incrementalMode: tableName ? (currentConfig.incrementalMode ?? false) : false,
+          sourceSchemaColumns: undefined,
         },
         sql: tableName ? `SELECT * FROM \`${tableName}\`` : '',
       },
