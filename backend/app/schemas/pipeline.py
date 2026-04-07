@@ -259,6 +259,68 @@ class GraphNodeSchema(BaseModel):
     merge_type: Optional[str] = Field(default=None, description="merge 节点合并类型: union | left_join | right_join | full_join")
 
 
+class InsertedColumnConfig(BaseModel):
+    """插入新列的配置"""
+    name: str = Field(..., description="新列名")
+    method: str = Field(
+        ...,
+        description="方法类型: calculation | split | function | lookup | rank | category | bin"
+    )
+    source_column: str = Field(..., description="源列名")
+    config: Dict[str, Any] = Field(default_factory=dict, description="方法特定配置")
+
+
+class CalculationConfig(BaseModel):
+    """计算列配置"""
+    expression: str = Field(..., description="计算表达式，如 A + B 或 (A + B) * 1.1")
+
+
+class SplitConfig(BaseModel):
+    """分列配置"""
+    delimiter: Optional[str] = Field(None, description="分隔符，如 , 或 |")
+    regex: Optional[str] = Field(None, description="正则表达式")
+    position: int = Field(default=1, ge=1, description="提取第N部分，从1开始")
+    split_type: str = Field(default="delimiter", description="split_type: delimiter | regex | fixed")
+
+
+class FunctionConfig(BaseModel):
+    """函数配置"""
+    function_name: str = Field(..., description="函数名: CONCAT | SUBSTRING | TRIM | UPPER | LOWER | YEAR | MONTH | DAY | ROUND | ABS | IF")
+    arguments: List[Any] = Field(default_factory=list, description="函数参数列表")
+
+
+class LookupConfig(BaseModel):
+    """查找替换配置"""
+    lookup_table: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="查找映射表: [{key: '北京', value: '北方'}, {key: '上海', value: '南方'}]"
+    )
+    default_value: Optional[str] = Field(None, description="未匹配时的默认值")
+
+
+class RankConfig(BaseModel):
+    """排名配置"""
+    partition_by: List[str] = Field(default_factory=list, description="分区字段列表")
+    order_by: Dict[str, str] = Field(..., description="排序配置: {column: 'col1', direction: 'desc'}")
+    rank_type: str = Field(default="ROW_NUMBER", description="排名类型: ROW_NUMBER | RANK | DENSE_RANK")
+
+
+class CategoryConfig(BaseModel):
+    """分类分组配置"""
+    ranges: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="区间配置: [{from: 0, to: 1000, label: '低'}, {from: 1000, to: 5000, label: '中'}, {from: 5000, to: null, label: '高'}]"
+    )
+    default_label: str = Field(default="其他", description="未匹配时的默认标签")
+
+
+class BinConfig(BaseModel):
+    """区间提取配置"""
+    bin_type: str = Field(default="fixed", description="bin_type: fixed | custom")
+    bin_size: Optional[float] = Field(None, description="固定区间大小")
+    custom_bins: Optional[List[float]] = Field(None, description="自定义区间边界")
+
+
 class NodePreviewRequest(BaseModel):
     """节点预览请求 - 用于无代码编辑器的实时预览"""
     node_type: str = Field(..., description="节点类型: source | filter | aggregate | join | column_select | output")

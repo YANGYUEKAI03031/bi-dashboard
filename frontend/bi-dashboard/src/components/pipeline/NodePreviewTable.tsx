@@ -3,9 +3,9 @@
  * 画布底部浏览区与节点内紧凑预览共用。
  * Supports both compact (3-row) and full paginated modes.
  */
-import React, { useState } from 'react';
-import { Table, Typography, Tag, Tooltip, Button, Space, Dropdown } from 'antd';
-import { LeftOutlined, RightOutlined, DownloadOutlined } from '@ant-design/icons';
+import React, { useState, useMemo } from 'react';
+import { Table, Typography, Tag, Tooltip, Button, Space, Dropdown, MenuProps } from 'antd';
+import { LeftOutlined, RightOutlined, DownloadOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { getDataTypeInfo } from '../../utils/nodeTypeRegistry';
 import type { PreviewData } from '../../hooks/useNodePreview';
@@ -18,6 +18,7 @@ import {
   formatPreviewCellValue,
 } from '../../utils/previewDisplayUtils';
 import { isNil } from '../../utils/isNil';
+import { InsertedColumnConfig } from './InsertColumnModal';
 
 const { Text } = Typography;
 
@@ -38,6 +39,16 @@ interface NodePreviewTableProps {
   columnFormatOverrides?: Record<string, string>;
   /** 列格式变更（画布预览写入节点 config） */
   onColumnFormatChange?: (columnKey: string, format: string) => void;
+  /** 插入新列回调 */
+  onInsertColumn?: (config: InsertedColumnConfig) => void;
+  /** 删除列回调 */
+  onDeleteColumn?: (columnKey: string) => void;
+  /** 重命名列回调 */
+  onRenameColumn?: (oldName: string, newName: string) => void;
+  /** 已插入的列配置列表（双击可编辑） */
+  insertedColumns?: InsertedColumnConfig[];
+  /** 双击插入列标签回调 */
+  onEditInsertColumn?: (config: InsertedColumnConfig) => void;
 }
 
 function currentFormatSelectValue(
@@ -63,10 +74,16 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   displayColumnKeys,
   columnFormatOverrides,
   onColumnFormatChange,
+  onInsertColumn,
+  onDeleteColumn,
+  onRenameColumn,
+  insertedColumns,
+  onEditInsertColumn,
 }) => {
   const [page, setPage] = useState(1);
+  const [contextMenuColumn, setContextMenuColumn] = useState<string | null>(null);
 
-  const columnsOrdered = React.useMemo(() => {
+  const columnsOrdered = useMemo(() => {
     if (!data?.columns?.length) {
       return [];
     }
@@ -75,6 +92,16 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
     }
     return displayColumnKeys.filter((c) => data.columns.includes(c));
   }, [data, displayColumnKeys]);
+
+  const insertedColNames = useMemo(() => {
+    if (!insertedColumns?.length) return [];
+    const seen = new Set<string>();
+    return insertedColumns.filter((c) => {
+      if (seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    });
+  }, [insertedColumns]);
 
   if (!data || data.columns.length === 0) {
     return (
@@ -88,8 +115,59 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   const maxPage = Math.max(1, Math.ceil(data.rows.length / pageSize));
   const startIdx = (page - 1) * pageSize;
   const pagedRows = compact ? displayRows : data.rows.slice(startIdx, startIdx + pageSize);
-
   const colList = columnsOrdered.length ? columnsOrdered : data.columns;
+
+  const getContextMenuItems = (column: string): MenuProps['items'] => {
+    const items: MenuProps['items'] = [
+      {
+        key: 'insert-column',
+        label: '插入新列',
+        icon: <PlusOutlined />,
+        onClick: () => {
+          if (onInsertColumn) {
+            onInsertColumn({
+              name: '',
+              method: 'calculation',
+              sourceColumn: column,
+              config: {},
+            });
+          }
+        },
+      },
+    ];
+
+    if (!compact) {
+      items.push(
+        { type: 'divider' },
+        {
+          key: 'rename-column',
+          label: '重命名列',
+          icon: <span style={{ fontSize: 12 }}>✏️</span>,
+          onClick: () => {
+            if (onRenameColumn) {
+              const newName = prompt(`请输入 "${column}" 的新名称：`);
+              if (newName && newName.trim()) {
+                onRenameColumn(column, newName.trim());
+              }
+            }
+          },
+        },
+        {
+          key: 'delete-column',
+          label: '删除列',
+          danger: true,
+          icon: <span style={{ fontSize: 12 }}>🗑️</span>,
+          onClick: () => {
+            if (onDeleteColumn) {
+              onDeleteColumn(column);
+            }
+          },
+        }
+      );
+    }
+
+    return items;
+  };
 
   const columns: ColumnsType<Record<string, unknown>> = colList.map((col) => {
     const ti = data.columns.indexOf(col);
@@ -159,10 +237,21 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
     }
     return {
       title: (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          {typeChip}
-          <span style={{ fontSize: 12 }}>{col}</span>
-        </div>
+        <Dropdown
+          menu={{ items: getContextMenuItems(col) }}
+          trigger={['contextMenu']}
+        >
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenuColumn(col);
+            }}
+          >
+            {typeChip}
+            <span style={{ fontSize: 12 }}>{col}</span>
+          </div>
+        </Dropdown>
       ),
       dataIndex: col,
       key: col,
@@ -180,6 +269,37 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
             {data.total > 3 ? `约 ${data.total} 行` : `共 ${data.total} 行`}
             {data.hasMore && '（仅显示前 3 行）'}
           </Text>
+        </div>
+      )}
+
+      {!compact && insertedColNames.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 6,
+            marginBottom: 8,
+            padding: '6px 10px',
+            background: '#F6FFED',
+            border: '1px solid #B7EB8F',
+            borderRadius: 6,
+          }}
+        >
+          <Text type="secondary" style={{ fontSize: 11, marginRight: 4 }}>
+            新加列：
+          </Text>
+          {insertedColNames.map((col) => (
+            <Tag
+              key={col.name}
+              color="green"
+              style={{ cursor: 'pointer', margin: 0 }}
+              onDoubleClick={() => onEditInsertColumn?.(col)}
+              title="双击编辑此列"
+            >
+              {col.name}
+            </Tag>
+          ))}
         </div>
       )}
       <Table

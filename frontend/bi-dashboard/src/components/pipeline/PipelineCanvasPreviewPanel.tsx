@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip, Alert, Checkbox, Divider,
+  Input, Tooltip, Alert, Checkbox, Divider, Modal,
 } from 'antd';
 import {
   ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
@@ -18,6 +18,7 @@ import { PipelineNode } from '../../services/pipelineService';
 import { getNodeTypeDef } from '../../utils/nodeTypeRegistry';
 import { resolvePreviewDataSourceId } from '../../utils/pipelineDataSourceUtils';
 import { NodePreviewTable } from './NodePreviewTable';
+import { InsertColumnModal, InsertedColumnConfig } from './InsertColumnModal';
 import { useNodePreview } from '../../hooks/useNodePreview';
 import { PREVIEW_COLUMN_DISPLAY_AUTO } from '../../constants/previewColumnDisplay';
 import { getPreviewColumnFormatsFromConfig } from '../../utils/previewDisplayUtils';
@@ -240,6 +241,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const [insertColumnModalOpen, setInsertColumnModalOpen] = useState(false);
+  const [insertColumnSourceColumn, setInsertColumnSourceColumn] = useState<string | undefined>();
+  const [insertColumnEditConfig, setInsertColumnEditConfig] = useState<InsertedColumnConfig | undefined>();
 
   const pipelineNode = previewNode?.data?.pipelineNode as PipelineNode | undefined;
   const nodeDef = pipelineNode ? getNodeTypeDef(pipelineNode.type) : null;
@@ -459,6 +463,99 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     setFilterOpen(false);
   };
 
+  /** 打开插入列弹窗 */
+  const handleOpenInsertColumn = (sourceColumn?: string) => {
+    setInsertColumnSourceColumn(sourceColumn);
+    setInsertColumnEditConfig(undefined);
+    setInsertColumnModalOpen(true);
+  };
+
+  /** 双击插入列标签 → 重新打开编辑 */
+  const handleEditInsertColumn = (config: InsertedColumnConfig) => {
+    setInsertColumnEditConfig(config);
+    setInsertColumnModalOpen(true);
+  };
+
+  /** 插入新列回调 */
+  const handleInsertColumn = (config: InsertedColumnConfig) => {
+    if (!previewNode || !onNodeUpdate) return;
+    const pn = previewNode.data.pipelineNode as Record<string, unknown>;
+    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const existingCols = (cfg.insertedColumns as InsertedColumnConfig[]) || [];
+
+    // 生成唯一 id
+    const configWithId = { ...config, id: config.id || `ic_${Date.now()}_${Math.random().toString(36).slice(2)}` };
+
+    let newCols: InsertedColumnConfig[];
+    if (insertColumnEditConfig?.id) {
+      // 编辑模式：替换
+      newCols = existingCols.map((c) => (c.id === insertColumnEditConfig.id ? configWithId : c));
+    } else {
+      // 新增模式
+      newCols = [...existingCols, configWithId];
+    }
+
+    const newCfg = { ...cfg, insertedColumns: newCols };
+    onNodeUpdate({
+      ...previewNode,
+      data: {
+        ...previewNode.data,
+        pipelineNode: { ...pn, config: newCfg },
+      },
+    });
+    setInsertColumnModalOpen(false);
+  };
+
+  /** 删除插入列 */
+  const handleDeleteInsertColumn = (configId: string) => {
+    if (!previewNode || !onNodeUpdate) return;
+    const pn = previewNode.data.pipelineNode as Record<string, unknown>;
+    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const existingCols = (cfg.insertedColumns as InsertedColumnConfig[]) || [];
+    const newCols = existingCols.filter((c) => c.id !== configId);
+    const newCfg = { ...cfg, insertedColumns: newCols };
+    onNodeUpdate({
+      ...previewNode,
+      data: {
+        ...previewNode.data,
+        pipelineNode: { ...pn, config: newCfg },
+      },
+    });
+  };
+
+  /** 表格右键插入列回调 */
+  const handleTableInsertColumn = (config: InsertedColumnConfig) => {
+    handleOpenInsertColumn(config.sourceColumn);
+  };
+
+  /** 删除列回调 */
+  const handleDeleteColumn = (columnKey: string) => {
+    if (!previewNode || !onNodeUpdate) return;
+    Modal.confirm({
+      title: '删除列',
+      content: `确定要删除列 "${columnKey}" 吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: () => {
+        const pn = previewNode.data.pipelineNode as Record<string, unknown>;
+        const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+        const outputKeys = (cfg.outputColumnKeys as string[]) || [];
+        const newOutputKeys = outputKeys.filter((k) => k !== columnKey);
+        const newCfg = {
+          ...cfg,
+          outputColumnKeys: newOutputKeys,
+        };
+        onNodeUpdate({
+          ...previewNode,
+          data: {
+            ...previewNode.data,
+            pipelineNode: { ...pn, config: newCfg },
+          },
+        });
+      },
+    });
+  };
+
   const showTable = !previewLoading && previewData && previewData.columns.length > 0;
   const showNoData = !previewLoading && !previewData && !previewError;
   const showLoading = previewLoading && !previewData;
@@ -573,6 +670,19 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             </Tooltip>
           </Popover>
 
+          {/* 插入新列按钮 */}
+          {columnCatalog.length > 0 && (
+            <Tooltip title="插入新列">
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => handleOpenInsertColumn(columnCatalog[0])}
+              >
+                插入列
+              </Button>
+            </Tooltip>
+          )}
+
           <Button
             size="small"
             icon={<ReloadOutlined />}
@@ -621,6 +731,10 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             }
             columnFormatOverrides={previewColumnFormats}
             onColumnFormatChange={onNodeUpdate ? handlePreviewColumnFormatChange : undefined}
+            onInsertColumn={onNodeUpdate ? handleTableInsertColumn : undefined}
+            onDeleteColumn={onNodeUpdate ? handleDeleteColumn : undefined}
+            insertedColumns={(pipelineNode?.config as Record<string, unknown>)?.insertedColumns as InsertedColumnConfig[] | undefined}
+            onEditInsertColumn={onNodeUpdate ? handleEditInsertColumn : undefined}
           />
         </div>
       )}
@@ -628,6 +742,16 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       {showNoData && (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
       )}
+
+      {/* 插入列弹窗 */}
+      <InsertColumnModal
+        visible={insertColumnModalOpen}
+        columns={columnCatalog}
+        editConfig={insertColumnEditConfig}
+        onCancel={() => { setInsertColumnModalOpen(false); setInsertColumnEditConfig(undefined); }}
+        onConfirm={handleInsertColumn}
+        onDelete={handleDeleteInsertColumn}
+      />
     </div>
   );
 };

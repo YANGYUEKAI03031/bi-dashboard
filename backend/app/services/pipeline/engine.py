@@ -1426,35 +1426,66 @@ class PipelineEngine:
         列名优先用 outputColumnKeys 中保存的原始列名；
         若含 renameMap 也支持别名映射。
 
+        同时处理 insertedColumns，添加新计算的列。
+
         allowed_sql_columns 非空时，只保留「内层结果中确实存在」的列（按 renameMap 映射前的
         源列名校验），避免 JOIN 类型切换后仍引用旧列名导致 1054。
         """
         if not sql:
             return ""
         output_keys: List[str] = config.get("outputColumnKeys", [])
-        if not output_keys:
-            return sql
-        # 支持 renameMap: { newName: oldName }
         rename_map: Dict[str, str] = config.get("renameMap", {})
-        keys_use: List[str] = list(output_keys)
-        if allowed_sql_columns is not None:
-            keys_use = [
-                col
-                for col in output_keys
-                if str(rename_map.get(col, col)).strip() in allowed_sql_columns
-            ]
-            if not keys_use:
-                return sql
+        inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", [])
+
         safe_cols: List[str] = []
-        for col in keys_use:
-            old_name = rename_map.get(col, col)
-            if col != old_name:
-                safe_cols.append(f"{PipelineEngine._safe_identifier(old_name)} AS {PipelineEngine._safe_identifier(col)}")
-            else:
-                safe_cols.append(PipelineEngine._safe_identifier(old_name))
+
+        # 当 outputColumnKeys 为空时，保留所有原有列（SELECT *）
+        # 只有在有 allowed_sql_columns 限制时才需要过滤
+        if not output_keys:
+            # outputColumnKeys 为空，保留原有列 + insertedColumns
+            if allowed_sql_columns is not None:
+                # 有列限制时，只保留存在的列
+                for col in allowed_sql_columns:
+                    safe_cols.append(PipelineEngine._safe_identifier(col))
+            # else: 不加任何列（外层 SELECT * 会处理）
+        else:
+            keys_use: List[str] = list(output_keys)
+            if allowed_sql_columns is not None:
+                keys_use = [
+                    col
+                    for col in output_keys
+                    if str(rename_map.get(col, col)).strip() in allowed_sql_columns
+                ]
+            for col in keys_use:
+                old_name = rename_map.get(col, col)
+                if col != old_name:
+                    safe_cols.append(f"{PipelineEngine._safe_identifier(old_name)} AS {PipelineEngine._safe_identifier(col)}")
+                else:
+                    safe_cols.append(PipelineEngine._safe_identifier(old_name))
+
+        # 添加 insertedColumns 生成的新列
+        has_inserted = False
+        for col_config in inserted_columns:
+            if not isinstance(col_config, dict):
+                continue
+            method = str(col_config.get("method", "")).strip().lower()
+            source_column = str(col_config.get("sourceColumn", "")).strip()
+            new_name = str(col_config.get("name", "")).strip()
+            method_config = col_config.get("config", {})
+            if not new_name:
+                continue
+            expr = PipelineEngine._build_single_inserted_column_expr(method, source_column, method_config)
+            if expr:
+                safe_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
+                has_inserted = True
+
         if not safe_cols:
             return sql
+
         cols_str = ", ".join(safe_cols)
+        # 如果 outputColumnKeys 为空且有 insertedColumns，需要 SELECT * + 新列
+        if not output_keys and has_inserted:
+            return f"SELECT *, {cols_str} FROM ({sql}) AS _ic"
         return f"SELECT {cols_str} FROM ({sql}) AS _p"
 
     # ================================================================
@@ -1575,7 +1606,402 @@ class PipelineEngine:
                 return list(upstream_cols[0])
             return None
 
-        return None
+        # 默认处理：透传上游列（如果有）
+        base_cols: Optional[List[str]] = None
+        if upstream_cols and upstream_cols[0] is not None:
+            base_cols = list(upstream_cols[0])
+
+        # 添加 insertedColumns 生成的列名
+        inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", [])
+        if inserted_columns and base_cols is not None:
+            for col_config in inserted_columns:
+                if isinstance(col_config, dict):
+                    new_name = str(col_config.get("name", "")).strip()
+                    if new_name:
+                        base_cols.append(new_name)
+
+        return base_cols
+
+    # ================================================================
+    # 插入新列 SQL 生成
+    # ================================================================
+
+    @staticmethod
+    def _build_inserted_columns_sql(
+        sql: str,
+        config: Dict[str, Any],
+        allowed_sql_columns: Optional[Set[str]] = None,
+    ) -> str:
+        """
+        处理 insertedColumns 配置，为 SQL 添加新计算的列。
+
+        insertedColumns 格式:
+        [
+            {
+                "name": "新列名",
+                "method": "calculation | split | function | lookup | rank | category | bin",
+                "sourceColumn": "源列名",
+                "config": { ... 方法特定配置 ... }
+            }
+        ]
+        """
+        inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", [])
+        if not inserted_columns:
+            return sql
+
+        new_columns: List[str] = []
+        for col_config in inserted_columns:
+            if not isinstance(col_config, dict):
+                continue
+            method = str(col_config.get("method", "")).strip().lower()
+            source_column = str(col_config.get("sourceColumn", "")).strip()
+            new_name = str(col_config.get("name", "")).strip()
+            method_config = col_config.get("config", {})
+
+            if not new_name:
+                continue
+
+            # 生成列表达式
+            expr = PipelineEngine._build_single_inserted_column_expr(
+                method, source_column, method_config
+            )
+            if not expr:
+                continue
+
+            safe_expr = f"{expr} AS {PipelineEngine._safe_identifier(new_name)}"
+            new_columns.append(safe_expr)
+
+        if not new_columns:
+            return sql
+
+        # 检查是否已有 * 号需要展开
+        if "SELECT *" in sql.upper() or "select *" in sql.lower():
+            # 需要展开 * 号 - 将 insertedColumns 添加到列列表
+            if allowed_sql_columns is not None:
+                # 简单处理：在子查询上添加列
+                new_cols_str = ", ".join(new_columns)
+                return f"SELECT *, {new_cols_str} FROM ({sql}) AS _ic"
+            else:
+                # 保持原有 SQL，让外层处理
+                new_cols_str = ", ".join(new_columns)
+                return f"SELECT *, {new_cols_str} FROM ({sql}) AS _ic"
+
+        # 已有具体列 - 在 SELECT 末尾添加新列
+        # 找到 SELECT 和 FROM 之间的位置
+        match = re.match(r"^(SELECT\s+)(.*?)(\s+FROM\s+)", sql, re.IGNORECASE | re.DOTALL)
+        if match:
+            existing_cols = match.group(2).strip()
+            new_cols_str = ", ".join(new_columns)
+            return f"SELECT {existing_cols}, {new_cols_str} FROM ({sql}) AS _ic"
+
+        # 未能匹配，追加到末尾
+        new_cols_str = ", ".join(new_columns)
+        return f"SELECT *, {new_cols_str} FROM ({sql}) AS _ic"
+
+    @staticmethod
+    def _build_single_inserted_column_expr(
+        method: str,
+        source_column: str,
+        method_config: Dict[str, Any],
+    ) -> Optional[str]:
+        """根据方法生成单个列的 SQL 表达式"""
+        safe_source = PipelineEngine._safe_identifier(source_column)
+
+        if method == "calculation":
+            return PipelineEngine._build_calculation_expr(safe_source, method_config)
+        elif method == "split":
+            return PipelineEngine._build_split_expr(safe_source, method_config)
+        elif method == "function":
+            return PipelineEngine._build_function_expr(safe_source, method_config)
+        elif method == "lookup":
+            return PipelineEngine._build_lookup_expr(safe_source, method_config)
+        elif method == "rank":
+            return PipelineEngine._build_rank_expr(safe_source, method_config)
+        elif method == "category":
+            return PipelineEngine._build_category_expr(safe_source, method_config)
+        elif method == "bin":
+            return PipelineEngine._build_bin_expr(safe_source, method_config)
+        else:
+            return "NULL"
+
+    @staticmethod
+    def _build_calculation_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        计算列表达式
+        config.expression: 计算表达式，如 "A + B" 或 "(A + B) * 1.1"
+        空表达式返回 NULL 占位，保证列结构稳定
+        """
+        expression = config.get("expression", "")
+        if not expression:
+            return "NULL"
+        return expression
+
+    @staticmethod
+    def _build_split_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        分列表达式
+        split_type: delimiter | regex | fixed
+        delimiter: 分隔符
+        position: 提取第N部分
+        """
+        split_type = config.get("split_type", "delimiter")
+        position = config.get("position", 1)
+
+        if split_type == "delimiter":
+            delimiter = config.get("delimiter", ",")
+            if not delimiter:
+                return f"NULL"
+            # SUBSTRING_INDEX(str, delim, count) - count 为正数从左边取，负数从右边取
+            # position 为 1 时取第一部分
+            return f"SUBSTRING_INDEX({source_column}, '{delimiter}', {position})"
+        elif split_type == "regex":
+            regex = config.get("regex", "")
+            if regex:
+                # 使用 REGEXP_SUBSTR (MySQL 8.0+)
+                return f"REGEXP_SUBSTR({source_column}, '{regex}')"
+            return f"NULL"
+        elif split_type == "fixed":
+            # 固定宽度提取暂不支持
+            return f"NULL"
+        return f"NULL"
+
+    @staticmethod
+    def _build_function_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        函数表达式
+        function_name: CONCAT | SUBSTRING | TRIM | UPPER | LOWER | YEAR | MONTH | DAY | ROUND | ABS | IF
+        arguments: [col1, col2, ...] 或 [col1, 1, 10] 等
+        """
+        function_name = config.get("function_name", "").upper()
+        arguments: List[Any] = config.get("arguments", [])
+
+        if not function_name:
+            return "NULL"
+
+        if function_name in ("CONCAT", "CONCAT_WS"):
+            args_str = ", ".join(
+                f"'{arg}'" if isinstance(arg, str) and not arg.startswith("`") else PipelineEngine._safe_identifier(str(arg))
+                for arg in arguments
+            )
+            if function_name == "CONCAT_WS":
+                return f"CONCAT_WS({args_str})"
+            return f"CONCAT({args_str})"
+
+        elif function_name == "SUBSTRING":
+            if len(arguments) >= 2:
+                start = arguments[1] if len(arguments) > 1 else 1
+                length = arguments[2] if len(arguments) > 2 else None
+                if length:
+                    return f"SUBSTRING({source_column}, {start}, {length})"
+                return f"SUBSTRING({source_column}, {start})"
+            return f"SUBSTRING({source_column}, 1)"
+
+        elif function_name in ("TRIM", "LTRIM", "RTRIM", "UPPER", "LOWER"):
+            return f"{function_name}({source_column})"
+
+        elif function_name in ("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND"):
+            return f"{function_name}({source_column})"
+
+        elif function_name == "ROUND":
+            decimals = arguments[0] if arguments else 0
+            return f"ROUND({source_column}, {decimals})"
+
+        elif function_name == "ABS":
+            return f"ABS({source_column})"
+
+        elif function_name == "IF":
+            if len(arguments) >= 3:
+                condition = arguments[0]
+                true_val = arguments[1]
+                false_val = arguments[2]
+                return f"IF({condition}, '{true_val}', '{false_val}')"
+            return "NULL"
+
+        elif function_name == "COALESCE":
+            args_str = ", ".join(
+                f"'{arg}'" if isinstance(arg, str) else PipelineEngine._safe_identifier(str(arg))
+                for arg in arguments
+            )
+            return f"COALESCE({args_str})"
+
+        elif function_name == "CAST":
+            target_type = arguments[0] if arguments else "CHAR"
+            return f"CAST({source_column} AS {target_type})"
+
+        elif function_name == "LENGTH":
+            return f"LENGTH({source_column})"
+
+        elif function_name == "CHAR_LENGTH":
+            return f"CHAR_LENGTH({source_column})"
+
+        elif function_name == "NOW":
+            return "NOW()"
+
+        elif function_name == "DATE":
+            return f"DATE({source_column})"
+
+        elif function_name == "DATE_FORMAT":
+            format_str = arguments[0] if arguments else "%Y-%m-%d"
+            return f"DATE_FORMAT({source_column}, '{format_str}')"
+
+        else:
+            # 通用函数调用
+            if arguments:
+                args_str = ", ".join(
+                    f"'{arg}'" if isinstance(arg, str) else PipelineEngine._safe_identifier(str(arg))
+                    for arg in arguments
+                )
+                return f"{function_name}({args_str})"
+            return f"{function_name}({source_column})"
+
+    @staticmethod
+    def _build_lookup_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        查找替换表达式
+        lookup_table: [{key: '北京', value: '北方'}, ...]
+        default_value: 未匹配时的默认值
+        """
+        lookup_table: List[Dict[str, str]] = config.get("lookup_table", [])
+        default_value = config.get("default_value", "")
+
+        if not lookup_table:
+            return "NULL"
+
+        case_parts: List[str] = []
+        for item in lookup_table:
+            if isinstance(item, dict):
+                key = str(item.get("key", "")).strip()
+                value = str(item.get("value", "")).strip()
+                if key:
+                    # 转义单引号
+                    key_escaped = key.replace("'", "''")
+                    value_escaped = value.replace("'", "''")
+                    case_parts.append(
+                        f"WHEN {source_column} = '{key_escaped}' THEN '{value_escaped}'"
+                    )
+
+        if not case_parts:
+            return "NULL"
+
+        case_expr = " ".join(case_parts)
+        if default_value:
+            default_escaped = default_value.replace("'", "''")
+            return f"CASE {case_expr} ELSE '{default_escaped}' END"
+        else:
+            return f"CASE {case_expr} ELSE {source_column} END"
+
+    @staticmethod
+    def _build_rank_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        排名表达式
+        partition_by: [col1, col2] - 分区字段
+        order_by: {column: 'col1', direction: 'desc'}
+        rank_type: ROW_NUMBER | RANK | DENSE_RANK
+        """
+        partition_by: List[str] = config.get("partition_by", [])
+        order_by: Dict[str, Any] = config.get("order_by", {})
+        rank_type = config.get("rank_type", "ROW_NUMBER").upper()
+
+        valid_rank_types = ("ROW_NUMBER", "RANK", "DENSE_RANK")
+        if rank_type not in valid_rank_types:
+            rank_type = "ROW_NUMBER"
+
+        # 构建 PARTITION BY 子句
+        if partition_by:
+            partition_cols = [PipelineEngine._safe_identifier(col) for col in partition_by]
+            partition_str = f"PARTITION BY {', '.join(partition_cols)}"
+        else:
+            partition_str = ""
+
+        # 构建 ORDER BY 子句
+        order_col = order_by.get("column", source_column)
+        order_dir = str(order_by.get("direction", "desc")).upper()
+        if order_dir not in ("ASC", "DESC"):
+            order_dir = "DESC"
+        order_str = f"ORDER BY {PipelineEngine._safe_identifier(order_col)} {order_dir}"
+
+        window_clause = partition_str + " " + order_str if partition_str else order_str
+        return f"{rank_type}() OVER ({window_clause})"
+
+    @staticmethod
+    def _build_category_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        分类分组表达式
+        ranges: [{from: 0, to: 1000, label: '低'}, ...]
+        default_label: 默认标签
+        """
+        ranges: List[Dict[str, Any]] = config.get("ranges", [])
+        default_label = config.get("default_label", "其他")
+
+        if not ranges:
+            return "NULL"
+
+        case_parts: List[str] = []
+        for item in ranges:
+            if isinstance(item, dict):
+                from_val = item.get("from")
+                to_val = item.get("to")
+                label = str(item.get("label", "")).strip()
+
+                if label:
+                    label_escaped = label.replace("'", "''")
+                    if from_val is not None and to_val is not None:
+                        case_parts.append(
+                            f"WHEN {source_column} >= {from_val} AND {source_column} < {to_val} THEN '{label_escaped}'"
+                        )
+                    elif from_val is not None:
+                        case_parts.append(
+                            f"WHEN {source_column} >= {from_val} THEN '{label_escaped}'"
+                        )
+                    elif to_val is not None:
+                        case_parts.append(
+                            f"WHEN {source_column} < {to_val} THEN '{label_escaped}'"
+                        )
+
+        if not case_parts:
+            return "NULL"
+
+        case_expr = " ".join(case_parts)
+        default_escaped = default_label.replace("'", "''")
+        return f"CASE {case_expr} ELSE '{default_escaped}' END"
+
+    @staticmethod
+    def _build_bin_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+        """
+        区间提取表达式
+        bin_type: fixed | custom
+        bin_size: 区间大小
+        custom_bins: [边界1, 边界2, ...]
+        """
+        bin_type = config.get("bin_type", "fixed")
+
+        if bin_type == "fixed":
+            bin_size = config.get("bin_size")
+            if bin_size and float(bin_size) > 0:
+                return f"FLOOR({source_column} / {bin_size}) * {bin_size}"
+            return "NULL"
+
+        elif bin_type == "custom":
+            custom_bins: List[float] = config.get("custom_bins", [])
+            if not custom_bins or len(custom_bins) < 2:
+                return "NULL"
+
+            case_parts: List[str] = []
+            for i in range(len(custom_bins) - 1):
+                from_val = custom_bins[i]
+                to_val = custom_bins[i + 1]
+                label = f"{from_val}-{to_val}"
+                label_escaped = label.replace("'", "''")
+                case_parts.append(
+                    f"WHEN {source_column} >= {from_val} AND {source_column} < {to_val} THEN '{label_escaped}'"
+                )
+
+            if case_parts:
+                case_expr = " ".join(case_parts)
+                return f"CASE {case_expr} ELSE CAST({source_column} AS CHAR) END"
+            return "NULL"
+
+        return "NULL"
 
     @staticmethod
     def _extract_join_on_right_column_names_from_sql(sql: str) -> List[str]:
