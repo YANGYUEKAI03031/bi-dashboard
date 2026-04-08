@@ -98,7 +98,143 @@ async def _get_db_engine(db_model) -> Any:
     return engine
 
 
+async def _resolve_pipeline_execution_query(
+    db: AsyncSession, chart: "VisualizationCard"
+) -> Optional[str]:
+    """
+    解析管道图表的占位符查询，返回实际可执行的 SELECT SQL。
+
+    策略：
+    1. 在应用库中查找该管道最新一次成功的 execution。
+    2. 从 execution.completed_steps 中定位 focus_node_id 对应 step（或回退到最后一步）。
+    3. 在 chart.data_source_id 指向的业务库中解析 tmp_pipeline_{exec_id}_* 表名并读取列。
+    4. 返回可在业务库执行的 SELECT（列式持久表，见 temp_table_manager）。
+
+    若临时表已被执行结束时的清理删掉，则尝试从管道节点解析 output 目标表并 SELECT *。
+    若仍无法解析，返回 None。
+    """
+    pipeline_id = getattr(chart, "pipeline_id", None)
+    focus_node_id = getattr(chart, "focus_node_id", None)
+    if not pipeline_id or not focus_node_id:
+        return None
+
+    try:
+        from app.models.pipeline import DataPipeline, PipelineExecution
+        from sqlalchemy import select, desc
+
+        from app.services.pipeline_chart_sync_service import (
+            _extract_output_table_from_pipeline,
+        )
+
+        # 获取该管道最新一次成功的执行
+        stmt = (
+            select(PipelineExecution)
+            .where(
+                PipelineExecution.pipeline_id == pipeline_id,
+                PipelineExecution.status == "completed",
+            )
+            .order_by(desc(PipelineExecution.completed_at))
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        execution: Optional[PipelineExecution] = result.scalar_one_or_none()
+        if not execution:
+            logger.info(
+                f"管道图表 {chart.id}: pipeline={pipeline_id} 尚无成功执行记录"
+            )
+            return None
+
+        completed_steps: list = execution.completed_steps or []
+
+        # 找到 focus_node_id 对应的 step
+        target_step: Optional[dict] = None
+        for step in completed_steps:
+            if step.get("node_id") == focus_node_id:
+                target_step = step
+                break
+
+        if not target_step:
+            # 图表节点不是输出节点，只透传，可能不在 completed_steps 中
+            # 退而取最后一个 step（最下游）
+            if completed_steps:
+                target_step = completed_steps[-1]
+                logger.info(
+                    f"图表节点 {focus_node_id} 未直接出现在步骤中，"
+                    f"使用最后一个步骤 {target_step.get('step_id')}"
+                )
+            else:
+                return None
+
+        step_id = target_step.get("step_id")
+        if not step_id:
+            return None
+
+        # 列式结果表命名：tmp_pipeline_{exec_id}_<idx>（在业务数据源库中创建，见 temp_table_manager）
+        # step_id 格式: step_0, step_1, ...
+        suffix = step_id.replace("step_", "")
+        struct_table = f"tmp_pipeline_{execution.id}_{suffix}"
+
+        # 必须在 chart 对应的数据源库上查 information_schema。
+        # 此前误用应用元数据库会话，DATABASE() 指向元库，永远找不到 tmp_pipeline_*。
+        ds_model = await db.get(Database, chart.data_source_id)
+        if not ds_model:
+            logger.warning(
+                f"管道图表 {chart.id}: 数据源 id={chart.data_source_id} 不存在，无法解析临时表"
+            )
+            return None
+
+        temp_engine = await _get_db_engine(ds_model)
+        from sqlalchemy import text
+
+        columns: List[str] = []
+        async with temp_engine.connect() as conn:
+            col_result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() AND table_name = :tbl "
+                    "ORDER BY ordinal_position"
+                ),
+                {"tbl": struct_table},
+            )
+            columns = [r[0] for r in col_result.fetchall()]
+
+        if not columns:
+            # 管道跑完后引擎会 cleanup_temp_table() 删掉 tmp_pipeline_*，占位符依赖的表随之消失。
+            # 回退：若管道图中有 output 节点，则直接查其写入的业务表（与 sync 时无占位符分支一致）。
+            pipeline_row = await db.get(DataPipeline, pipeline_id)
+            nodes_list = (
+                pipeline_row.nodes
+                if pipeline_row and isinstance(pipeline_row.nodes, list)
+                else []
+            )
+            output_table = _extract_output_table_from_pipeline(
+                nodes_list, focus_node_id or ""
+            )
+            if output_table:
+                safe_tbl = output_table.replace("`", "``")
+                logger.info(
+                    f"图表 {chart.id}: 临时表 {struct_table} 已不存在，"
+                    f"回退为 output 目标表 `{safe_tbl}`"
+                )
+                return f"SELECT * FROM `{safe_tbl}`"
+
+            logger.warning(
+                f"临时表 {struct_table} 在数据源 {ds_model.name} 中不存在或无列，"
+                f"且无 output 目标表可回退，图表 {chart.id} 无法查询"
+            )
+            return None
+
+        quoted_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
+        return f"SELECT {quoted_cols} FROM `{struct_table}`"
+
+    except Exception as e:
+        logger.warning(f"解析管道图表 execution 查询失败: {e}")
+        return None
+
+
 def _sql_has_limit(sql: str) -> bool:
+    if not sql:
+        return False
     return bool(re.search(r"\bLIMIT\b", sql or "", re.IGNORECASE))
 
 
@@ -591,10 +727,24 @@ class ChartService:
             dataset_query = chart.dataset_query
             if isinstance(dataset_query, str):
                 dataset_query = json.loads(dataset_query)
-            
+
             sql_query = dataset_query.get('native', {}).get('query', '')
             if not sql_query:
                 return []
+
+            # 管道图表占位符：动态解析为最新 execution 的结果表
+            PIPELINE_PLACEHOLDER = "__PIPELINE_EXECUTION_QUERY__"
+            if sql_query == PIPELINE_PLACEHOLDER:
+                resolved_sql = await _resolve_pipeline_execution_query(self.db, chart)
+                if not resolved_sql:
+                    logger.warning(
+                        f"图表 {chart.id} 为管道图表，但无法解析 execution 查询"
+                    )
+                    return []
+                sql_query = resolved_sql
+                logger.info(
+                    f"图表 {chart.id} 执行查询已解析为: {sql_query[:80]}..."
+                )
             
             # ========== 方案2: 自动生成 WHERE 条件 ==========
             # 非指标图：应用仪表盘/报表筛选器参数；指标图：忽略筛选器，仅使用 visualization_settings.metric_filters

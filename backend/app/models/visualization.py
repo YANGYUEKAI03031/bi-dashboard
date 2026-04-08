@@ -39,10 +39,16 @@ class VisualizationCard(Base):
     # 时间戳
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
+    # 管道图表节点关联字段
+    pipeline_id = Column(Integer, ForeignKey("data_pipelines.id"), nullable=True)
+    focus_node_id = Column(String(64), nullable=True)  # 对应 chart 节点的 id 字段
+    synced_at = Column(DateTime, nullable=True)  # 最近同步时间
+
     # 关系
     database = relationship("Database", back_populates="visualization_cards")
     creator = relationship("User", back_populates="created_visualizations")
+    pipeline = relationship("DataPipeline", foreign_keys=[pipeline_id])
 
 class Database(Base):
     """数据库连接配置模型"""

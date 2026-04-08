@@ -22,6 +22,7 @@ from app.db.session import get_db
 from app.services.pipeline_service import PipelineService
 from app.services.pipeline.engine import PipelineEngine
 from app.services.pipeline.temp_table_manager import TempTableManager
+from app.services.pipeline_chart_sync_service import PipelineChartSyncService
 from app.schemas.pipeline import (
     PipelineCreate, PipelineUpdate, PipelineResponse,
     PipelineListResponse, ExecutionResponse, ExecutionListResponse,
@@ -64,6 +65,18 @@ async def create_pipeline(
             config=pipeline_data.config,
             is_public=pipeline_data.is_public
         )
+
+        # 创建成功后，同步 chart 节点到 visualization_cards
+        try:
+            sync_service = PipelineChartSyncService(db)
+            count, _ = await sync_service.sync_pipeline_charts(
+                pipeline_id=pipeline.id,
+                nodes=nodes_dict,
+                user_id=user_id,
+            )
+            logger.info(f"管道 {pipeline.id} 创建时图表同步完成: {count} 条")
+        except Exception as sync_err:
+            logger.warning(f"创建时图表同步失败（不影响管道创建）: {sync_err}")
 
         return PipelineResponse.model_validate(pipeline)
 
@@ -172,6 +185,19 @@ async def update_pipeline(
 
         if not pipeline:
             raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 节点有更新时，同步 chart 节点到 visualization_cards
+        if update_data.nodes is not None:
+            try:
+                sync_service = PipelineChartSyncService(db)
+                count, summaries = await sync_service.sync_pipeline_charts(
+                    pipeline_id=pipeline_id,
+                    nodes=[n.dict() for n in update_data.nodes],
+                    user_id=user_id,
+                )
+                logger.info(f"管道 {pipeline_id} 图表同步完成: {count} 条")
+            except Exception as sync_err:
+                logger.warning(f"管道图表同步失败（不影响管道保存）: {sync_err}")
 
         return PipelineResponse.model_validate(pipeline)
 
@@ -332,6 +358,24 @@ async def _run_pipeline_background(
             logger.info(
                 f"管道执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}"
             )
+
+            # 执行成功后，同步 chart 节点配置到 visualization_cards
+            if success and pipeline.nodes:
+                try:
+                    from app.db.session import get_db
+                    from app.core.security import get_current_user_id
+                    async with SessionLocal() as sync_session:
+                        sync_svc = PipelineChartSyncService(sync_session)
+                        nodes_list = pipeline.nodes if isinstance(pipeline.nodes, list) else []
+                        count, _ = await sync_svc.sync_pipeline_charts(
+                            pipeline_id=pipeline_id,
+                            nodes=nodes_list,
+                        )
+                        logger.info(
+                            f"管道 {pipeline_id} 执行后图表同步完成: {count} 条"
+                        )
+                except Exception as sync_err:
+                    logger.warning(f"执行后图表同步失败（不影响执行结果）: {sync_err}")
 
     except Exception as e:
         logger.error(f"后台执行管道失败: {e}")
