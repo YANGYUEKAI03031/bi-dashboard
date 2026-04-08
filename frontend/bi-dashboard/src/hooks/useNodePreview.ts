@@ -35,109 +35,114 @@ export function useNodePreview() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cacheRef = useRef<Record<string, PreviewData>>({});
 
-  const loadPreview = useCallback(async (params: LoadPreviewParams, immediate = false) => {
-    const { node, allNodes, pipelineDataSourceId, limit = 100 } = params;
-    if (!pipelineDataSourceId) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      setPreviewLoading(false);
-      setPreviewData(null);
-      setPreviewError(null);
-      return;
-    }
-
-    const pipelineNode = node.data.pipelineNode as PipelineNode;
-    const cacheKey = `${node.id}-${JSON.stringify(pipelineNode)}`;
-    if (!immediate && cacheRef.current[cacheKey]) {
-      setPreviewLoading(false);
-      setPreviewData(cacheRef.current[cacheKey]);
-      setPreviewError(null);
-      return;
-    }
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setPreviewLoading(true);
-    setPreviewError(null);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const token = AuthService.getAuthToken();
-
-        // 构建图结构，供后端折叠上游子查询
-        // 源节点的表名在 config.tableName，也可能仅在节点顶层 sql（SELECT * FROM `t`）中
-        const graph_nodes = allNodes.map((n: GraphNode) => {
-          const pn = n.data.pipelineNode as PipelineNode;
-          const baseCfg =
-            pn.config && typeof pn.config === 'object' ? { ...pn.config } : {};
-          if (typeof pn.sql === 'string' && pn.sql.trim()) {
-            baseCfg.sql = pn.sql;
-          }
-          return {
-            id: n.id,
-            type: pn.type,
-            config: baseCfg,
-            // merge_type 可能在 config.merge_type（前端）或顶层（API返回）；统一取一次
-            merge_type: mergeTypeForPreviewApi(pn),
-          };
-        });
-        // 预览折叠 SQL 以节点 upstream 为准，避免 React Flow edges 与 upstream 短暂不一致时下游无数据
-        const graph_edges = buildEdgesFromUpstream(allNodes).map((e) => ({
-          source: e.source,
-          target: e.target,
-        }));
-
-        const body = {
-          node_type: pipelineNode.type,
-          config: pipelineNode.config || {},
-          source_data_source_id: pipelineDataSourceId,
-          limit,
-          // 链式折叠模式：传全图结构 + focus_id
-          graph_nodes,
-          graph_edges,
-          focus_node_id: node.id,
-        };
-
-        const response = await fetch(`${API_BASE_URL}/pipeline/preview`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({ detail: '预览请求失败' }));
-          const detail = err.detail;
-          const msg =
-            typeof detail === 'string'
-              ? detail
-              : Array.isArray(detail)
-                ? detail.map((x: { msg?: string }) => x?.msg || '').filter(Boolean).join('; ')
-                : '预览请求失败';
-          throw new Error(msg || '预览请求失败');
-        }
-
-        const data = await response.json();
-        const ac = data.all_columns;
-        const result: PreviewData = {
-          columns: data.columns || [],
-          allColumns: Array.isArray(ac) && ac.length > 0 ? ac : undefined,
-          columnTypes: data.column_types || [],
-          rows: data.rows || [],
-          total: data.total ?? data.rows?.length ?? 0,
-          hasMore: data.has_more ?? false,
-          sqlGenerated: data.sql_generated || '',
-        };
-        cacheRef.current[cacheKey] = result;
-        setPreviewData(result);
-        setPreviewError(null);
-      } catch (err: unknown) {
-        setPreviewData(null);
-        setPreviewError(err instanceof Error ? err.message : '预览加载失败');
-      } finally {
+  const loadPreview = useCallback(
+    async (params: LoadPreviewParams, immediate = false): Promise<PreviewData | null> => {
+      const { node, allNodes, pipelineDataSourceId, limit = 100 } = params;
+      if (!pipelineDataSourceId) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
         setPreviewLoading(false);
+        setPreviewData(null);
+        setPreviewError(null);
+        return null;
       }
-    }, immediate ? 0 : 750);
-  }, []);
+
+      const pipelineNode = node.data.pipelineNode as PipelineNode;
+      const cacheKey = `${node.id}-${JSON.stringify(pipelineNode)}`;
+      if (!immediate && cacheRef.current[cacheKey]) {
+        const cached = cacheRef.current[cacheKey];
+        setPreviewLoading(false);
+        setPreviewData(cached);
+        setPreviewError(null);
+        return cached;
+      }
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setPreviewLoading(true);
+      setPreviewError(null);
+
+      return new Promise<PreviewData | null>((resolve) => {
+        const delay = immediate ? 0 : 750;
+        debounceRef.current = setTimeout(async () => {
+          try {
+            const token = AuthService.getAuthToken();
+
+            const graph_nodes = allNodes.map((n: GraphNode) => {
+              const pn = n.data.pipelineNode as PipelineNode;
+              const baseCfg =
+                pn.config && typeof pn.config === 'object' ? { ...pn.config } : {};
+              if (typeof pn.sql === 'string' && pn.sql.trim()) {
+                baseCfg.sql = pn.sql;
+              }
+              return {
+                id: n.id,
+                type: pn.type,
+                config: baseCfg,
+                merge_type: mergeTypeForPreviewApi(pn),
+              };
+            });
+            const graph_edges = buildEdgesFromUpstream(allNodes).map((e) => ({
+              source: e.source,
+              target: e.target,
+            }));
+
+            const body = {
+              node_type: pipelineNode.type,
+              config: pipelineNode.config || {},
+              source_data_source_id: pipelineDataSourceId,
+              limit,
+              graph_nodes,
+              graph_edges,
+              focus_node_id: node.id,
+            };
+
+            const response = await fetch(`${API_BASE_URL}/pipeline/preview`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+              const err = await response.json().catch(() => ({ detail: '预览请求失败' }));
+              const detail = err.detail;
+              const msg =
+                typeof detail === 'string'
+                  ? detail
+                  : Array.isArray(detail)
+                    ? detail.map((x: { msg?: string }) => x?.msg || '').filter(Boolean).join('; ')
+                    : '预览请求失败';
+              throw new Error(msg || '预览请求失败');
+            }
+
+            const data = await response.json();
+            const ac = data.all_columns;
+            const result: PreviewData = {
+              columns: data.columns || [],
+              allColumns: Array.isArray(ac) && ac.length > 0 ? ac : undefined,
+              columnTypes: data.column_types || [],
+              rows: data.rows || [],
+              total: data.total ?? data.rows?.length ?? 0,
+              hasMore: data.has_more ?? false,
+              sqlGenerated: data.sql_generated || '',
+            };
+            cacheRef.current[cacheKey] = result;
+            setPreviewData(result);
+            setPreviewError(null);
+            resolve(result);
+          } catch (err: unknown) {
+            setPreviewData(null);
+            setPreviewError(err instanceof Error ? err.message : '预览加载失败');
+            resolve(null);
+          } finally {
+            setPreviewLoading(false);
+          }
+        }, delay);
+      });
+    },
+    []
+  );
 
   const clearPreview = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

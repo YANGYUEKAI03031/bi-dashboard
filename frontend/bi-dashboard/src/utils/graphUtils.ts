@@ -125,12 +125,15 @@ export function buildEdgesFromUpstream(nodes: GraphNode[]): GraphEdge[] {
   return edges;
 }
 
-/** 输出节点占位 SQL，与后端 PipelineEngine 中 {prev_table} 占位协议一致 */
-const OUTPUT_NODE_SQL_PLACEHOLDER = 'SELECT * FROM {prev_table}';
+/**
+ * 输出 / 图表节点占位 SQL，与后端 PipelineEngine 中 {prev_table} 占位协议一致。
+ * 图表节点无独立 SQL，执行时等同透传上游结果（与 build_node_sql 中 chart 分支一致）。
+ */
+const PASSTHROUGH_UPSTREAM_SQL_PLACEHOLDER = 'SELECT * FROM {prev_table}';
 
 /**
  * React Flow nodes 转换为 PipelineNode[]（用于 API 提交）
- * 输出 / 关联节点若未写回 sql，此处补全以满足后端 PipelineNodeCreate.sql 必填；
+ * 输出 / 图表 / 关联节点若未写回 sql，此处补全以满足后端 PipelineNodeCreate.sql 必填；
  * 关联 SQL 须含 {upstream_table_0/1} 供执行引擎替换。
  */
 export function nodesToPipelineNodes(
@@ -147,7 +150,10 @@ export function nodesToPipelineNodes(
     const nodeType = String(pn.type ?? '');
     const sqlStr = String(pn.sql ?? '').trim();
     if (nodeType === 'output' && !sqlStr) {
-      pn.sql = OUTPUT_NODE_SQL_PLACEHOLDER;
+      pn.sql = PASSTHROUGH_UPSTREAM_SQL_PLACEHOLDER;
+    }
+    if (nodeType === 'chart' && !sqlStr) {
+      pn.sql = PASSTHROUGH_UPSTREAM_SQL_PLACEHOLDER;
     }
     if (nodeType === 'join' && !sqlStr) {
       const cfg = (pn.config as Record<string, unknown>) || {};

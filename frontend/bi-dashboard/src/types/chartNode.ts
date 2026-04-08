@@ -210,3 +210,99 @@ export function getChartTypeLabel(chartType: ChartType | string): string {
 export function getAggMethodLabel(method: AggregationMethod | string): string {
   return AGG_METHOD_LABELS[method as AggregationMethod] || method;
 }
+
+/**
+ * 字段映射 UI 规则（与 VisualizationBuilder.getChartFieldConfig 对齐；散点图在管道弹窗用多选 2 列以满足校验）
+ */
+export interface ChartFieldMappingConfig {
+  xFieldRequired: boolean;
+  yFieldsRequired: number;
+  yFieldsMax: number;
+  showMultipleY: boolean;
+  description: string;
+}
+
+export function getChartFieldMappingConfig(chartType: ChartType): ChartFieldMappingConfig {
+  switch (chartType) {
+    case 'pie':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showMultipleY: false,
+        description: '需要 1 个分类字段和 1 个数值字段',
+      };
+    case 'scatter':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 2,
+        yFieldsMax: 2,
+        showMultipleY: true,
+        description: '需要 2 个数值字段作为坐标',
+      };
+    case 'radar':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 2,
+        yFieldsMax: 10,
+        showMultipleY: true,
+        description: '选择多个数值字段作为维度',
+      };
+    case 'boxplot':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showMultipleY: true,
+        description: '选择数值字段用于箱体计算',
+      };
+    case 'bar_line':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 2,
+        yFieldsMax: 10,
+        showMultipleY: true,
+        description: '分组柱 + 折线；可在下方指定折线指标',
+      };
+    case 'funnel':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showMultipleY: false,
+        description: '需要 1 个阶段字段和 1 个数值字段',
+      };
+    case 'waterfall':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showMultipleY: false,
+        description: '需要 1 个阶段字段和 1 个增量数值字段',
+      };
+    case 'stacked_bar':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showMultipleY: true,
+        description: '1 个分类字段与多个数值字段堆积',
+      };
+    case 'metric':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showMultipleY: false,
+        description: '选择数值列与聚合方式',
+      };
+    default:
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showMultipleY: true,
+        description: '1 个分类字段与 1 个或多个数值字段',
+      };
+  }
+}

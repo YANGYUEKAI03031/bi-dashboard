@@ -16,7 +16,8 @@ import {
 } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
-import { useNodePreview } from '../../../hooks/useNodePreview';
+import { useNodePreview, type PreviewData } from '../../../hooks/useNodePreview';
+import { resolvePreviewDataSourceId } from '../../../utils/pipelineDataSourceUtils';
 import { ChartNodeConfigModal } from './ChartNodeConfigModal';
 import {
   ChartNodeConfig as ChartNodeConfigType,
@@ -66,6 +67,11 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
 
   // Get node config
   const pipelineNode = node.data.pipelineNode as PipelineNode;
+  const resolvedDsId = useMemo(
+    () => resolvePreviewDataSourceId(pipelineNode, pipelineDataSourceId ?? undefined),
+    [pipelineNode, pipelineDataSourceId]
+  );
+
   const nodeConfig = useMemo<ChartNodeConfigType | null>(() => {
     const config = pipelineNode?.config as Record<string, unknown> | undefined;
     if (!config) return null;
@@ -96,46 +102,48 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
     };
   }, [pipelineNode?.config]);
 
-  // Load upstream preview data
+  /** 与画布预览一致：预览当前图表节点（后端折叠为上游结果集） */
   const upstreamPreview = useNodePreview();
+  const [modalPreviewData, setModalPreviewData] = useState<PreviewData | null>(null);
 
-  // Load preview when modal opens
-  const loadUpstreamPreview = useCallback(async () => {
-    if (upstreamNodes.length === 0) {
+  const loadChartPreviewForModal = useCallback(async () => {
+    if (!resolvedDsId) {
+      message.warning('请先为管道配置业务数据源');
       return null;
     }
-
     setModalLoading(true);
     try {
-      // Use first upstream node for preview data
-      const upstreamNode = upstreamNodes[0];
-      const upstreamPipelineNode = upstreamNode.data.pipelineNode as PipelineNode;
-
-      // Load preview for upstream node
-      await upstreamPreview.loadPreview({
-        node: upstreamNode,
-        allNodes,
-        pipelineDataSourceId,
-      });
-
-      return upstreamPreview.previewData;
+      const data = await upstreamPreview.loadPreview(
+        {
+          node,
+          allNodes,
+          pipelineDataSourceId: resolvedDsId,
+          limit: 100,
+        },
+        true
+      );
+      setModalPreviewData(data);
+      return data;
     } catch (error) {
-      console.error('Failed to load upstream preview:', error);
-      message.error('加载上游数据预览失败');
+      console.error('Failed to load chart preview:', error);
+      message.error('加载预览数据失败');
+      setModalPreviewData(null);
       return null;
     } finally {
       setModalLoading(false);
     }
-  }, [upstreamNodes, allNodes, pipelineDataSourceId, upstreamPreview]);
+  }, [resolvedDsId, upstreamPreview, node, allNodes]);
 
-  // Handle modal open
+  // Handle modal open：先拉取与底部表格相同的数据，再展示弹窗
   const handleModalOpen = async () => {
+    await loadChartPreviewForModal();
     setModalOpen(true);
   };
 
   // Handle modal close
   const handleModalClose = () => {
     setModalOpen(false);
+    setModalPreviewData(null);
   };
 
   // Handle config save
@@ -271,10 +279,9 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
         {nodeConfig && (
           <Button
             icon={<SyncOutlined spin={modalLoading} />}
-            onClick={() => {
-              if (upstreamPreview.previewData) {
-                setModalOpen(true);
-              }
+            onClick={async () => {
+              await loadChartPreviewForModal();
+              setModalOpen(true);
             }}
             disabled={!hasUpstream || modalLoading}
             style={{ marginLeft: 8 }}
@@ -288,7 +295,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
       <ChartNodeConfigModal
         open={modalOpen}
         nodeConfig={nodeConfig || DEFAULT_CHART_CONFIG}
-        upstreamPreviewData={upstreamPreview.previewData}
+        upstreamPreviewData={modalPreviewData ?? upstreamPreview.previewData}
         onSave={handleSaveConfig}
         onCancel={handleModalClose}
         readOnly={readOnly}

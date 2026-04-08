@@ -26,6 +26,7 @@ import {
   AGG_METHOD_LABELS,
   getChartTypeLabel,
   getAggMethodLabel,
+  getChartFieldMappingConfig,
   MetricFilter,
   MetricFilterExprNode,
 } from '../../../types/chartNode';
@@ -127,53 +128,136 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     }
   }, [open, nodeConfig, form]);
 
-  // Process upstream preview data
-  useEffect(() => {
-    if (upstreamPreviewData && upstreamPreviewData.rows.length > 0) {
-      setPreviewData(upstreamPreviewData.rows);
+  /** 与 VisualizationBuilder 一致的智能默认字段 */
+  const applySmartDefaults = useCallback(
+    (prev: ChartNodeConfigType, rows: Record<string, unknown>[], columns: string[]): ChartNodeConfigType => {
+      if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
+      if (!rows.length || !columns.length) return prev;
+      const sample = rows[0];
 
-      const columns = upstreamPreviewData.columns || Object.keys(upstreamPreviewData.rows[0]);
-      setAvailableFields(columns);
-      setFieldTypes(
-        inferMetricFieldTypesFromSampleRows(upstreamPreviewData.rows, columns)
-      );
-
-      // Auto-set default fields if not configured
-      if (!config.xField && !config.yFields.length) {
-        autoSetDefaultFields(upstreamPreviewData.rows, columns);
+      if (prev.chartType === 'metric') {
+        const numericFirst = columns.find((col) => {
+          const v = sample[col];
+          return (
+            typeof v === 'number' ||
+            (typeof v === 'string' && isNumericString(v))
+          );
+        });
+        const y0 = numericFirst || columns[0];
+        return {
+          ...prev,
+          yFields: y0 ? [y0] : [],
+          yAxisTitle: y0 || 'Y轴',
+        };
       }
-    }
-  }, [upstreamPreviewData]);
 
-  // Auto-set default X and Y fields based on data types
-  const autoSetDefaultFields = useCallback((
-    rows: Record<string, unknown>[],
-    columns: string[]
-  ) => {
-    if (!rows.length || !columns.length) return;
+      if (prev.chartType === 'scatter') {
+        const nums = columns.filter((col) => {
+          const v = sample[col];
+          return typeof v === 'number' || (typeof v === 'string' && isNumericString(v));
+        });
+        const yPair =
+          nums.length >= 2
+            ? nums.slice(0, 2)
+            : columns.filter((c) => c !== columns[0]).slice(0, 2).length >= 2
+              ? columns.slice(0, 2)
+              : nums.length === 1
+                ? [nums[0], columns.find((c) => c !== nums[0]) || columns[0]].filter(Boolean)
+                : columns.slice(0, 2);
+        return {
+          ...prev,
+          xField: columns[0] || '',
+          yFields: yPair.slice(0, 2),
+          xAxisTitle: columns[0] || 'X轴',
+          yAxisTitle: yPair.length > 1 ? 'Y' : yPair[0] || 'Y轴',
+        };
+      }
 
-    const sampleRow = rows[0];
-    const textFields = columns.filter(col => {
-      const val = sampleRow[col];
-      return typeof val === 'string' && !isNumericString(val);
-    });
-    const numericFields = columns.filter(col => {
-      const val = sampleRow[col];
-      return typeof val === 'number' || isNumericString(val);
-    });
+      const suitableXFields = columns.filter((field) => {
+        const sampleValue = sample[field];
+        return (
+          typeof sampleValue === 'string' ||
+          sampleValue instanceof Date ||
+          (typeof sampleValue === 'object' && sampleValue !== null)
+        );
+      });
+      const xField = suitableXFields.length > 0 ? suitableXFields[0] : columns[0] || '';
 
-    setConfig(prev => ({
-      ...prev,
-      xField: textFields[0] || columns[0] || '',
-      yFields: numericFields.slice(0, 3),
-    }));
-  }, []);
+      let suitableYFields = columns
+        .filter((field) => {
+          const sampleValue = sample[field];
+          return (
+            typeof sampleValue === 'number' ||
+            (typeof sampleValue === 'string' && isNumericString(sampleValue))
+          );
+        })
+        .filter((field) => field !== xField);
+
+      let defaultYFields = suitableYFields.slice(0, Math.min(3, suitableYFields.length));
+      if (defaultYFields.length === 0) {
+        const remainingFields = columns.filter((f) => f !== xField);
+        defaultYFields = remainingFields.slice(0, Math.min(3, remainingFields.length));
+      }
+
+      const fc = getChartFieldMappingConfig(prev.chartType);
+      defaultYFields = defaultYFields.slice(0, fc.yFieldsMax);
+
+      return {
+        ...prev,
+        xField,
+        yFields: defaultYFields,
+        xAxisTitle: xField || 'X轴',
+        yAxisTitle: defaultYFields.length > 1 ? '汇总' : defaultYFields[0] || 'Y轴',
+      };
+    },
+    []
+  );
 
   const isNumericString = (val: unknown): boolean => {
     if (typeof val !== 'string') return false;
     const num = Number(val);
     return !isNaN(num) && val.toString().trim() !== '';
   };
+
+  // Process preview sample rows（与图表构建器相同：X/Y 下拉共用全部列）
+  useEffect(() => {
+    if (!open) return;
+    if (!upstreamPreviewData?.rows?.length) {
+      setPreviewData([]);
+      setAvailableFields([]);
+      setFieldTypes({});
+      return;
+    }
+    const rows = upstreamPreviewData.rows;
+    const columns =
+      upstreamPreviewData.columns?.length > 0
+        ? upstreamPreviewData.columns
+        : Object.keys(rows[0] || {});
+    setPreviewData(rows);
+    setAvailableFields(columns);
+    setFieldTypes(inferMetricFieldTypesFromSampleRows(rows, columns));
+
+    setConfig((prev) => {
+      if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
+      const next = applySmartDefaults(prev, rows, columns);
+      queueMicrotask(() => {
+        form.setFieldsValue({
+          chartType: next.chartType,
+          xField: next.xField,
+          yFields: next.yFields,
+          yAggMethod: next.yAggMethod,
+          xGroupByEnabled: next.xGroupByEnabled,
+          xAxisTitle: next.xAxisTitle,
+          yAxisTitle: next.yAxisTitle,
+          sortBy: next.sortBy,
+          sortOrder: next.sortOrder,
+          showLegend: next.showLegend,
+          showTooltip: next.showTooltip,
+        });
+      });
+      return next;
+    });
+  }, [open, upstreamPreviewData, applySmartDefaults, form]);
 
   // Handle form value changes
   const handleFormChange = (changedValues: any) => {
@@ -299,9 +383,9 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     return null;
   };
 
-  // Separate numeric and non-numeric fields
-  const numericFields = availableFields.filter(field => fieldTypes[field] === 'number');
-  const nonNumericFields = availableFields.filter(field => fieldTypes[field] === 'string');
+  // All available fields for X/Y selects (same as VisualizationBuilder)
+  const fieldOptions = availableFields.map((f) => ({ label: f, value: f }));
+  const fieldMappingConfig = getChartFieldMappingConfig(config.chartType);
 
   return (
     <Modal
@@ -353,38 +437,78 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
             onValuesChange={handleFormChange}
           >
             {/* X Axis Field */}
-            <Form.Item
-              name="xField"
-              label={`${getChartTypeLabel(config.chartType)} 的分类字段 (X轴)`}
-              extra={!nonNumericFields.length && '无可用文本字段'}
-            >
-              <Select
-                allowClear
-                showSearch
-                placeholder="选择分类字段"
-                options={nonNumericFields.map(f => ({ label: f, value: f }))}
-                disabled={readOnly}
-                onChange={val => handleFormChange({ xField: val })}
-              />
-            </Form.Item>
+            {fieldMappingConfig.xFieldRequired ? (
+              <Form.Item
+                name="xField"
+                label={`${getChartTypeLabel(config.chartType)} 分类字段 (X轴)`}
+                extra={!availableFields.length && '暂无可用字段，请先连接上游节点'}
+              >
+                <Select
+                  allowClear
+                  showSearch
+                  placeholder="选择分类字段"
+                  options={fieldOptions}
+                  disabled={readOnly}
+                  onChange={(val) => handleFormChange({ xField: val })}
+                />
+              </Form.Item>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                此图表类型无需 X 轴字段
+              </Text>
+            )}
 
             {/* Y Axis Fields */}
-            <Form.Item
-              name="yFields"
-              label="数值字段 (Y轴 / 度量)"
-              extra={!numericFields.length && '无可用数值字段'}
-            >
-              <Select
-                mode="multiple"
-                allowClear
-                showSearch
-                placeholder="选择数值字段"
-                options={numericFields.map(f => ({ label: f, value: f }))}
-                disabled={readOnly}
-                onChange={val => handleFormChange({ yFields: val })}
-                maxTagCount={3}
-              />
-            </Form.Item>
+            {fieldMappingConfig.showMultipleY ? (
+              <>
+                <Form.Item
+                  name="yFields"
+                  label={
+                    <span>
+                      数值字段 (Y轴)
+                      <Text type="secondary" style={{ fontWeight: 400, marginLeft: 8 }}>
+                        至少 {fieldMappingConfig.yFieldsRequired} 个
+                      </Text>
+                    </span>
+                  }
+                  extra={
+                    availableFields.length === 0
+                      ? '暂无可用字段'
+                      : fieldMappingConfig.description
+                  }
+                >
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    showSearch
+                    placeholder={`选择 ${fieldMappingConfig.yFieldsRequired} 个以上数值字段`}
+                    options={fieldOptions}
+                    disabled={readOnly}
+                    onChange={(val) => handleFormChange({ yFields: val })}
+                    maxTagCount={3}
+                  />
+                </Form.Item>
+              </>
+            ) : (
+              <Form.Item
+                name="yFields"
+                label="数值字段 (Y轴)"
+                extra={
+                  availableFields.length === 0
+                    ? '暂无可用字段'
+                    : fieldMappingConfig.description
+                }
+              >
+                <Select
+                  allowClear
+                  showSearch
+                  placeholder="选择 1 个字段"
+                  options={fieldOptions}
+                  disabled={readOnly}
+                  onChange={(val) => handleFormChange({ yFields: val ? [val] : [] })}
+                />
+              </Form.Item>
+            )}
 
             {/* Aggregation Method */}
             <Form.Item
