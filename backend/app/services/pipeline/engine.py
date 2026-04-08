@@ -1769,11 +1769,22 @@ class PipelineEngine:
     def _build_function_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
         """
         函数表达式
-        function_name: CONCAT | SUBSTRING | TRIM | UPPER | LOWER | YEAR | MONTH | DAY | ROUND | ABS | IF
-        arguments: [col1, col2, ...] 或 [col1, 1, 10] 等
+        支持两种模式：
+        1. 结构化配置: function_name + arguments（保留旧逻辑）
+        2. 自由表达式: expression（直接透传到 SQL，列名用 `` 包裹）
         """
+        expression = config.get("expression", "").strip()
         function_name = config.get("function_name", "").upper()
         arguments: List[Any] = config.get("arguments", [])
+
+        # 优先使用自由表达式
+        if expression:
+            safe_source = PipelineEngine._safe_identifier(source_column)
+            # 将占位符 # 替换为源列引用，#N 替换为第 N 个列名
+            safe_expr = expression.strip()
+            if safe_source:
+                safe_expr = safe_expr.replace("``", safe_source)
+            return safe_expr
 
         if not function_name:
             return "NULL"

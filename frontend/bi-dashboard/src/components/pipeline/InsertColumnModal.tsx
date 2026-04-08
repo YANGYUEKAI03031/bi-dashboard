@@ -1,6 +1,6 @@
 /**
  * InsertColumnModal - 插入新列配置弹窗
- * 支持7种方法：计算列、分列、函数、查找替换、排名、分类分组、区间提取
+ * 支持8种方法：计算列、分列、函数、查找替换、排名、分类分组、区间提取、累计求和
  */
 import React, { useState, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import {
@@ -37,6 +37,148 @@ import {
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
+/**
+ * 表达式编辑器组件
+ * 在表达式中用特殊背景色高亮列名
+ */
+interface ExpressionEditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  columns: string[];
+  rows?: number;
+  placeholder?: string;
+}
+
+const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
+  value,
+  onChange,
+  columns,
+  rows = 4,
+  placeholder,
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+
+  // 渲染高亮文本
+  const renderHighlightedText = useMemo(() => {
+    if (!value && !placeholder) {
+      return <span style={{ color: '#bfbfbf' }}>&nbsp;</span>;
+    }
+
+    if (!value) {
+      return <span style={{ color: '#bfbfbf' }}>{placeholder}</span>;
+    }
+
+    if (columns.length === 0) {
+      return <span>{value}</span>;
+    }
+
+    const escapedColumns = columns.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (escapedColumns.length === 0) {
+      return <span>{value}</span>;
+    }
+
+    const columnPattern = new RegExp(`(${escapedColumns.join('|')})`, 'g');
+    const parts = value.split(columnPattern);
+
+    return parts.map((part, i) => {
+      const isColumn = columns.includes(part);
+      if (isColumn) {
+        return (
+          <span
+            key={i}
+            style={{
+              background: '#bae0ff',
+              borderRadius: 3,
+              padding: '1px 2px',
+              color: '#1677ff',
+              fontWeight: 500,
+              boxShadow: '0 0 0 1px #91caff',
+            }}
+          >
+            {part}
+          </span>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  }, [value, columns, placeholder]);
+
+  // 处理输入变化
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  }, [onChange]);
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        background: '#fff',
+        borderRadius: 6,
+        border: isFocused ? '2px solid #1677ff' : '1px solid #d9d9d9',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* 高亮预览层 - 只读显示 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: '8px 12px',
+          borderRadius: 6,
+          background: 'transparent',
+          whiteSpace: 'pre-wrap',
+          wordWrap: 'break-word',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          color: '#000',
+          fontFamily: "'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace",
+          fontSize: 14,
+          lineHeight: 1.6,
+          boxSizing: 'border-box',
+          zIndex: 0,
+          minHeight: rows * 28 + 16,
+          overflowX: 'auto',
+          overflowY: 'auto',
+        }}
+      >
+        {renderHighlightedText}
+      </div>
+
+      {/* 实际输入层 */}
+      <textarea
+        value={value}
+        onChange={handleChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        rows={rows}
+        placeholder={placeholder}
+        spellCheck={false}
+        style={{
+          position: 'relative',
+          width: '100%',
+          fontFamily: "'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace",
+          fontSize: 14,
+          lineHeight: 1.6,
+          padding: '8px 12px',
+          border: 'none',
+          borderRadius: 6,
+          background: 'transparent',
+          color: 'transparent',
+          caretColor: '#1677ff',
+          resize: 'none',
+          outline: 'none',
+          zIndex: 1,
+          boxSizing: 'border-box',
+          minHeight: rows * 28 + 16,
+        }}
+      />
+    </div>
+  );
+};
+
 export interface InsertedColumnConfig {
   /** 编辑时的唯一标识 */
   id?: string;
@@ -46,7 +188,7 @@ export interface InsertedColumnConfig {
   config: Record<string, unknown>;
 }
 
-export type InsertedColumnMethod = 'calculation' | 'split' | 'function' | 'lookup' | 'rank' | 'category' | 'bin';
+export type InsertedColumnMethod = 'calculation' | 'split' | 'function' | 'lookup' | 'rank' | 'category' | 'bin' | 'cumulative';
 
 export interface InsertColumnModalProps {
   visible: boolean;
@@ -96,12 +238,18 @@ interface CalculationFormProps {
 
 const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChange, initialConfig }) => {
   const [expression, setExpression] = useState(() => String(initialConfig?.expression ?? ''));
-  const initSig = JSON.stringify(initialConfig ?? {});
+  // 使用 ref 存储初始值，避免 useEffect 依赖变化导致的问题
+  const initialExpression = React.useRef(String(initialConfig?.expression ?? ''));
 
   useEffect(() => {
     const cfg = initialConfig ?? {};
-    setExpression(String(cfg.expression ?? ''));
-  }, [initSig]);
+    const newExpr = String(cfg.expression ?? '');
+    // 只在 initialConfig 真正变化时才重置
+    if (initialExpression.current !== newExpr) {
+      initialExpression.current = newExpr;
+      setExpression(newExpr);
+    }
+  }, [initialConfig]);
 
   useEffect(() => {
     onValuesChange({ expression });
@@ -122,12 +270,12 @@ const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChan
       />
       <Form layout="vertical">
         <Form.Item label="表达式">
-          <TextArea
+          <ExpressionEditor
             value={expression}
-            onChange={(e) => setExpression(e.target.value)}
+            onChange={setExpression}
+            columns={columns}
             rows={4}
             placeholder="例如: (销售额 + 税额) * 0.9"
-            style={{ fontFamily: 'monospace' }}
           />
         </Form.Item>
         <Form.Item label="插入列名到表达式">
@@ -136,8 +284,7 @@ const CalculationForm: React.FC<CalculationFormProps> = ({ columns, onValuesChan
               <Tag
                 key={col}
                 onClick={() => insertColumn(col)}
-                style={{ cursor: 'pointer' }}
-                color="blue"
+                style={{ cursor: 'pointer', background: '#e6f7ff', borderColor: '#91d5ff', color: '#1890ff' }}
               >
                 {col}
               </Tag>
@@ -268,160 +415,131 @@ interface FunctionFormProps {
   onSourceColumnChange?: (col: string) => void;
 }
 
-const FUNCTIONS = [
-  { label: '字符串函数', options: [
-    { label: 'CONCAT - 拼接字符串', value: 'CONCAT' },
-    { label: 'SUBSTRING - 截取字符串', value: 'SUBSTRING' },
-    { label: 'TRIM - 去除首尾空格', value: 'TRIM' },
-    { label: 'LTRIM - 去除左侧空格', value: 'LTRIM' },
-    { label: 'RTRIM - 去除右侧空格', value: 'RTRIM' },
-    { label: 'UPPER - 转大写', value: 'UPPER' },
-    { label: 'LOWER - 转小写', value: 'LOWER' },
-    { label: 'LENGTH - 字符串长度', value: 'LENGTH' },
-    { label: 'CHAR_LENGTH - 字符数', value: 'CHAR_LENGTH' },
-  ]},
-  { label: '数值函数', options: [
-    { label: 'ROUND - 四舍五入', value: 'ROUND' },
-    { label: 'ABS - 绝对值', value: 'ABS' },
-    { label: 'FLOOR - 向下取整', value: 'FLOOR' },
-    { label: 'CEIL - 向上取整', value: 'CEIL' },
-  ]},
-  { label: '日期函数', options: [
-    { label: 'YEAR - 提取年份', value: 'YEAR' },
-    { label: 'MONTH - 提取月份', value: 'MONTH' },
-    { label: 'DAY - 提取日期', value: 'DAY' },
-    { label: 'DATE - 转为日期', value: 'DATE' },
-    { label: 'DATE_FORMAT - 日期格式化', value: 'DATE_FORMAT' },
-  ]},
-  { label: '逻辑函数', options: [
-    { label: 'IF - 条件判断', value: 'IF' },
-    { label: 'COALESCE - 返回首个非空值', value: 'COALESCE' },
-    { label: 'CAST - 类型转换', value: 'CAST' },
-  ]},
+// 累计求和模板说明（用于展示区）
+const CUMULATIVE_SUM_TEMPLATE = {
+  label: '累计求和',
+  snippet: 'SUM() OVER (PARTITION BY  ORDER BY  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
+  description: '对字段按分区和排序进行累计求和',
+  example: 'SUM(销售额) OVER (PARTITION BY 地区 ORDER BY 月份 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n结果示例：地区=华北，月份=1月，累计=1000；2月，累计=2800；3月，累计=4500',
+};
+
+// 函数表达式快捷模板
+const FUNCTION_TEMPLATES = [
+  { label: 'ROUND(列, 小数位)', snippet: 'ROUND(, 2)' },
+  { label: 'ABS(列)', snippet: 'ABS()' },
+  { label: 'FLOOR(列)', snippet: 'FLOOR()' },
+  { label: 'CEIL(列)', snippet: 'CEIL()' },
+  { label: 'SUBSTRING(列, 开始, 长度)', snippet: 'SUBSTRING(, 1, 10)' },
+  { label: 'CONCAT(列1, 列2)', snippet: 'CONCAT(, )' },
+  { label: 'TRIM(列)', snippet: 'TRIM()' },
+  { label: 'UPPER(列)', snippet: 'UPPER()' },
+  { label: 'LOWER(列)', snippet: 'LOWER()' },
+  { label: 'LENGTH(列)', snippet: 'LENGTH()' },
+  { label: 'CHAR_LENGTH(列)', snippet: 'CHAR_LENGTH()' },
+  { label: 'IF(条件, 真值, 假值)', snippet: 'IF( > 0, , )' },
+  { label: 'COALESCE(列1, 列2)', snippet: 'COALESCE(, )' },
+  { label: 'CAST(列 AS 类型)', snippet: 'CAST( AS SIGNED)' },
+  { label: 'DATE_FORMAT(列, 格式)', snippet: "DATE_FORMAT(, '%Y-%m-%d')" },
+  { label: 'YEAR(列)', snippet: 'YEAR()' },
+  { label: 'MONTH(列)', snippet: 'MONTH()' },
+  { label: CUMULATIVE_SUM_TEMPLATE.label, snippet: CUMULATIVE_SUM_TEMPLATE.snippet, isCumulative: true },
 ];
 
-function parseFunctionFormState(cfg: Record<string, unknown>) {
-  const rawArgs = cfg.arguments;
-  const arr = Array.isArray(rawArgs) ? rawArgs.map((a) => String(a ?? '')) : [];
-  const args = arr.length > 0 ? arr : [''];
-  return {
-    function_name: String(cfg.function_name ?? ''),
-    arguments: args,
-    extraArg: '',
-  };
-}
-
-const FunctionForm: React.FC<FunctionFormProps> = ({
-  columns,
-  onValuesChange,
-  initialConfig,
-  sourceColumn,
-  onSourceColumnChange,
-}) => {
-  const [values, setValues] = useState(() => parseFunctionFormState(initialConfig ?? {}));
-  const initSig = JSON.stringify(initialConfig ?? {});
+const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange, initialConfig }) => {
+  const [expression, setExpression] = useState(() => String(initialConfig?.expression ?? ''));
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  // 使用 ref 存储初始值，避免 useEffect 依赖变化导致的问题
+  const initialExpression = React.useRef(String(initialConfig?.expression ?? ''));
 
   useEffect(() => {
-    setValues(parseFunctionFormState(initialConfig ?? {}));
-  }, [initSig]);
+    const cfg = initialConfig ?? {};
+    const newExpr = String(cfg.expression ?? '');
+    // 只在 initialConfig 真正变化时才重置
+    if (initialExpression.current !== newExpr) {
+      initialExpression.current = newExpr;
+      setExpression(newExpr);
+    }
+  }, [initialConfig]);
 
   useEffect(() => {
-    const args = values.arguments.filter((a) => a !== '');
-    onValuesChange({
-      function_name: values.function_name,
-      arguments: [...args, values.extraArg].filter((a) => a !== ''),
-    });
-  }, [values, onValuesChange]);
+    onValuesChange({ expression });
+  }, [expression, onValuesChange]);
 
-  const addArg = () => {
-    setValues((prev) => ({ ...prev, arguments: [...prev.arguments, ''] }));
+  const insertText = (text: string, label: string) => {
+    setExpression((prev) => prev + text);
+    setActiveTemplate(label);
   };
 
-  const updateArg = (index: number, value: string) => {
-    setValues((prev) => {
-      const newArgs = [...prev.arguments];
-      newArgs[index] = value;
-      return { ...prev, arguments: newArgs };
-    });
+  const insertColumn = (col: string) => {
+    setExpression((prev) => prev + ` ${col} `);
   };
+
+  const activeTemplateInfo = activeTemplate
+    ? FUNCTION_TEMPLATES.find((t) => t.label === activeTemplate)
+    : null;
+  const isCumulative = activeTemplateInfo && 'isCumulative' in activeTemplateInfo && activeTemplateInfo.isCumulative;
 
   return (
     <div>
       <Alert
-        message="函数说明"
-        description="选择函数并配置参数，部分参数可选择列名"
+        message="函数表达式说明"
+        description="直接输入 MySQL 函数表达式，可从下方快捷模板或列名列表中插入。示例: ROUND(销售额, 2)、IF(数量 > 0, '正', '负')"
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
       />
       <Form layout="vertical">
-        <Form.Item label="源列（部分函数以列为输入）">
-          <Select
-            value={sourceColumn || undefined}
-            onChange={(v) => onSourceColumnChange?.(v)}
-            options={columns.map((c) => ({ label: c, value: c }))}
-            placeholder="选择源列"
-            allowClear
+        <Form.Item label="表达式">
+          <ExpressionEditor
+            value={expression}
+            onChange={setExpression}
+            columns={columns}
+            rows={4}
+            placeholder="例如: ROUND(销售额, 2) 或 IF(数量 > 0, '有', '无')"
           />
         </Form.Item>
-        <Form.Item label="函数">
-          <Select
-            showSearch
-            options={FUNCTIONS}
-            value={values.function_name || undefined}
-            onChange={(v) => setValues((prev) => ({ ...prev, function_name: v }))}
-            placeholder="选择函数"
-            filterOption={(input, option) =>
-              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-            }
-          />
+        {isCumulative && activeTemplateInfo && 'description' in activeTemplateInfo && (
+          <Form.Item label="函数说明">
+            <Card size="small" style={{ background: '#f5f5f5' }}>
+              <>
+                <div style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 4 }}>
+                    <strong>说明：</strong>{String(activeTemplateInfo.description)}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>
+                    <strong>使用示例：</strong>{CUMULATIVE_SUM_TEMPLATE.example}
+                  </div>
+                </div>
+              </>
+            </Card>
+          </Form.Item>
+        )}
+        <Form.Item label="插入列名">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {columns.map((col) => (
+              <Tag
+                key={col}
+                onClick={() => insertColumn(col)}
+                style={{ cursor: 'pointer', background: '#e6f7ff', borderColor: '#91d5ff', color: '#1890ff' }}
+              >
+                {col}
+              </Tag>
+            ))}
+          </div>
         </Form.Item>
-        <Form.Item label="参数 (选择列或输入值)">
-          {values.arguments.map((arg, index) => (
-            <div key={index} style={{ marginBottom: 8 }}>
-              <Text type="secondary">参数 {index + 1}:</Text>
-              <Space.Compact style={{ width: '100%', marginTop: 4 }}>
-                <Select
-                  style={{ width: '50%' }}
-                  options={columns.map((c) => ({ label: c, value: c }))}
-                  value={columns.includes(arg) ? arg : undefined}
-                  onChange={(v) => updateArg(index, v)}
-                  placeholder="选择列"
-                  allowClear
-                />
-                <Input
-                  style={{ width: '50%' }}
-                  value={columns.includes(arg) ? '' : arg}
-                  onChange={(e) => updateArg(index, e.target.value)}
-                  placeholder="或输入值"
-                />
-              </Space.Compact>
-            </div>
-          ))}
-          {values.function_name === 'SUBSTRING' && values.arguments.length < 2 && (
-            <Button type="dashed" onClick={addArg} icon={<PlusOutlined />}>
-              添加参数
-            </Button>
-          )}
-          {values.function_name === 'IF' && (
-            <Paragraph type="secondary" style={{ marginTop: 8 }}>
-              IF 语法: IF(条件, 真值, 假值)
-            </Paragraph>
-          )}
-          {values.function_name === 'DATE_FORMAT' && (
-            <Form.Item label="日期格式" style={{ marginTop: 8 }}>
-              <Select
-                options={[
-                  { label: '%Y-%m-%d', value: '%Y-%m-%d' },
-                  { label: '%Y-%m-%d %H:%i:%s', value: '%Y-%m-%d %H:%i:%s' },
-                  { label: '%Y年%m月%d日', value: '%Y年%m月%d日' },
-                  { label: '%m/%d/%Y', value: '%m/%d/%Y' },
-                ]}
-                placeholder="选择日期格式"
-                onChange={(v) => setValues((prev) => ({ ...prev, extraArg: v }))}
-              />
-            </Form.Item>
-          )}
+        <Form.Item label="快捷模板">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {FUNCTION_TEMPLATES.map((t) => (
+              <Tag
+                key={t.label}
+                onClick={() => insertText(t.snippet, t.label)}
+                style={{ cursor: 'pointer' }}
+                color={'isCumulative' in t && t.isCumulative ? 'orange' : 'green'}
+              >
+                {t.label}
+              </Tag>
+            ))}
+          </div>
         </Form.Item>
       </Form>
     </div>
