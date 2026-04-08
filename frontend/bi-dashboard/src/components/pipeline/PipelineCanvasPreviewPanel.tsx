@@ -8,10 +8,11 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip, Alert, Checkbox, Divider, Modal,
+  Input, Tooltip, Alert, Checkbox, Divider, Modal, Radio,
 } from 'antd';
 import {
   ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
+  TableOutlined, BarChartOutlined,
 } from '@ant-design/icons';
 import { GraphNode, GraphEdge } from '../../utils/graphUtils';
 import { PipelineNode } from '../../services/pipelineService';
@@ -19,9 +20,15 @@ import { getNodeTypeDef } from '../../utils/nodeTypeRegistry';
 import { resolvePreviewDataSourceId } from '../../utils/pipelineDataSourceUtils';
 import { NodePreviewTable } from './NodePreviewTable';
 import { InsertColumnModal, InsertedColumnConfig } from './InsertColumnModal';
+import { ChartNodePreview } from './visual-nodes/ChartNodePreview';
 import { useNodePreview } from '../../hooks/useNodePreview';
 import { PREVIEW_COLUMN_DISPLAY_AUTO } from '../../constants/previewColumnDisplay';
 import { getPreviewColumnFormatsFromConfig } from '../../utils/previewDisplayUtils';
+import {
+  ChartNodeConfig,
+  DEFAULT_CHART_CONFIG,
+  ChartType,
+} from '../../types/chartNode';
 
 const { Text } = Typography;
 
@@ -245,6 +252,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const [insertColumnSourceColumn, setInsertColumnSourceColumn] = useState<string | undefined>();
   const [insertColumnEditConfig, setInsertColumnEditConfig] = useState<InsertedColumnConfig | undefined>();
 
+  /** 图表预览模式：table | chart */
+  const [previewMode, setPreviewMode] = useState<'table' | 'chart'>('table');
+
   const pipelineNode = previewNode?.data?.pipelineNode as PipelineNode | undefined;
   const nodeDef = pipelineNode ? getNodeTypeDef(pipelineNode.type) : null;
   const resolvedDsId = useMemo(
@@ -283,6 +293,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     if (!previewNode || !nodeDef?.hasPreview) {
       clearPreview();
       setVisibleColumnKeys([]);
+      setPreviewMode('table');
       return;
     }
     loadPreview(
@@ -559,6 +570,38 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const showTable = !previewLoading && previewData && previewData.columns.length > 0;
   const showNoData = !previewLoading && !previewData && !previewError;
   const showLoading = previewLoading && !previewData;
+  const isChartNode = pipelineNode?.type === 'chart';
+
+  // 提取图表节点配置
+  const chartNodeConfig = useMemo<ChartNodeConfig | null>(() => {
+    if (!isChartNode || !pipelineNode?.config) return null;
+    const cfg = pipelineNode.config as Record<string, unknown>;
+    return {
+      chartType: (cfg.chartType as ChartType) || DEFAULT_CHART_CONFIG.chartType,
+      xField: (cfg.xField as string) || '',
+      yFields: (cfg.yFields as string[]) || [],
+      graphDimensions: (cfg.graphDimensions as string[]) || [],
+      graphMetrics: (cfg.graphMetrics as string[]) || [],
+      yAggMethod: (cfg.yAggMethod as any) || 'sum',
+      xGroupByEnabled: cfg.xGroupByEnabled !== false,
+      xAxisTitle: (cfg.xAxisTitle as string) || '',
+      yAxisTitle: (cfg.yAxisTitle as string) || '',
+      yAxisRightTitle: (cfg.yAxisRightTitle as string) || '',
+      sortBy: (cfg.sortBy as 'x' | 'y') || 'x',
+      sortOrder: (cfg.sortOrder as 'asc' | 'desc') || 'desc',
+      showLegend: cfg.showLegend !== false,
+      showTooltip: cfg.showTooltip !== false,
+      lineYFields: (cfg.lineYFields as string[]) || [],
+      metricMode: (cfg.metricMode as any) || 'aggregate',
+      metricFilterField: (cfg.metricFilterField as string) || '',
+      metricFilterValue: (cfg.metricFilterValue as string) || '',
+      metricFilters: (cfg.metricFilters as any[]) || [],
+      metricFilterExpr: cfg.metricFilterExpr as any,
+      metricUnit: (cfg.metricUnit as string) || '',
+      metricDecimals: (cfg.metricDecimals as number) || 2,
+      metricLabel: (cfg.metricLabel as string) || '',
+    };
+  }, [isChartNode, pipelineNode?.config]);
 
   if (!previewNode) {
     return (
@@ -589,6 +632,24 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
           {title}
         </Text>
         <div className="pipeline-canvas-preview-toolbar-right">
+          {/* 图表/表格切换（仅图表节点显示） */}
+          {isChartNode && (
+            <Radio.Group
+              value={previewMode}
+              onChange={(e) => setPreviewMode(e.target.value)}
+              size="small"
+              optionType="button"
+              buttonStyle="solid"
+            >
+              <Radio.Button value="table">
+                <TableOutlined /> 表格
+              </Radio.Button>
+              <Radio.Button value="chart">
+                <BarChartOutlined /> 图表
+              </Radio.Button>
+            </Radio.Group>
+          )}
+
           {columnCatalog.length > 0 && (
             <Popover
               trigger="click"
@@ -718,7 +779,20 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
       )}
 
-      {showTable && (
+      {/* 图表预览模式 */}
+      {isChartNode && previewMode === 'chart' && (
+        <div className="pipeline-canvas-preview-chart-wrap">
+          <ChartNodePreview
+            nodeConfig={chartNodeConfig}
+            previewData={previewData}
+            loading={previewLoading}
+            height={350}
+          />
+        </div>
+      )}
+
+      {/* 表格预览模式 */}
+      {showTable && previewMode === 'table' && (
         <div className="pipeline-canvas-preview-table-wrap" ref={tableWrapRef}>
           <NodePreviewTable
             data={previewData}

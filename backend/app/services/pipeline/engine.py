@@ -2372,6 +2372,12 @@ class PipelineEngine:
                 ref, _ = upstream_refs[0]
                 return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
 
+        if node_type == "chart":
+            # 数据可视化节点不产生 SQL，预览与表格展示均透传上游结果集
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
+
         return "", []
 
     @staticmethod

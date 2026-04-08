@@ -13,6 +13,7 @@ import {
   AppstoreOutlined,
   ExportOutlined,
   HolderOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons';
 
 /** Data type colors for column chips */
@@ -72,6 +73,7 @@ export const EDITOR_NODE_TYPE_ORDER: string[] = [
   'output',
   'transform',
   'merge',
+  'chart',
 ];
 
 /** 右侧配置「节点类型」下拉的选项；旧管道中的 filter 节点会额外带上 filter 一项 */
@@ -197,6 +199,20 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     icon: <ColumnHeightOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform', 'merge'],
     cssClass: 'merge',
+  },
+  chart: {
+    type: 'chart',
+    label: '数据可视化',
+    labelShort: '图表',
+    color: '#722ed1',
+    bgColor: '#f9f0ff',
+    borderColor: '#d3adf7',
+    tagBg: '#722ed1',
+    tagColor: '#fff',
+    hasPreview: true,
+    description: '将上游数据可视化展示为图表',
+    icon: <PieChartOutlined />,
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'merge'],
   },
 };
 

@@ -21,6 +21,7 @@ import { JoinNodeConfig } from './visual-nodes/JoinNodeConfig';
 import { ColumnSelectConfig } from './visual-nodes/ColumnSelectConfig';
 import { OutputNodeConfig } from './visual-nodes/OutputNodeConfig';
 import { MergeNodeConfig } from './visual-nodes/MergeNodeConfig';
+import { ChartNodeConfig } from './visual-nodes/ChartNodeConfig';
 
 const { Text } = Typography;
 
@@ -288,6 +289,16 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 node={selectedNode}
                 upstreamNodes={upstreams}
                 allNodes={allNodes}
+                onChange={handleFormChange}
+                readOnly={readOnly}
+              />
+            )}
+            {pipelineNode?.type === 'chart' && (
+              <ChartNodeConfig
+                node={selectedNode}
+                upstreamNodes={upstreams}
+                allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 readOnly={readOnly}
               />

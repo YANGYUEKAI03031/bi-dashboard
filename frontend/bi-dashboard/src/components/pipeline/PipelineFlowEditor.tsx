@@ -28,6 +28,7 @@ import {
   ImportOutlined, BarChartOutlined, SwapOutlined, ColumnHeightOutlined,
   AppstoreOutlined, ExportOutlined, DownOutlined,
   DatabaseOutlined, ArrowRightOutlined, HolderOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons';
 import './PipelineFlowEditor.css';
 import { PipelineNode, PipelineService } from '../../services/pipelineService';
@@ -298,6 +299,37 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     );
   }
 
+  if (node.type === 'chart') {
+    const chartType = (config.chartType as string) || 'bar';
+    const xField = (config.xField as string) || '';
+    const yFields = (config.yFields as string[]) || [];
+    const aggMethod = (config.yAggMethod as string) || 'sum';
+
+    const chartTypeLabels: Record<string, string> = {
+      bar: '柱状图',
+      line: '折线图',
+      area: '面积图',
+      pie: '饼图',
+      scatter: '散点图',
+      radar: '雷达图',
+      boxplot: '箱线图',
+      bar_line: '柱线组合',
+      stacked_bar: '堆积柱形图',
+      waterfall: '瀑布图',
+      funnel: '漏斗图',
+      metric: '指标卡',
+    };
+
+    return (
+      <div className="pipeline-node-card-summary">
+        {renderChip(chartTypeLabels[chartType] || chartType)}
+        {xField && renderChip(xField, 'X轴', true)}
+        {yFields.length > 0 && renderChip(yFields[0], yFields.length > 1 ? `+${yFields.length - 1}` : 'Y轴', true)}
+        {renderChip(aggMethod, '聚合', true)}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -372,6 +404,16 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
             </Space>
           ),
           onClick: () => onAdd('merge'),
+        },
+        {
+          key: 'chart',
+          label: (
+            <Space style={{ fontSize: 12 }}>
+              <PieChartOutlined style={{ color: NODE_TYPE_REGISTRY.chart?.color ?? '#722ed1' }} />
+              数据可视化
+            </Space>
+          ),
+          onClick: () => onAdd('chart'),
         },
       ],
     },

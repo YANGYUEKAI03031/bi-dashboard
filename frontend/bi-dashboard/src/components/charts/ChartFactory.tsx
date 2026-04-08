@@ -89,7 +89,7 @@ echarts.use([
   CanvasRenderer
 ]);
 
-interface ChartConfig {
+export interface ChartConfig {
   type: string;
   title?: string;
   xAxis?: any;
