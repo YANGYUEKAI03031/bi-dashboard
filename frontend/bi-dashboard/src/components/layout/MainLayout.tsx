@@ -246,8 +246,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         return '仪表盘';
       case '/reports':
         return '报表中心';
-      case '/visualization-builder':
-        return '可视化构建器';
       case '/charts-management':
         return '图表管理';
       case '/datasources':
@@ -441,14 +439,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="nav-text">图表管理</span>
           </Link>
           
-          {/* 添加可视化构建器导航项（位置靠后） */}
-          <Link 
-            to="/visualization-builder" 
-            className={`nav-item ${isActive('/visualization-builder') ? 'active' : ''}`}
-          >
-            <span className="icon">🎨</span>
-            <span className="nav-text">可视化构建</span>
-          </Link>
 
           {/* 数据源管理 - 仅管理员可见 */}
           {isAdmin && (

@@ -619,6 +619,18 @@ class ChartService:
                 update_fields[VisualizationCard.cache_enabled] = update_data.cache_enabled
             if hasattr(update_data, 'cache_duration') and update_data.cache_duration is not None:
                 update_fields[VisualizationCard.cache_duration] = update_data.cache_duration
+
+            raw_update = (
+                update_data.model_dump(exclude_unset=True)
+                if hasattr(update_data, "model_dump")
+                else update_data.dict(exclude_unset=True)
+            )
+            if "pipeline_id" in raw_update:
+                update_fields[VisualizationCard.pipeline_id] = raw_update["pipeline_id"]
+            if "focus_node_id" in raw_update:
+                update_fields[VisualizationCard.focus_node_id] = raw_update["focus_node_id"]
+            if "table_name" in raw_update:
+                update_fields[VisualizationCard.table_name] = raw_update["table_name"]
             
             # 更新时间戳
             update_fields[VisualizationCard.updated_at] = datetime.utcnow()
@@ -654,7 +666,18 @@ class ChartService:
                 )
                 
                 logger.info(f"图表更新成功: {chart.name} (ID: {chart.id})")
-            
+
+            # 反向同步到管道节点（如果有 pipeline_id 和 focus_node_id）
+            if getattr(chart, "pipeline_id", None) and getattr(chart, "focus_node_id", None):
+                try:
+                    from app.services.pipeline_chart_sync_service import PipelineChartSyncService
+                    sync_service = PipelineChartSyncService(self.db)
+                    success, msg = await sync_service.sync_chart_to_pipeline(chart)
+                    if success:
+                        logger.info(f"图表 {chart_id} 已同步到管道节点: {msg}")
+                except Exception as sync_err:
+                    logger.warning(f"图表 {chart_id} 反向同步到管道失败（不影响图表更新）: {sync_err}")
+
             return chart
             
         except SQLAlchemyError as e:

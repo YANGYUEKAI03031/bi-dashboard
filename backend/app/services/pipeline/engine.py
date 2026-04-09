@@ -239,6 +239,16 @@ class PipelineEngine:
                             merge_type,
                         )
 
+                        # 与预览折叠 SQL（build_chained_sql）一致：行筛选、列选、插入列（insertedColumns）
+                        # 来自 config，而非写死在 node.sql。仅替换占位符而不合并 config 时，插入列不会进临时表/输出表。
+                        if canonical_type != "output":
+                            actual_sql = PipelineEngine._apply_row_filter(
+                                actual_sql, node_config
+                            )
+                            actual_sql = PipelineEngine._apply_column_projection(
+                                actual_sql, node_config, None
+                            )
+
                         # 验证 SQL 安全性
                         if not self._validate_sql(actual_sql):
                             raise ValueError("SQL 语句包含不允许的操作")

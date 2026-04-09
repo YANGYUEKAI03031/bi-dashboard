@@ -35,6 +35,8 @@ interface ChartNodeConfigProps {
   allNodes: GraphNode[];
   pipelineDataSourceId?: number | null;
   onChange: () => void;
+  /** 图表弹窗保存时必须走此回调写回画布 nodes，否则仅改内存 + onChange 时 Form/闭包可能覆盖 config，导致「预览已变但保存/运行后 DB 仍是旧 chartType」 */
+  onNodeUpdate: (updatedNode: GraphNode) => void;
   readOnly?: boolean;
 }
 
@@ -60,6 +62,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
   allNodes,
   pipelineDataSourceId,
   onChange,
+  onNodeUpdate,
   readOnly = false,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
@@ -150,17 +153,17 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
   const handleSaveConfig = (newConfig: ChartNodeConfigType) => {
     const pn = node.data.pipelineNode as Record<string, unknown>;
     const currentConfig = (pn.config as Record<string, unknown>) || {};
-    node.data = {
-      ...node.data,
-      pipelineNode: {
-        ...pn,
-        config: {
-          ...currentConfig,
-          ...newConfig,
+    const mergedConfig = { ...currentConfig, ...newConfig };
+    onNodeUpdate({
+      ...node,
+      data: {
+        ...node.data,
+        pipelineNode: {
+          ...pn,
+          config: mergedConfig,
         },
       },
-    };
-    onChange();
+    });
     setModalOpen(false);
     message.success('图表配置已保存');
   };

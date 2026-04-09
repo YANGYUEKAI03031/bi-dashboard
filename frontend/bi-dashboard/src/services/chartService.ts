@@ -11,6 +11,10 @@ interface ChartCreateRequest {
   database_id: number;
   creator_id: number;
   is_public?: boolean;
+  /** 源表展示名；管道图可由前端从管道解析后写入 */
+  table_name?: string | null;
+  pipeline_id?: number | null;
+  focus_node_id?: string | null;
 }
 
 interface ChartResponse {
@@ -23,6 +27,8 @@ interface ChartResponse {
   database_id: number;
   creator_id: number;
   table_name?: string;
+  pipeline_id?: number | null;
+  focus_node_id?: string | null;
   created_at: string;
   updated_at: string;
 }

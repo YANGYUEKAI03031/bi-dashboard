@@ -1,13 +1,19 @@
 # backend/app/services/pipeline_chart_sync_service.py
 """
-将管道中的 chart 节点配置同步到 visualization_cards 表。
+将管道中的 chart 节点配置同步到 visualization_cards 表（pipeline → chart），
+以及将图表编辑器的设置同步回管道节点（chart → pipeline）。
 
-同步策略：
+同步策略（pipeline → chart）：
 - 根据 pipeline_id + focus_node_id 查找 visualization_cards：
   - 存在则更新，不存在则新建。
 - visualization_settings 字段保存图表可视化配置（来自 chart 节点的 config）。
 - dataset_query.native.query 使用占位符，chart service 查询时会动态解析到最新 execution 的结果表。
 - synced_at 记录最近一次同步时间。
+
+反向同步策略（chart → pipeline）：
+- 根据 chart 的 pipeline_id + focus_node_id 定位对应管道的节点。
+- 将图表编辑器格式的 visualization_settings 映射回 pipeline chart 节点的 config 格式。
+- 只更新节点的 config，nodes 数组中的其他节点不受影响。
 """
 import json
 import logging
@@ -31,7 +37,7 @@ def _chart_type_to_standard(chart_type: Optional[str]) -> str:
     """将 pipeline chart 图表类型映射为 visualization_cards 标准类型。"""
     if not chart_type:
         return "bar"
-    ct = chart_type.lower()
+    ct = chart_type.strip().lower()
     mapping = {
         "bar": "bar",
         "horizontal_bar": "horizontal_bar",
@@ -45,6 +51,8 @@ def _chart_type_to_standard(chart_type: Optional[str]) -> str:
         "table": "table",
         "gauge": "gauge",
         "number": "metric",
+        "boxplot": "boxplot",
+        "箱线图": "boxplot",
     }
     return mapping.get(ct, "bar")
 
@@ -200,6 +208,11 @@ class PipelineChartSyncService:
 
             # 构建 visualization_settings
             viz_settings = _build_visualization_settings(node_config)
+            std_type = _chart_type_to_standard(viz_settings.get("chartType"))
+            logger.debug(
+                f"[sync] node={node_id} raw.chartType={node_config.get('chartType')} "
+                f"viz.chartType={viz_settings.get('chartType')} mapped={std_type}"
+            )
 
             # 构建 dataset_query
             # 优先查找 output 节点目标表
@@ -237,7 +250,9 @@ class PipelineChartSyncService:
 
             logger.info(
                 f"图表同步: [{action}] '{node_name}' "
-                f"(viz_id={chart.id}, pipeline_id={pipeline_id}, node={node_id})"
+                f"(viz_id={chart.id}, viz_chart_type={chart.chart_type}, "
+                f"node_config.chartType={node_config.get('chartType')}, "
+                f"pipeline_id={pipeline_id}, node={node_id})"
             )
             synced.append({
                 "id": chart.id,
@@ -314,3 +329,193 @@ class PipelineChartSyncService:
         await self.db.commit()
         await self.db.refresh(chart)
         return chart
+
+    # ================================================================
+    # 反向同步：图表编辑器 → 管道节点（chart → pipeline）
+    # ================================================================
+
+    def _visualization_settings_to_node_config(
+        viz_settings: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        将图表编辑器的 visualization_settings 格式映射回 pipeline chart 节点的 config 格式。
+
+        映射关系（反向）：
+        - graph_dimensions / x_field -> xField / graphDimensions
+        - graph_metrics / y_fields -> yFields / graphMetrics
+        - y_agg_method -> yAggMethod
+        - x_group_by_enabled -> xGroupByEnabled
+        - x_axis_title -> xAxisTitle
+        - y_axis_title -> yAxisTitle
+        - show_legend -> showLegend
+        - show_tooltip -> showTooltip
+        - sort_by -> sortBy
+        - sort_order -> sortOrder
+        - chartType -> chartType
+        """
+        cfg: Dict[str, Any] = {}
+
+        # chartType
+        chart_type = viz_settings.get("chartType")
+        if not chart_type:
+            chart_type = viz_settings.get("chart_type")
+        if chart_type:
+            cfg["chartType"] = chart_type
+
+        # X 轴字段
+        dims = viz_settings.get("graph_dimensions") or viz_settings.get("graphDimensions", [])
+        if dims:
+            cfg["graphDimensions"] = dims
+            if isinstance(dims, list) and dims:
+                cfg["xField"] = dims[0]
+
+        # Y 轴字段
+        mets = viz_settings.get("graph_metrics") or viz_settings.get("graphMetrics", [])
+        if mets:
+            cfg["graphMetrics"] = mets
+            if isinstance(mets, list):
+                cfg["yFields"] = mets
+
+        # Y 轴聚合方式
+        y_agg = viz_settings.get("y_agg_method")
+        if y_agg:
+            cfg["yAggMethod"] = y_agg
+
+        # X 轴聚合开关
+        x_group = viz_settings.get("x_group_by_enabled")
+        if x_group is not None:
+            cfg["xGroupByEnabled"] = x_group
+
+        # 轴标题
+        x_title = viz_settings.get("x_axis_title")
+        if x_title:
+            cfg["xAxisTitle"] = x_title
+
+        y_title = viz_settings.get("y_axis_title")
+        if y_title:
+            cfg["yAxisTitle"] = y_title
+
+        # 显示选项
+        show_legend = viz_settings.get("show_legend")
+        if show_legend is not None:
+            cfg["showLegend"] = show_legend
+
+        show_tooltip = viz_settings.get("show_tooltip")
+        if show_tooltip is not None:
+            cfg["showTooltip"] = show_tooltip
+
+        # 排序
+        sort_by = viz_settings.get("sort_by")
+        if sort_by:
+            cfg["sortBy"] = sort_by
+
+        sort_order = viz_settings.get("sort_order")
+        if sort_order:
+            cfg["sortOrder"] = sort_order
+
+        # 指标卡专用
+        metric_mode = viz_settings.get("metric_mode")
+        if metric_mode:
+            cfg["metricMode"] = metric_mode
+
+        metric_unit = viz_settings.get("metric_unit")
+        if metric_unit:
+            cfg["metricUnit"] = metric_unit
+
+        metric_decimals = viz_settings.get("metric_decimals")
+        if metric_decimals is not None:
+            cfg["metricDecimals"] = metric_decimals
+
+        metric_label = viz_settings.get("metric_label")
+        if metric_label:
+            cfg["metricLabel"] = metric_label
+
+        # 折线图 Y 轴字段（双轴）
+        line_y_fields = viz_settings.get("line_y_fields")
+        if line_y_fields:
+            cfg["lineYFields"] = line_y_fields
+
+        return cfg
+
+    async def sync_chart_to_pipeline(
+        self,
+        chart: VisualizationCard,
+    ) -> Tuple[bool, str]:
+        """
+        将图表编辑器的配置反向同步到关联的管道节点。
+
+        Args:
+            chart: VisualizationCard 对象（应有 pipeline_id + focus_node_id）
+
+        Returns:
+            (success, message)
+        """
+        pipeline_id = getattr(chart, "pipeline_id", None)
+        focus_node_id = getattr(chart, "focus_node_id", None)
+
+        if not pipeline_id or not focus_node_id:
+            logger.info(
+                f"图表 {chart.id} 无 pipeline_id 或 focus_node_id，跳过反向同步"
+            )
+            return False, "图表未关联到管道节点"
+
+        # 解析 visualization_settings
+        viz_settings_raw = getattr(chart, "visualization_settings", "{}") or "{}"
+        if isinstance(viz_settings_raw, str):
+            try:
+                viz_settings = json.loads(viz_settings_raw)
+            except json.JSONDecodeError:
+                viz_settings = {}
+        else:
+            viz_settings = viz_settings_raw or {}
+
+        # 构建节点 config
+        node_config = self._visualization_settings_to_node_config(viz_settings)
+        if not node_config:
+            logger.info(f"图表 {chart.id} 可视化设置为空，跳过反向同步")
+            return False, "可视化设置为空"
+
+        # 查找管道
+        pipeline = await self.db.get(DataPipeline, pipeline_id)
+        if not pipeline:
+            logger.warning(f"图表 {chart.id} 关联的管道 {pipeline_id} 不存在")
+            return False, f"管道 {pipeline_id} 不存在"
+
+        # 解析管道的 nodes JSON
+        pipeline_nodes = getattr(pipeline, "nodes", []) or []
+        if isinstance(pipeline_nodes, str):
+            try:
+                pipeline_nodes = json.loads(pipeline_nodes)
+            except json.JSONDecodeError:
+                pipeline_nodes = []
+
+        # 找到对应的 chart 节点
+        target_idx = -1
+        for i, node in enumerate(pipeline_nodes):
+            if str(node.get("id", "")) == str(focus_node_id) and node.get("type") == "chart":
+                target_idx = i
+                break
+
+        if target_idx < 0:
+            logger.warning(
+                f"管道 {pipeline_id} 中未找到 chart 节点 {focus_node_id}"
+            )
+            return False, f"管道中未找到对应的图表节点 {focus_node_id}"
+
+        # 更新节点的 config（只更新 config，不改变其他字段）
+        old_config = pipeline_nodes[target_idx].get("config", {}) or {}
+        pipeline_nodes[target_idx]["config"] = {
+            **old_config,
+            **node_config,
+        }
+
+        # 写回数据库
+        pipeline.nodes = pipeline_nodes
+        pipeline.updated_at = datetime.utcnow()
+        await self.db.commit()
+
+        logger.info(
+            f"图表 {chart.id} 反向同步到管道 {pipeline_id} 节点 {focus_node_id} 完成"
+        )
+        return True, "同步成功"
+

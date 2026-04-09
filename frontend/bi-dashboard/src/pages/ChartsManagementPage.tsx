@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm, Switch } from 'antd';
 import { DataSourceService } from '../services/dataSourceService';
-import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { EyeOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
 import './ChartsManagementPage.css';
@@ -22,6 +22,8 @@ interface ChartItem {
   chart_type: string;
   database_id: number;
   table_name?: string;  // 新增：表名字段
+  pipeline_id?: number | null;
+  focus_node_id?: string | null;
   created_at: string;
   visualization_settings?: {
     // 前端使用的字段
@@ -64,15 +66,55 @@ export const ChartsManagementPage: React.FC = () => {
   // 预览数据状态
   const [previewData, setPreviewData] = useState<any[]>([]);
   
+  const PREVIEW_ROW_LIMIT = 200;
+
   // 加载预览数据
-  const loadPreviewData = async (databaseId: number, tableName: string) => {
+  const loadPreviewData = async (databaseId: number, tableName: string | undefined, chart?: ChartItem) => {
     try {
       console.log('开始加载预览数据:', { databaseId, tableName });
-      
-      // 构建查询语句
-      const query = `SELECT * FROM \`${tableName}\` LIMIT 10`;
-      
-      // 调用后端API执行查询
+
+      // 优先走与仪表盘相同的图表查询：管道图会得到节点输出列名（如 count_distinct_xxx），
+      // 与 X/Y 配置一致；若仍用源表 SELECT *，列名对不上则柱形图为空。
+      if (chart?.id) {
+        try {
+          const rows = await ChartService.executeChartQuery(chart.id);
+          if (Array.isArray(rows)) {
+            const limited = rows.slice(0, PREVIEW_ROW_LIMIT);
+            console.log('预览数据结果(图表查询):', { row_count: limited.length });
+            setPreviewData(limited);
+            return;
+          }
+        } catch (chartQueryErr) {
+          console.warn('图表查询预览失败，尝试源表采样:', chartQueryErr);
+        }
+      }
+
+      let actualTableName = (tableName || '').trim();
+
+      // 如果表名为空但图表关联了管道，从管道节点追溯源表名
+      if (!actualTableName && chart?.id) {
+        const chartDetail = await fetch(`${API_BASE_URL}/visualization/charts/${chart.id}`, {
+          headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+        }).catch(() => null);
+        let chartData: any = null;
+        if (chartDetail?.ok) {
+          chartData = await chartDetail.json();
+        }
+        const pipelineId = chartData?.pipeline_id;
+        const focusNodeId = chartData?.focus_node_id;
+        if (pipelineId && focusNodeId) {
+          actualTableName = (await loadSourceTableName(pipelineId, focusNodeId)) || '';
+        }
+      }
+
+      if (!actualTableName) {
+        setPreviewData([]);
+        return;
+      }
+
+      // 兜底：直连源表采样（列名可能与管道派生指标不一致，仅作非管道或查询失败时的参考）
+      const query = `SELECT * FROM \`${actualTableName}\` LIMIT 10`;
+
       const response = await fetch(`${API_BASE_URL}/visualization/query`, {
         method: 'POST',
         headers: {
@@ -84,16 +126,15 @@ export const ChartsManagementPage: React.FC = () => {
           query: query
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error(`查询失败: ${response.status} ${response.statusText}`);
       }
-      
+
       const result = await response.json();
-      console.log('预览数据结果:', result);
-      
+      console.log('预览数据结果(源表采样):', result);
+
       setPreviewData(result.rows || []);
-      
     } catch (error) {
       console.error('加载预览数据失败:', error);
       message.error('加载预览数据失败，请检查数据源连接');
@@ -109,23 +150,101 @@ export const ChartsManagementPage: React.FC = () => {
     }
   }, [editingChart?.visualization_settings?.sort_by, editingChart?.visualization_settings?.sort_order, editingChart, previewData.length]);
 
-  // 加载字段数据
-  const loadFields = async (databaseId: number, tableName?: string) => {
+  /** 从源节点 SQL 中解析表名（config 未写 tableName 时的兜底，如 SELECT * FROM `shop_reviews`） */
+  const parseTableFromSql = (sql: unknown): string | null => {
+    if (typeof sql !== 'string' || !sql.trim()) return null;
+    const m = sql.match(
+      /\bFROM\s+(?:(?:`([^`]+)`|(\w+))\s*\.\s*)?(?:`([^`]+)`|(\w+))/i
+    );
+    if (!m) return null;
+    const schema = m[1] || m[2];
+    const table = m[3] || m[4];
+    if (!table) return null;
+    return schema ? `${schema}.${table}` : table;
+  };
+
+  // 从管道节点中提取源表名（pipeline-based 图表专用）
+  const loadSourceTableName = async (pipelineId: number, focusNodeId: string): Promise<string | null> => {
     try {
-      console.log('开始加载字段数据:', { databaseId, tableName });
-      
-      // 根据数据库ID确定表名
-      let actualTableName = tableName;
-      if (!actualTableName) {
-        // 如果没有表名，根据数据库ID推测
-        switch(databaseId) {
-          case 1: actualTableName = 'sales'; break;
-          case 2: actualTableName = 'orders'; break;
-          case 3: actualTableName = 'customers'; break;
-          default: actualTableName = 'sales'; // 默认表名
+      const res = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}`, {
+        headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) return null;
+      const pipeline = await res.json();
+      const nodes: any[] = pipeline.nodes || [];
+      // 向上追溯到最近的 source 节点
+      const findSource = (nodeId: string, visited: Set<string> = new Set()): string | null => {
+        if (visited.has(nodeId)) return null;
+        visited.add(nodeId);
+        const node = nodes.find((n: any) => n.id === nodeId);
+        if (!node) return null;
+        if (node.type === 'source') {
+          return (
+            node.config?.tableName ||
+            node.config?.table_name ||
+            parseTableFromSql(node.sql) ||
+            null
+          );
+        }
+        const upIds: string[] = node.upstream || [];
+        for (const upId of upIds) {
+          const tbl = findSource(upId, visited);
+          if (tbl) return tbl;
+        }
+        return null;
+      };
+      return findSource(focusNodeId);
+    } catch {
+      return null;
+    }
+  };
+
+  // 加载字段数据
+  const loadFields = async (databaseId: number, tableName: string | undefined, chart?: ChartItem) => {
+    try {
+      let actualTableName = (tableName || '').trim();
+
+      let pipelineId: number | null | undefined = chart?.pipeline_id;
+      let focusNodeId: string | null | undefined = chart?.focus_node_id;
+
+      if (chart?.id) {
+        const chartDetail = await fetch(`${API_BASE_URL}/visualization/charts/${chart.id}`, {
+          headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+        }).catch(() => null);
+        let chartData: any = null;
+        if (chartDetail?.ok) {
+          chartData = await chartDetail.json();
+        }
+        if (chartData) {
+          pipelineId = chartData.pipeline_id ?? pipelineId;
+          focusNodeId = chartData.focus_node_id ?? focusNodeId;
         }
       }
-      
+
+      // 管道图表：始终以管道源节点解析表名，覆盖库里残留的错误值（如历史保存写入的 zfcount）
+      if (pipelineId && focusNodeId) {
+        const resolved = (await loadSourceTableName(pipelineId, focusNodeId)) || '';
+        if (resolved) {
+          actualTableName = resolved;
+          if (chart?.id) {
+            setEditingChart(prev =>
+              prev && prev.id === chart.id ? { ...prev, table_name: resolved } : prev
+            );
+          }
+        }
+      }
+
+      console.log('开始加载字段数据:', { databaseId, tableName: actualTableName, pipelineId, focusNodeId });
+
+      if (!actualTableName) {
+        // 仍然没有表名，提示用户
+        message.warning('无法确定数据表名，请在图表编辑器中选择数据源或检查管道配置');
+        setXFields([]);
+        setYFields([]);
+        setColorFields([]);
+        return;
+      }
+
       console.log('使用的表名:', actualTableName);
       
       // 获取表的列信息：根据图表绑定的 databaseId 访问对应数据源
@@ -360,11 +479,11 @@ export const ChartsManagementPage: React.FC = () => {
     
     // 加载字段数据
     if (chart.database_id) {
-      await loadFields(chart.database_id, chart.table_name);
+      await loadFields(chart.database_id, chart.table_name, chart);
     }
-    // 加载预览数据
-    if (chart.database_id && chart.table_name) {
-      await loadPreviewData(chart.database_id, chart.table_name);
+    // 加载预览数据：与 loadFields 一致，无 table_name 时仍尝试（管道图表从 focus 节点解析源表）
+    if (chart.database_id) {
+      await loadPreviewData(chart.database_id, chart.table_name, chart);
     }
   };
 
@@ -381,21 +500,43 @@ export const ChartsManagementPage: React.FC = () => {
         if (editingChart.visualization_settings?.y_fields && editingChart.visualization_settings.y_fields.length > 0) {
           selectFields.push(...editingChart.visualization_settings.y_fields);
         }
-        
-        const querySql = `SELECT ${selectFields.join(', ')} FROM ${editingChart.table_name || 'zfcount'}`;
-        
+
+        // 管道图表：SQL 存为后端占位符，后端按 pipeline_id/focus_node_id 动态解析到执行结果表
+        // 非管道图表：直接拼接 FROM 表名（table_name 必有值）
+        const isPipelineChart = !!editingChart.pipeline_id;
+        const querySql = isPipelineChart
+          ? '__PIPELINE_EXECUTION_QUERY__'
+          : `SELECT ${selectFields.join(', ')} FROM \`${editingChart.table_name || ''}\``;
+
+        let resolvedSourceTable: string | null = null;
+        if (
+          isPipelineChart &&
+          editingChart.pipeline_id &&
+          editingChart.focus_node_id
+        ) {
+          resolvedSourceTable = await loadSourceTableName(
+            editingChart.pipeline_id,
+            editingChart.focus_node_id
+          );
+        }
+
         const updateData = {
           name: editingChart.name,
           chart_type: editingChart.chart_type,
           database_id: editingChart.database_id,
+          pipeline_id: editingChart.pipeline_id ?? undefined,
+          focus_node_id: editingChart.focus_node_id ?? undefined,
+          // 管道图：写入真实源表名，便于列表/元数据展示；占位 SQL 无法解析出表名
+          table_name: isPipelineChart ? resolvedSourceTable ?? null : editingChart.table_name?.trim() || undefined,
           visualization_settings: {
             // 使用后端期望的原始字段名
+            chartType: editingChart.chart_type,
             graph_dimensions: editingChart.visualization_settings?.x_field ? [editingChart.visualization_settings.x_field] : [],
             graph_metrics: editingChart.visualization_settings?.y_fields || [],
             x_axis_title: editingChart.visualization_settings?.x_axis_title || 'X轴',
             y_axis_title: editingChart.visualization_settings?.y_axis_title || 'Y轴',
             show_legend: editingChart.visualization_settings?.show_legend !== false,
-            tooltip_enabled: editingChart.visualization_settings?.show_tooltip !== false,
+            show_tooltip: editingChart.visualization_settings?.show_tooltip !== false,
             // Y轴聚合方式
             y_agg_method: editingChart.visualization_settings?.y_agg_method || 'sum',
             // 是否按 X 轴聚合（group by），持久化保存
@@ -404,8 +545,8 @@ export const ChartsManagementPage: React.FC = () => {
                 ? editingChart.visualization_settings.x_group_by_enabled
                 : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
             // 排序配置
-            'graph.sort_by': editingChart.visualization_settings?.sort_by || 'x',
-            'graph.sort_order': editingChart.visualization_settings?.sort_order || 'asc'
+            sort_by: editingChart.visualization_settings?.sort_by || 'x',
+            sort_order: editingChart.visualization_settings?.sort_order || 'asc',
           },
           dataset_query: {
             type: 'native',
@@ -474,11 +615,11 @@ export const ChartsManagementPage: React.FC = () => {
         <Space size="small" wrap>
           <Button
             type="link"
-            icon={<EditOutlined />}
+            icon={<EyeOutlined />}
             onClick={() => handleEdit(record)}
             size="small"
           >
-            编辑
+            预览
           </Button>
           <Popconfirm
             title="确定删除这个图表吗？"
@@ -919,8 +1060,19 @@ export const ChartsManagementPage: React.FC = () => {
                   ) : (
                     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
                       <div style={{ textAlign: 'center', padding: '20px' }}>
-                        <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>需要配置字段</div>
-                        <div style={{ fontSize: '14px', color: '#666' }}>请先选择X轴和Y轴字段以生成预览</div>
+                        {editingChart.visualization_settings?.x_field &&
+                        editingChart.visualization_settings?.y_fields &&
+                        editingChart.visualization_settings.y_fields.length > 0 ? (
+                          <>
+                            <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>暂无预览数据</div>
+                            <div style={{ fontSize: '14px', color: '#666' }}>已选坐标轴但查询结果为空，请检查表是否有数据或数据源连接</div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>需要配置字段</div>
+                            <div style={{ fontSize: '14px', color: '#666' }}>请先选择X轴和Y轴字段以生成预览</div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}

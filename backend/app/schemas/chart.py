@@ -68,6 +68,8 @@ class ChartUpdate(BaseModel):
     visualization_settings: Optional[VisualizationSettings] = None
     database_id: Optional[int] = None
     table_name: Optional[str] = None  # 新增：表名字段
+    pipeline_id: Optional[int] = None
+    focus_node_id: Optional[str] = None
     is_public: Optional[bool] = None
     cache_enabled: Optional[bool] = None
     cache_duration: Optional[int] = None
@@ -84,6 +86,9 @@ class ChartResponse(BaseModel):
     data_source_id: int  # 对应 database_id
     created_by: int  # 对应 creator_id
     table_name: Optional[str] = None  # 新增：表名字段
+    # 管道同步图表：用于前端解析源表名与预览
+    pipeline_id: Optional[int] = None
+    focus_node_id: Optional[str] = None
     is_public: bool
     archived: bool
     cache_enabled: bool
