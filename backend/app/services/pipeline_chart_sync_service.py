@@ -53,6 +53,13 @@ def _chart_type_to_standard(chart_type: Optional[str]) -> str:
         "number": "metric",
         "boxplot": "boxplot",
         "箱线图": "boxplot",
+        # 与前端 chartNode.ts ChartType 一致；未映射时曾错误回退为 bar
+        "bar_line": "bar_line",
+        "柱线组合": "bar_line",
+        "stacked_bar": "stacked_bar",
+        "堆积柱形图": "stacked_bar",
+        "waterfall": "waterfall",
+        "瀑布图": "waterfall",
     }
     return mapping.get(ct, "bar")
 
