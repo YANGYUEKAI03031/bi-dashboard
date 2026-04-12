@@ -19,6 +19,35 @@ import {
   hydrateSourceNodesWithPipelineDataSource,
 } from '../utils/pipelineDataSourceUtils';
 
+/**
+ * 从节点列表中提取第一个启用了自动触发的源节点配置
+ * 返回触发器配置，如果没有启用自动触发的节点则返回 null
+ */
+function extractTriggerConfig(nodes: PipelineNode[]): {
+  source_table: string;
+  watermark_field: string;
+  poll_interval_seconds: number;
+  enabled: boolean;
+} | null {
+  // 找到第一个 type 为 source 且启用了 autoTriggerEnabled 的节点
+  const sourceNode = nodes.find(
+    (n) => n.type === 'source' && n.config?.autoTriggerEnabled
+  );
+  if (!sourceNode) return null;
+
+  const tableName = sourceNode.config?.tableName;
+  const watermarkField = sourceNode.config?.triggerWatermarkField;
+
+  if (!tableName || !watermarkField) return null;
+
+  return {
+    source_table: tableName,
+    watermark_field: watermarkField,
+    poll_interval_seconds: sourceNode.config?.pollIntervalSeconds || 300,
+    enabled: true,
+  };
+}
+
 interface DataSource {
   id: string;
   name: string;
@@ -492,7 +521,13 @@ export const PipelineTestPage: React.FC = () => {
                   message.error('请在数据源节点中选择业务数据源（业务库）');
                   return;
                 }
+
+                // 提取触发器配置
+                const triggerConfig = extractTriggerConfig(nodesPayload);
+
                 try {
+                  let savedPipeline: PipelineResponse;
+
                   if (editingPipelineId) {
                     await PipelineService.updatePipeline(editingPipelineId, {
                       name: values.name,
@@ -500,15 +535,10 @@ export const PipelineTestPage: React.FC = () => {
                       nodes: nodesPayload,
                       source_data_source_id: pipelineDsId,
                     });
+                    savedPipeline = await PipelineService.getPipeline(editingPipelineId);
                     message.success('管道更新成功');
-                    setCreateModalVisible(false);
-                    setEditorNodes([]);
-                    setEditingPipelineId(null);
-                    form.resetFields();
-                    loadPipelines();
-                    setDetailDrawerVisible(false);
                   } else {
-                    await PipelineService.createPipeline({
+                    savedPipeline = await PipelineService.createPipeline({
                       name: values.name,
                       description: values.description,
                       source_data_source_id: pipelineDsId,
@@ -516,10 +546,36 @@ export const PipelineTestPage: React.FC = () => {
                       is_public: false,
                     });
                     message.success('管道创建成功');
-                    setCreateModalVisible(false);
-                    setEditorNodes([]);
-                    form.resetFields();
-                    loadPipelines();
+                  }
+
+                  // 同步触发器配置到数据库
+                  if (triggerConfig) {
+                    try {
+                      await PipelineService.savePipelineTrigger(savedPipeline.id, triggerConfig);
+                      message.info('触发器配置已同步');
+                    } catch (triggerErr: any) {
+                      console.error('触发器同步失败:', triggerErr);
+                      message.warning('触发器配置同步失败: ' + triggerErr.message);
+                    }
+                  } else {
+                    // 如果之前有触发器配置但现在没有启用，则删除
+                    try {
+                      const existingTrigger = await PipelineService.getPipelineTrigger(savedPipeline.id);
+                      if (existingTrigger) {
+                        await PipelineService.deletePipelineTrigger(savedPipeline.id);
+                      }
+                    } catch {
+                      // 忽略删除失败的错误
+                    }
+                  }
+
+                  setCreateModalVisible(false);
+                  setEditorNodes([]);
+                  setEditingPipelineId(null);
+                  form.resetFields();
+                  loadPipelines();
+                  if (editingPipelineId) {
+                    setDetailDrawerVisible(false);
                   }
                 } catch (error: any) {
                   message.error(error.message || (editingPipelineId ? '更新管道失败' : '创建管道失败'));

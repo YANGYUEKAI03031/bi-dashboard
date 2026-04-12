@@ -31,6 +31,11 @@ async def lifespan(app: FastAPI):
     # 初始化数据库增强表（在 uvicorn 事件循环内执行，避免事件循环冲突）
     await _init_database_tables()
 
+    # 启动 Pipeline 触发调度器
+    from app.core.scheduler import init_scheduler
+    init_scheduler()
+    logger.info("Pipeline 触发调度器已启动")
+
     # 连接缓存服务
     await cache_service.connect()
     
@@ -41,6 +46,10 @@ async def lifespan(app: FastAPI):
     
     # 关闭时执行
     logger.info("Shutting down application...")
+    
+    # 关闭调度器
+    from app.core.scheduler import shutdown_scheduler
+    shutdown_scheduler()
     
     # 停止实时同步服务
     await realtime_service.stop()

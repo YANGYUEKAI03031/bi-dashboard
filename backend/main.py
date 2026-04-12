@@ -33,8 +33,19 @@ app.include_router(api_router, prefix="/api/v1")
 async def startup_event():
     """应用启动时的初始化"""
     print("应用正在启动...")
-    # 注意：在生产环境中，建议手动运行init_mysql_db.py来初始化数据库
-    # 这里可以添加其他启动时需要执行的任务
+    # 启动 Pipeline 触发调度器
+    from app.core.scheduler import init_scheduler
+    init_scheduler()
+    print("Pipeline 触发调度器已启动")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时的清理"""
+    # 关闭调度器
+    from app.core.scheduler import shutdown_scheduler
+    shutdown_scheduler()
+    print("应用已关闭")
 
 
 # 根路径端点

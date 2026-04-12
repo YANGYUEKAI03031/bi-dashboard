@@ -168,6 +168,19 @@ export interface PipelineStats {
   last_execution?: string;
 }
 
+export interface PipelineTrigger {
+  id: number;
+  pipeline_id: number;
+  source_table: string;
+  watermark_field: string;
+  poll_interval_seconds: number;
+  enabled: boolean;
+  last_check_at: string | null;
+  last_watermark_value: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export class PipelineService {
   static async createPipeline(pipelineData: PipelineCreateRequest): Promise<PipelineResponse> {
     const token = AuthService.getAuthToken();
@@ -404,5 +417,78 @@ export class PipelineService {
     if (!response.ok) {
       throw new Error(await parseApiError(response, '删除水位线失败'));
     }
+  }
+
+  // ==================== 触发器管理 ====================
+
+  static async savePipelineTrigger(
+    pipelineId: number,
+    triggerData: {
+      source_table: string;
+      watermark_field: string;
+      poll_interval_seconds: number;
+      enabled: boolean;
+    }
+  ): Promise<PipelineTrigger> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(triggerData),
+    });
+    if (!response.ok) {
+      throw new Error(await parseApiError(response, '保存触发器失败'));
+    }
+    return response.json();
+  }
+
+  static async getPipelineTrigger(pipelineId: number): Promise<PipelineTrigger | null> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(await parseApiError(response, '获取触发器失败'));
+    }
+    return response.json();
+  }
+
+  static async deletePipelineTrigger(pipelineId: number): Promise<void> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(await parseApiError(response, '删除触发器失败'));
+    }
+  }
+
+  static async testPipelineTrigger(pipelineId: number): Promise<{
+    source_table: string;
+    watermark_field: string;
+    current_max_value: string | null;
+    last_watermark_value: string | null;
+    has_new_data: boolean;
+  }> {
+    const token = AuthService.getAuthToken();
+    if (!token) throw new Error('用户未认证');
+
+    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger/test`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(await parseApiError(response, '测试触发器失败'));
+    }
+    return response.json();
   }
 }

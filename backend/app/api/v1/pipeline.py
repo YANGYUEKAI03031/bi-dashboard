@@ -14,6 +14,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi import Body
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
@@ -30,7 +31,7 @@ from app.schemas.pipeline import (
     PipelineStatsResponse, NodePreviewRequest, NodePreviewResponse
 )
 from app.core.security import get_current_user_id
-from app.models.pipeline import DataPipeline, PipelineExecution, PipelineWatermark
+from app.models.pipeline import DataPipeline, PipelineExecution, PipelineWatermark, PipelineTrigger
 from app.models.visualization import Database
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -926,5 +927,306 @@ async def delete_watermark(
         raise
     except Exception as e:
         logger.error(f"删除水位线API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 触发器管理 ====================
+
+class TriggerCreateRequest(BaseModel):
+    """创建/更新触发器请求"""
+    source_table: str                    # 监控的源表名
+    watermark_field: str                 # 高水位字段（updated_at / id）
+    poll_interval_seconds: int = 300     # 轮询间隔（默认 5 分钟）
+    enabled: bool = True                 # 是否启用
+
+
+class TriggerResponse(BaseModel):
+    """触发器响应"""
+    id: int
+    pipeline_id: int
+    source_table: str
+    watermark_field: str
+    poll_interval_seconds: int
+    enabled: bool
+    last_check_at: Optional[str]
+    last_watermark_value: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+@router.post("/{pipeline_id}/trigger", response_model=TriggerResponse)
+async def create_or_update_trigger(
+    pipeline_id: int,
+    trigger_data: TriggerCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    创建或更新管道触发器
+
+    如果已存在则更新，不存在则创建。
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限配置此管道")
+
+        # 查找现有触发器
+        trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
+        trigger_result = await db.execute(trigger_stmt)
+        trigger = trigger_result.scalar_one_or_none()
+
+        if trigger:
+            # 更新
+            trigger.source_table = trigger_data.source_table
+            trigger.watermark_field = trigger_data.watermark_field
+            trigger.poll_interval_seconds = trigger_data.poll_interval_seconds
+            trigger.enabled = trigger_data.enabled
+        else:
+            # 创建
+            trigger = PipelineTrigger(
+                pipeline_id=pipeline_id,
+                source_table=trigger_data.source_table,
+                watermark_field=trigger_data.watermark_field,
+                poll_interval_seconds=trigger_data.poll_interval_seconds,
+                enabled=trigger_data.enabled,
+            )
+            db.add(trigger)
+
+        await db.commit()
+        await db.refresh(trigger)
+
+        return TriggerResponse(
+            id=trigger.id,
+            pipeline_id=trigger.pipeline_id,
+            source_table=trigger.source_table,
+            watermark_field=trigger.watermark_field,
+            poll_interval_seconds=trigger.poll_interval_seconds,
+            enabled=trigger.enabled,
+            last_check_at=trigger.last_check_at.isoformat() if trigger.last_check_at else None,
+            last_watermark_value=trigger.last_watermark_value,
+            created_at=trigger.created_at.isoformat() if trigger.created_at else "",
+            updated_at=trigger.updated_at.isoformat() if trigger.updated_at else "",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建/更新触发器API错误: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{pipeline_id}/trigger", response_model=Optional[TriggerResponse])
+async def get_trigger(
+    pipeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    获取管道触发器配置
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此管道")
+
+        # 获取触发器
+        trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
+        trigger_result = await db.execute(trigger_stmt)
+        trigger = trigger_result.scalar_one_or_none()
+
+        if not trigger:
+            return None
+
+        return TriggerResponse(
+            id=trigger.id,
+            pipeline_id=trigger.pipeline_id,
+            source_table=trigger.source_table,
+            watermark_field=trigger.watermark_field,
+            poll_interval_seconds=trigger.poll_interval_seconds,
+            enabled=trigger.enabled,
+            last_check_at=trigger.last_check_at.isoformat() if trigger.last_check_at else None,
+            last_watermark_value=trigger.last_watermark_value,
+            created_at=trigger.created_at.isoformat() if trigger.created_at else "",
+            updated_at=trigger.updated_at.isoformat() if trigger.updated_at else "",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取触发器API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{pipeline_id}/trigger")
+async def delete_trigger(
+    pipeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    删除管道触发器
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限删除此管道触发器")
+
+        # 删除触发器
+        trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
+        trigger_result = await db.execute(trigger_stmt)
+        trigger = trigger_result.scalar_one_or_none()
+
+        if trigger:
+            await db.delete(trigger)
+            await db.commit()
+
+        return {"message": "触发器已删除"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除触发器API错误: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{pipeline_id}/trigger/check-index")
+async def check_trigger_index(
+    pipeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    检查触发器配置的字段是否有索引
+
+    用于在保存触发器前提示用户是否需要建索引。
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此管道")
+
+        # 获取触发器
+        trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
+        trigger_result = await db.execute(trigger_stmt)
+        trigger = trigger_result.scalar_one_or_none()
+
+        if not trigger:
+            raise HTTPException(status_code=404, detail="该管道未配置触发器")
+
+        # 检查索引
+        from app.services.pipeline.trigger_scheduler import TriggerScheduler
+        scheduler = TriggerScheduler(db)
+        has_index, message = await scheduler.check_source_table_index(
+            pipeline.source_data_source_id,
+            trigger.source_table,
+            trigger.watermark_field
+        )
+
+        return {
+            "has_index": has_index,
+            "message": message,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"检查索引API错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{pipeline_id}/trigger/test")
+async def test_trigger(
+    pipeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    测试触发器配置
+
+    立即执行一次轮询，返回当前水位值。
+    """
+    try:
+        from sqlalchemy import select
+
+        # 检查管道存在
+        stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
+        result = await db.execute(stmt)
+        pipeline = result.scalar_one_or_none()
+
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="管道不存在")
+
+        # 权限检查
+        if not pipeline.is_public and pipeline.created_by != user_id:
+            raise HTTPException(status_code=403, detail="无权限访问此管道")
+
+        # 获取触发器
+        trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
+        trigger_result = await db.execute(trigger_stmt)
+        trigger = trigger_result.scalar_one_or_none()
+
+        if not trigger:
+            raise HTTPException(status_code=404, detail="该管道未配置触发器")
+
+        # 执行一次轮询
+        from app.services.pipeline.trigger_scheduler import TriggerScheduler
+        scheduler = TriggerScheduler(db)
+        current_max = await scheduler._get_current_max_value(trigger, pipeline.source_data_source_id)
+
+        return {
+            "source_table": trigger.source_table,
+            "watermark_field": trigger.watermark_field,
+            "current_max_value": current_max,
+            "last_watermark_value": trigger.last_watermark_value,
+            "has_new_data": scheduler._has_new_data(trigger, current_max) if current_max else False,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"测试触发器API错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 

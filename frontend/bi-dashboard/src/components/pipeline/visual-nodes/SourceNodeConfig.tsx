@@ -470,6 +470,127 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                   style={{ marginTop: 8, fontSize: 11 }}
                 />
               )}
+
+              {/* 数据变更自动触发配置 */}
+              <Divider style={{ margin: '12px 0 8px' }} />
+              <Form.Item
+                label={
+                  <Space>
+                    <SettingOutlined />
+                    <span>数据变更自动触发</span>
+                  </Space>
+                }
+                style={{ marginBottom: 8 }}
+              >
+                <Space>
+                  <Select
+                    value={config.autoTriggerEnabled ? 'on' : 'off'}
+                    onChange={(v) => {
+                      const pn = node.data.pipelineNode as Record<string, unknown>;
+                      node.data = {
+                        ...node.data,
+                        pipelineNode: {
+                          ...pn,
+                          config: {
+                            ...(pn.config as Record<string, unknown>) || {},
+                            autoTriggerEnabled: v === 'on',
+                          },
+                        },
+                      };
+                      onChange();
+                    }}
+                    size="small"
+                    style={{ width: 120 }}
+                    disabled={readOnly}
+                    options={[
+                      { label: '关闭', value: 'off' },
+                      { label: '开启', value: 'on' },
+                    ]}
+                  />
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {config.autoTriggerEnabled ? '当源表有新数据时自动触发执行' : '需要手动触发执行'}
+                  </Text>
+                </Space>
+              </Form.Item>
+
+              {config.autoTriggerEnabled && (
+                <>
+                  <Form.Item
+                    label="轮询间隔"
+                    style={{ marginBottom: 8 }}
+                  >
+                    <Select
+                      size="small"
+                      value={config.pollIntervalSeconds || 300}
+                      onChange={(v) => {
+                        const pn = node.data.pipelineNode as Record<string, unknown>;
+                        node.data = {
+                          ...node.data,
+                          pipelineNode: {
+                            ...pn,
+                            config: {
+                              ...(pn.config as Record<string, unknown>) || {},
+                              pollIntervalSeconds: v,
+                            },
+                          },
+                        };
+                        onChange();
+                      }}
+                      disabled={readOnly}
+                      options={[
+                        { label: '每 1 分钟', value: 60 },
+                        { label: '每 5 分钟', value: 300 },
+                        { label: '每 15 分钟', value: 900 },
+                        { label: '每 30 分钟', value: 1800 },
+                        { label: '每 1 小时', value: 3600 },
+                      ]}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    label="监控字段"
+                    extra="用于检测数据变化的字段，推荐使用 id（主键自带索引）或 updated_at（需确保已建索引）"
+                    style={{ marginBottom: 4 }}
+                  >
+                    <Select
+                      showSearch
+                      allowClear
+                      placeholder="选择监控字段..."
+                      size="small"
+                      disabled={readOnly}
+                      value={config.triggerWatermarkField || config.incrementalField}
+                      onChange={(v) => {
+                        const pn = node.data.pipelineNode as Record<string, unknown>;
+                        node.data = {
+                          ...node.data,
+                          pipelineNode: {
+                            ...pn,
+                            config: {
+                              ...(pn.config as Record<string, unknown>) || {},
+                              triggerWatermarkField: v,
+                            },
+                          },
+                        };
+                        onChange();
+                      }}
+                      options={tableColumns
+                        .filter(col => ['datetime', 'timestamp', 'date', 'int', 'bigint'].includes(col.type.toLowerCase()))
+                        .map(col => ({
+                          label: `${col.name} (${col.type})`,
+                          value: col.name,
+                        }))}
+                    />
+                  </Form.Item>
+
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="注意：源表监控字段需要有索引"
+                    description="如果没有索引，轮询时会进行全表扫描。建议先在源表为监控字段建立索引：ALTER TABLE {table} ADD INDEX idx_{field} ({field});"
+                    style={{ marginTop: 4, fontSize: 11 }}
+                  />
+                </>
+              )}
             </>
           )}
         </>
