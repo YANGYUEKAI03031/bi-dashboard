@@ -1,6 +1,9 @@
-/* ══════════════════════════════════════════════════════════════
-   ReportsPage — 统一视觉风格
-   ══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   ReportsPage — Cursor-Inspired Design System
+   基于 getdesign.md/cursor/design-md 设计规范
+
+   设计理念：暖奶油背景 + 玻璃态卡片 + 橙色品牌强调
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .reports-page-wrapper {
   display: flex;
@@ -21,7 +24,7 @@
   overflow-y: auto;
   min-width: 0;
   margin: 0;
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
 /* ── 页面头部卡片 ── */
@@ -29,9 +32,9 @@
   background: var(--theme-card-background);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  border: 1.5px solid var(--theme-border-light);
+  border: 1.5px solid var(--theme-border);
   margin-bottom: 0;
-  transition: box-shadow var(--transition-base);
+  transition: box-shadow var(--transition-fast);
 }
 
 .reports-header-card:hover {
@@ -46,7 +49,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
 .reports-header-left {
@@ -63,12 +66,12 @@
   background: var(--theme-card-background);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   box-shadow: var(--shadow-sm);
-  border: 1.5px solid var(--theme-border-light);
+  border: 1.5px solid var(--theme-border);
   border-bottom: none;
   margin-bottom: -1px;
   position: relative;
   z-index: 1;
-  transition: box-shadow var(--transition-base);
+  transition: box-shadow var(--transition-fast);
 }
 
 .reports-dashboard-nav-card:hover {
@@ -85,7 +88,7 @@
   align-items: flex-end;
   gap: 0;
   flex-wrap: wrap;
-  border-bottom: 1.5px solid var(--theme-border-light);
+  border-bottom: 1.5px solid var(--theme-border);
   padding: 0 var(--space-xl);
 }
 
@@ -97,18 +100,20 @@
   margin: 0;
 }
 
-/* ── 仪表盘标签（类似 Tabs 风格） ── */
+/* ── 仪表盘标签（Tab 风格） ── */
 .dashboard-nav-tag {
   display: inline-flex;
   align-items: center;
-  padding: 12px var(--space-lg);
+  padding: 12px var(--space-md);
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--theme-text-secondary);
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
+  transition: color var(--transition-fast),
+              border-color var(--transition-fast),
+              background var(--transition-fast);
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -131,7 +136,6 @@
   background: var(--theme-primary-light);
 }
 
-/* 当前激活时保持样式、不灰显 */
 .dashboard-nav-tag.active:disabled {
   opacity: 1;
   cursor: default;
@@ -147,22 +151,22 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  margin-left: var(--space-xs);
-  margin-right: var(--space-sm);
+  margin-left: var(--space-2);
+  margin-right: var(--space-xs);
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--theme-text-tertiary);
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--transition-fast);
   flex-shrink: 0;
   box-sizing: border-box;
   opacity: 0.6;
 }
 
 .dashboard-nav-tag-more-btn:hover {
-  background: var(--theme-background-tertiary);
+  background: var(--surface-300);
   color: var(--theme-text-secondary);
   opacity: 1;
 }
@@ -180,8 +184,8 @@
   height: 20px;
   padding: 0 6px;
   background: #ffffff;
-  color: var(--theme-secondary);
-  border: 1px solid var(--theme-secondary);
+  color: var(--theme-warning);
+  border: 1px solid var(--theme-warning);
   border-radius: var(--radius-xs);
   font-size: 12px;
   font-weight: 500;
@@ -194,14 +198,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-xs) var(--space-md);
+  padding: var(--space-2) var(--space-sm);
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--theme-text-secondary);
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-base), background var(--transition-base);
+  transition: color var(--transition-fast),
+              background var(--transition-fast);
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -227,7 +232,8 @@
   color: var(--theme-text-tertiary);
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-base), background var(--transition-base);
+  transition: color var(--transition-fast),
+              background var(--transition-fast);
   margin: 0;
   font-family: inherit;
   flex-shrink: 0;
@@ -246,7 +252,7 @@
   line-height: 46px;
   height: 46px;
   box-sizing: border-box;
-  padding: 0 var(--space-lg);
+  padding: 0 var(--space-md);
 }
 
 /* ── 内容区域 ── */
@@ -259,13 +265,13 @@
   background: var(--theme-card-background);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   box-shadow: var(--shadow-sm);
-  border: 1.5px solid var(--theme-border-light);
+  border: 1.5px solid var(--theme-border);
   border-top: none;
   margin-top: 0;
   margin-bottom: 0;
   position: relative;
   z-index: 0;
-  transition: box-shadow var(--transition-base);
+  transition: box-shadow var(--transition-fast);
 }
 
 .reports-content-card:hover {
@@ -300,9 +306,10 @@
 .reports-dashboard-view .ant-card {
   box-shadow: var(--shadow-sm);
   border-radius: var(--radius-md);
-  border: 1.5px solid var(--theme-border-light);
+  border: 1.5px solid var(--theme-border);
   background: #ffffff;
-  transition: box-shadow var(--transition-base), transform var(--transition-spring);
+  transition: box-shadow var(--transition-fast),
+              transform var(--transition-spring);
 }
 
 .reports-dashboard-view .ant-card:hover {
@@ -311,8 +318,8 @@
 }
 
 .reports-dashboard-view .ant-card-head {
-  border-bottom: 1px solid var(--theme-border-light);
-  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--theme-border);
+  padding: var(--space-sm) var(--space-md);
 }
 
 .reports-dashboard-view .ant-card-head-title {
@@ -323,14 +330,14 @@
 
 .reports-dashboard-view .ant-card-body {
   overflow: hidden;
-  padding: var(--space-lg);
+  padding: var(--space-md);
 }
 
 /* ── 响应式 ── */
 @media (max-width: 768px) {
   .reports-page {
-    padding: var(--space-lg);
-    gap: var(--space-md);
+    padding: var(--space-md);
+    gap: var(--space-sm);
   }
 
   .reports-header-content {

@@ -1,6 +1,9 @@
-/* ══════════════════════════════════════════════════════════════
-   VisualizationBuilder — 统一视觉风格
-   ══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   VisualizationBuilder — Cursor-Inspired Design System
+   基于 getdesign.md/cursor/design-md 设计规范
+
+   设计理念：简洁预览区域 + 橙色虚线边框
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .realtime-preview-card {
   margin-top: var(--space-xl);
@@ -11,14 +14,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--theme-background-tertiary);
+  background-color: var(--surface-200);
   border-radius: var(--radius-md);
-  border: 2px dashed var(--theme-primary);
-  transition: background-color var(--transition-base), border-color var(--transition-base);
+  border: 2px dashed rgba(74, 144, 226, 0.35);
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast);
 }
 
 .realtime-preview-container:hover {
   background-color: var(--theme-primary-light);
+  border-color: rgba(74, 144, 226, 0.55);
 }
 
 .realtime-preview-content {
@@ -29,17 +34,17 @@
   color: var(--theme-primary);
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
 }
 
 .realtime-preview-subtitle {
   color: var(--theme-text-secondary);
-  margin-top: var(--space-sm);
+  margin-top: var(--space-xs);
   font-size: 14px;
 }
 
 .realtime-preview-info {
   color: var(--theme-text-tertiary);
   font-size: 12px;
-  margin-top: var(--space-xs);
+  margin-top: var(--space-2);
 }

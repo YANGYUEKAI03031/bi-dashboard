@@ -1,6 +1,6 @@
-/* ══════════════════════════════════════════════════════════════
-   DashboardEditorPage — 统一视觉风格
-   ══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   DashboardEditorPage — BI Dashboard Design System
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .dashboard-editor-canvas-loading {
   animation: dashboard-editor-canvas-fade-in 0.3s ease-out;
@@ -14,7 +14,7 @@
 .dashboard-editor-chart-search-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   min-height: 0;
 }
 
@@ -27,12 +27,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
-  padding: 10px var(--space-sm);
+  gap: var(--space-sm);
+  padding: 10px var(--space-xs);
   border-radius: var(--radius-sm);
   cursor: grab;
   user-select: none;
-  transition: background var(--transition-base);
+  transition: background var(--transition-fast);
 }
 
 .dashboard-editor-chart-search-item:hover {
@@ -72,7 +72,7 @@
   max-height: min(320px, 42vh);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: var(--space-xs);
+  padding-right: var(--space-1);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -86,9 +86,10 @@
   min-height: 600px;
 }
 
+/* React Grid 拖拽占位符 */
 .dashboard-editor-grid .react-grid-item.react-grid-placeholder {
-  background: rgba(74, 144, 226, 0.12);
+  background: rgba(74, 144, 226, 0.08);
   border: 2px dashed var(--theme-primary);
   border-radius: var(--radius-md);
-  transition: background var(--transition-base), border-color var(--transition-base);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }

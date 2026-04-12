@@ -1,11 +1,22 @@
-/* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.css */
+/* ═══════════════════════════════════════════════════════════════════════════
+   MainLayout — Cursor-Inspired Design System
+   基于 getdesign.md/cursor/design-md 设计规范
+
+   设计理念：深色侧边栏 + 暖奶油主内容区
+   - 侧边栏保持深色，提供导航锚点
+   - 主内容区使用暖奶油背景 #f2f1ed
+   - 所有颜色通过 CSS 变量引用
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 主布局容器 ── */
 .main-layout {
   display: flex;
   height: 100vh;
   background-color: var(--theme-background);
-  transition: background-color 0.3s ease;
+  transition: background-color var(--transition-slow);
 }
 
+/* ── 侧边栏 ── */
 .sidebar {
   width: 250px;
   flex: 0 0 250px;
@@ -14,11 +25,11 @@
   color: var(--theme-sidebar-text);
   display: flex;
   flex-direction: column;
-  box-shadow: 2px 0 10px rgba(74, 144, 226, 0.12);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-              flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-              background-color 0.3s ease,
-              box-shadow 0.3s ease;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.12);
+  transition: width var(--transition-spring),
+              flex-basis var(--transition-spring),
+              background-color var(--transition-slow),
+              box-shadow var(--transition-slow);
   overflow: hidden;
   position: relative;
 }
@@ -29,10 +40,13 @@
   min-width: 70px;
 }
 
+/* ── Logo 区域 ── */
 .logo {
   padding: 24px 20px;
   border-bottom: 1px solid var(--theme-sidebar-border);
-  transition: border-color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+  transition: border-color var(--transition-slow),
+              opacity var(--transition-slow),
+              transform var(--transition-slow);
   white-space: nowrap;
   overflow: hidden;
   display: flex;
@@ -59,15 +73,19 @@
   font-size: 22px;
   font-weight: 700;
   color: var(--theme-sidebar-text);
-  transition: color 0.3s ease;
+  transition: color var(--transition-slow);
   flex: 1;
   min-width: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.3px;
 }
 
+/* ── 导航菜单 ── */
 .nav-menu {
   flex: 1;
   padding: 20px 0;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity var(--transition-slow),
+              transform var(--transition-slow);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -78,15 +96,16 @@
   padding: 20px 0;
 }
 
+/* ── 导航项 ── */
 .nav-item {
   display: flex;
   align-items: center;
   padding: 12px 20px;
   margin: 4px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
   color: var(--theme-sidebar-text-secondary);
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
   font-size: 14px;
   font-weight: 500;
   justify-content: flex-start;
@@ -103,8 +122,13 @@
 }
 
 .nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.10);
   color: var(--theme-sidebar-text);
+  text-decoration: none;
+}
+
+.nav-item:hover .nav-text {
+  text-decoration: none;
 }
 
 .nav-item.active {
@@ -124,17 +148,21 @@
 
 .nav-text {
   white-space: nowrap;
-  transition: opacity 0.3s ease, width 0.3s ease;
+  transition: opacity var(--transition-slow),
+              width var(--transition-slow);
 }
 
 .sidebar.collapsed .nav-text {
   display: none;
 }
 
+/* ── 侧边栏底部 ── */
 .sidebar-footer {
   padding: 20px;
   border-top: 1px solid var(--theme-sidebar-border);
-  transition: border-color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+  transition: border-color var(--transition-slow),
+              opacity var(--transition-slow),
+              transform var(--transition-slow);
 }
 
 .sidebar.collapsed .sidebar-footer {
@@ -168,6 +196,7 @@
   margin-right: 0;
 }
 
+/* ── 用户信息 ── */
 .user-info {
   display: flex;
   align-items: center;
@@ -178,22 +207,24 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background-color: var(--theme-primary);
+  background-color: var(--theme-accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
   margin-right: 12px;
-  transition: background-color 0.3s ease;
+  transition: background-color var(--transition-slow);
 }
 
 .user-avatar-clickable {
   cursor: pointer;
   outline: none;
 }
+
 .user-avatar-clickable:hover {
   opacity: 0.9;
 }
+
 .user-avatar-emoji {
   font-size: 22px;
   line-height: 1;
@@ -208,32 +239,33 @@
   font-size: 14px;
   color: var(--theme-sidebar-text);
   margin-bottom: 2px;
-  transition: color 0.3s ease;
+  transition: color var(--transition-slow);
 }
 
 .user-role {
   font-size: 12px;
   color: var(--theme-sidebar-text-secondary);
-  transition: color 0.3s ease;
+  transition: color var(--transition-slow);
 }
 
+/* ── 退出按钮 ── */
 .logout-btn {
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.10);
   border: 1px solid var(--theme-sidebar-border);
   color: var(--theme-sidebar-text-secondary);
   padding: 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
 }
 
 .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.20);
   color: var(--theme-sidebar-text);
 }
 
@@ -242,25 +274,29 @@
   font-size: 16px;
 }
 
+/* ── 主内容区 ── */
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: margin-left var(--transition-spring);
   min-width: 0;
+  background-color: var(--theme-background);
 }
 
+/* ── 顶部栏 ── */
 .top-bar {
   height: 64px;
-  background: var(--theme-top-bar-background);
-  border-bottom: 1px solid var(--theme-top-bar-border);
+  background: var(--theme-card-background);
+  border-bottom: 1px solid var(--theme-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
   box-shadow: var(--shadow-sm);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  transition: background-color var(--transition-slow),
+              border-color var(--transition-slow);
 }
 
 .top-bar-left {
@@ -270,10 +306,11 @@
   min-width: 0;
 }
 
+/* ── 侧边栏切换按钮 ── */
 .sidebar-toggle {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.10);
   border: 1px solid var(--theme-sidebar-border);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   width: 36px;
   height: 36px;
   flex-shrink: 0;
@@ -281,16 +318,17 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--theme-sidebar-text);
-  transition: all 0.3s ease;
+  color: var(--theme-text-primary);
+  transition: all var(--transition-slow);
   position: relative;
   padding: 0;
   margin: 0;
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: var(--theme-sidebar-text);
+  background: rgba(38, 37, 30, 0.06);
+  border-color: var(--theme-border-medium);
+  color: var(--theme-primary);
 }
 
 .sidebar-toggle:active {
@@ -300,7 +338,7 @@
 .sidebar-toggle svg {
   position: relative;
   z-index: 1;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--transition-spring);
   font-size: 16px;
 }
 
@@ -309,6 +347,7 @@
   margin: 0;
 }
 
+/* ── 页面标题 ── */
 .page-title {
   font-size: 20px;
   font-weight: 600;
@@ -316,9 +355,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: color 0.3s ease;
+  transition: color var(--transition-slow);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* ── 用户操作区 ── */
 .user-actions {
   display: flex;
   align-items: center;
@@ -333,15 +374,15 @@
   color: var(--theme-text-tertiary);
   padding: 8px;
   border-radius: 50%;
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow);
 }
 
 .notification-btn:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
   color: var(--theme-text-primary);
 }
 
-/* 主题切换器样式 */
+/* ── 主题切换器 ── */
 .theme-switcher {
   position: relative;
   display: inline-block;
@@ -350,7 +391,7 @@
 .theme-switcher-btn {
   background: none;
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   width: 36px;
   height: 36px;
   display: inline-flex;
@@ -358,13 +399,14 @@
   justify-content: center;
   cursor: pointer;
   color: var(--theme-text-primary);
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 18px;
 }
 
 .theme-switcher-btn:hover {
-  background-color: var(--theme-button-hover);
-  border-color: var(--theme-border);
+  background-color: var(--surface-300);
+  border-color: var(--theme-border-medium);
+  color: var(--theme-primary);
 }
 
 .theme-menu {
@@ -373,8 +415,8 @@
   right: 0;
   background: var(--theme-card-background);
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  box-shadow: var(--theme-card-shadow);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
   min-width: 200px;
   z-index: 1000;
   padding: 8px;
@@ -385,23 +427,23 @@
 
 .theme-menu-item {
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: var(--theme-text-primary);
-  transition: background-color 0.2s ease;
+  transition: background-color var(--transition-fast);
   font-size: 14px;
 }
 
 .theme-menu-item:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
 }
 
 .theme-menu-item.active {
   background-color: var(--theme-primary);
-  color: white;
+  color: #ffffff;
 }
 
 .theme-menu-item.active:hover {
@@ -425,45 +467,45 @@
 
 .theme-mode-option {
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--theme-text-primary);
-  transition: background-color 0.2s ease;
+  transition: background-color var(--transition-fast);
   font-size: 13px;
 }
 
 .theme-mode-option:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
 }
 
 .theme-mode-option.active {
   background-color: var(--theme-primary);
-  color: white;
+  color: #ffffff;
 }
 
 .theme-mode-option.active:hover {
   background-color: var(--theme-primary-hover);
 }
 
+/* ── 内容包装器 ── */
 .content-wrapper {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  background-color: var(--theme-background);
 }
 
-/* 滚动条样式由全局 index.css 统一（与仪表盘「添加图表」一致） */
-
-/* 子导航样式 */
+/* ── 子导航样式 ── */
 .nav-item-group {
   margin-bottom: 4px;
 }
 
 .nav-arrow {
   font-size: 10px;
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-fast);
   margin-left: auto;
 }
 
@@ -474,8 +516,8 @@
   width: 20px;
   height: 20px;
   margin-left: auto;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
+  border-radius: var(--radius-xs);
+  transition: background-color var(--transition-fast);
   color: var(--theme-sidebar-text-secondary);
   cursor: pointer;
 }
@@ -489,7 +531,7 @@
   margin-left: 20px;
   margin-top: 4px;
   padding-left: 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  border-left: 2px solid rgba(255, 255, 255, 0.10);
 }
 
 .sidebar.collapsed .nav-submenu {
@@ -501,10 +543,10 @@
   align-items: center;
   padding: 8px 16px;
   margin: 2px 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   text-decoration: none;
   color: var(--theme-sidebar-text-secondary);
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 13px;
   font-weight: 400;
 }
@@ -512,6 +554,7 @@
 .nav-subitem:hover {
   background-color: rgba(255, 255, 255, 0.08);
   color: var(--theme-sidebar-text);
+  text-decoration: none;
 }
 
 .nav-subitem.active {
@@ -551,13 +594,13 @@
   color: var(--theme-sidebar-text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 14px;
   width: 20px;
   height: 20px;
@@ -574,14 +617,14 @@
   padding-right: 32px;
 }
 
-/* Popover 子导航样式 */
+/* ── Popover 子导航样式 ── */
 .nav-popover {
   z-index: 1050;
 }
 
 .nav-popover .ant-popover-inner {
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
 }
 
@@ -598,7 +641,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--theme-border);
   font-weight: 600;
   font-size: 14px;
   color: var(--theme-text-primary);
@@ -611,17 +654,17 @@
   color: var(--theme-text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   width: 20px;
   height: 20px;
 }
 
 .nav-popover-add-btn:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
   color: var(--theme-text-primary);
 }
 
@@ -661,16 +704,17 @@
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   text-decoration: none;
   color: var(--theme-text-primary);
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 13px;
   font-weight: 400;
 }
 
 .nav-popover-item-link:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
+  text-decoration: none;
 }
 
 .nav-popover-item.active .nav-popover-item-link {
@@ -700,13 +744,13 @@
   color: var(--theme-text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
   font-size: 14px;
   width: 20px;
   height: 20px;
@@ -714,7 +758,7 @@
 }
 
 .nav-popover-item-menu-btn:hover {
-  background-color: var(--theme-button-hover);
+  background-color: var(--surface-300);
   color: var(--theme-text-primary);
 }
 
@@ -722,7 +766,11 @@
   padding-right: 32px;
 }
 
-/* ─── Responsive: medium – narrower expanded sidebar ─── */
+/* ─────────────────────────────────────────────────────────
+   响应式
+   ───────────────────────────────────────────────────────── */
+
+/* 中等屏幕 */
 @media (max-width: 1200px) {
   .sidebar {
     width: 200px;
@@ -754,7 +802,7 @@
   }
 }
 
-/* ─── Responsive: small – default collapsed, main area maximised ─── */
+/* 小屏幕 */
 @media (max-width: 992px) {
   .sidebar {
     width: 70px;
@@ -833,7 +881,7 @@
   }
 }
 
-/* ─── Responsive: tiny – tighter top-bar & content ─── */
+/* 极小屏幕 */
 @media (max-width: 576px) {
   .top-bar {
     padding: 0 16px;
@@ -848,5 +896,3 @@
     padding: 12px;
   }
 }
-
-/* ─── Scrollbar: global fallback (index.css should override) ─── */

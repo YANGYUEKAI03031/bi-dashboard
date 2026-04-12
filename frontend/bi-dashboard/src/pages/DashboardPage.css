@@ -1,6 +1,8 @@
-/* ══════════════════════════════════════════════════════════════
-   DashboardPage — 统一视觉风格
-   ══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   DashboardPage — BI Dashboard Design System
+
+   设计理念：暖奶油背景 + 玻璃态面板 + 蓝色品牌强调
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .dashboard-page {
   height: 100%;
@@ -8,6 +10,7 @@
   min-height: 100vh;
 }
 
+/* ── 页面头部 ── */
 .page-header {
   background: var(--theme-card-background);
   padding: 20px 32px;
@@ -27,37 +30,37 @@
   height: calc(100% - 84px);
 }
 
-/* ── 图表列表面板 ── */
+/* ── 图表列表面板（玻璃态） ── */
 .chart-list-panel {
   height: 100%;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--theme-border);
 }
 
 .chart-list {
   max-height: 600px;
   overflow-y: auto;
-  padding-right: var(--space-sm);
+  padding-right: var(--space-xs);
 }
 
 .chart-search-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
 }
 
 .chart-search-dropdown {
-  padding: var(--space-sm);
+  padding: var(--space-xs);
 }
 
 .chart-search-dropdown-hint {
   font-size: 12px;
   color: var(--theme-text-secondary);
-  padding: var(--space-xs) var(--space-xs) var(--space-sm);
+  padding: var(--space-1) var(--space-1) var(--space-xs);
 }
 
 .chart-search-results {
@@ -69,12 +72,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
-  padding: 10px var(--space-sm);
+  gap: var(--space-sm);
+  padding: 10px var(--space-xs);
   border-radius: var(--radius-sm);
   cursor: grab;
   user-select: none;
-  transition: background var(--transition-base);
+  transition: background var(--transition-fast);
 }
 
 .chart-search-item:hover {
@@ -108,21 +111,22 @@
 }
 
 .chart-search-below {
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding-top: var(--space-md);
+  border-top: 1px solid var(--theme-border);
+  padding-top: var(--space-sm);
 }
 
 .chart-search-below-title {
   font-size: 12px;
   color: var(--theme-text-secondary);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
 }
 
 /* ── 可拖拽图表项 ── */
 .draggable-chart-item {
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-md);
   cursor: grab;
-  transition: transform var(--transition-spring), box-shadow var(--transition-spring);
+  transition: transform var(--transition-spring),
+              box-shadow var(--transition-spring);
   border-radius: var(--radius-md);
 }
 
@@ -160,25 +164,29 @@
   grid-template-columns: repeat(12, 1fr);
   grid-auto-rows: minmax(250px, auto);
   gap: 20px;
-  padding: var(--space-lg);
+  padding: var(--space-md);
   min-height: 600px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius-lg);
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.03);
+  box-shadow: inset 0 0 20px rgba(38, 37, 30, 0.02);
 }
 
+/* ── 仪表盘卡片 ── */
 .dashboard-card-wrapper {
   position: relative;
-  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  background: linear-gradient(145deg, #ffffff, var(--surface-200));
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  transition: transform var(--transition-spring), box-shadow var(--transition-spring), border-color var(--transition-base);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: transform var(--transition-spring),
+              box-shadow var(--transition-spring),
+              border-color var(--transition-fast);
+  border: 1px solid var(--theme-border);
   overflow: hidden;
 }
 
+/* 顶部彩色条 — 改为橙色系渐变 */
 .dashboard-card-wrapper::before {
   content: '';
   position: absolute;
@@ -186,14 +194,14 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, var(--theme-primary), var(--theme-success), var(--theme-warning), var(--theme-danger));
+  background: linear-gradient(90deg, var(--theme-primary), var(--theme-warning), var(--theme-success), var(--theme-danger));
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .dashboard-card-wrapper:hover {
   box-shadow: var(--shadow-lg);
   transform: translateY(-4px) scale(1.02);
-  border-color: rgba(74, 144, 226, 0.2);
+  border-color: rgba(74, 144, 226, 0.20);
 }
 
 .dashboard-card-wrapper.dragging {
@@ -211,17 +219,19 @@
   z-index: 10;
   background: rgba(255, 255, 255, 0.95);
   border-radius: var(--radius-sm);
-  padding: var(--space-sm);
-  box-shadow: var(--shadow-md);
-  transition: background var(--transition-base), box-shadow var(--transition-spring), transform var(--transition-spring);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  padding: var(--space-xs);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-fast),
+              box-shadow var(--transition-spring),
+              transform var(--transition-spring);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--theme-border);
 }
 
 .drag-handle:hover {
   background: #ffffff;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   transform: scale(1.1) rotate(90deg);
 }
 
@@ -239,17 +249,19 @@
 /* ── 网格占位符 ── */
 .grid-placeholder {
   background:
-    linear-gradient(45deg, #f0f2f5 25%, transparent 25%),
-    linear-gradient(-45deg, #f0f2f5 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #f0f2f5 75%),
-    linear-gradient(-45deg, transparent 75%, #f0f2f5 75%),
-    linear-gradient(135deg, #eef5ff 0%, #f5f9ff 100%);
+    linear-gradient(45deg, var(--surface-300) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-300) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-300) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-300) 75%),
+    linear-gradient(135deg, var(--surface-100) 0%, var(--theme-background) 100%);
   background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, 100% 100%;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px, 0 0;
   animation: placeholder-pulse 2s infinite;
   border-radius: var(--radius-md);
-  border: 2px dashed rgba(74, 144, 226, 0.4);
-  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
+  border: 2px dashed rgba(74, 144, 226, 0.30);
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast),
+              transform var(--transition-fast);
 }
 
 .grid-placeholder:hover {
@@ -259,28 +271,19 @@
 }
 
 @keyframes placeholder-pulse {
-  0% {
-    opacity: 0.7;
-    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  }
-  50% {
-    opacity: 1;
-    background-position: 10px 10px, 10px 20px, 20px 0px, 0px 10px;
-  }
-  100% {
-    opacity: 0.7;
-    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  }
+  0%   { opacity: 0.7; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
+  50%  { opacity: 1;   background-position: 10px 10px, 10px 20px, 20px 0px, 0px 10px; }
+  100% { opacity: 0.7; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
 }
 
 /* ── 响应式 ── */
 @media (max-width: 768px) {
   .dashboard-grid {
     grid-template-columns: repeat(6, 1fr);
-    gap: var(--space-md);
+    gap: var(--space-sm);
   }
 
   .dashboard-content {
-    padding: var(--space-md);
+    padding: var(--space-sm);
   }
 }
