@@ -793,11 +793,14 @@ class PipelineEngine:
             key=lambda x: x.get("order", 999) if isinstance(x, dict) else 999
         )
 
-        # 过滤节点：有 SQL 的节点直接保留；无 SQL 但有 insertedColumns 的节点也保留（用于添加新列）
+        # 过滤节点：有 SQL 或 insertedColumns 的节点保留
+        # 无 SQL 且无 insertedColumns 的节点也保留（透传节点，不报错）
         return [
             n for n in sorted_nodes
             if isinstance(n, dict) and (
-                n.get("sql") or n.get("config", {}).get("insertedColumns")
+                n.get("sql") 
+                or n.get("config", {}).get("insertedColumns")
+                or n.get("upstream")  # 有上游引用的节点可以透传
             )
         ]
 
@@ -1006,15 +1009,35 @@ class PipelineEngine:
         Returns:
             实际执行的 SQL
         """
-        # 没有 SQL 且没有 insertedColumns 配置，返回空
         config = node_config or {}
-        if not step_sql and not config.get("insertedColumns"):
-            return ""
-
-        sql = step_sql.strip()
+        canonical_type = PipelineEngine._canonical_pipeline_node_type(node_type)
+        
+        sql = (step_sql or "").strip()
+        
+        # 没有 SQL 且没有 insertedColumns 时，需要上游才能透传
+        if not sql and not config.get("insertedColumns"):
+            # 如果没有上游，只有 source 节点可以（直接执行自己的 SQL）
+            # 其他节点没有 SQL 且没有上游，无法生成有效的 SELECT
+            if not upstream_step_ids:
+                if canonical_type == "source":
+                    return sql
+                return ""
+            # 有上游但没有 SQL → 透传上游数据
+            # 构建上游引用需要 struct_table_map 等，这些在后面处理
+            pass  # 继续执行后面的透传逻辑
 
         # 没有上游（source 节点），直接执行
         if not upstream_step_ids:
+            # source 节点没有上游，直接执行
+            if canonical_type == "source":
+                return sql
+            # 非 source 节点没有上游（可能上游节点被过滤掉了）
+            # 如果 SQL 包含占位符但没被替换，说明配置有问题
+            if "{" in sql:
+                raise ValueError(
+                    f"节点 SQL 包含占位符（如 {{prev_table}}）但缺少有效的上游引用。"
+                    f"请检查上游节点是否被正确配置。"
+                )
             return sql
 
         # 构建各上游的临时表引用（列式表直接引用，JSON 表走子查询）
@@ -1031,8 +1054,12 @@ class PipelineEngine:
         # 没有 SQL 但有 insertedColumns - 使用 insertedColumns 生成 SQL
         if not sql and config.get("insertedColumns"):
             return self._build_sql_from_inserted_columns(upstream_refs, config, node_type="")
+        
+        # 没有 SQL 也没有 insertedColumns - 直接使用上游临时表（透传）
+        if not sql:
+            # 直接返回上游引用，占位符已在 upstream_refs 中展开
+            return f"SELECT * FROM {upstream_refs[0]}"
 
-        canonical_type = PipelineEngine._canonical_pipeline_node_type(node_type)
         is_union_merge = bool(
             merge_type and merge_type.lower() in ("union", "union all")
         )
@@ -1126,6 +1153,12 @@ class PipelineEngine:
             return False
 
         sql_upper = sql.upper().strip()
+        
+        # 预处理：移除外层括号和空白，便于验证包含子查询的 SQL
+        # 例如 "(SELECT ... FROM ... WHERE step_id = 'xxx') AS _up0" 
+        # 预处理后变为 "SELECT ... FROM ..."
+        while sql_upper.startswith("(") and sql_upper.endswith(")"):
+            sql_upper = sql_upper[1:-1].strip()
 
         # 只允许 SELECT
         if not sql_upper.startswith("SELECT"):
@@ -1236,18 +1269,21 @@ class PipelineEngine:
             if not node.get("name"):
                 return False, f"节点 {i} 缺少名称"
 
-            # 节点可以没有 SQL，但必须有 insertedColumns（用于添加新列）
-            has_sql = bool(node.get("sql"))
-            has_inserted = bool(node.get("config", {}).get("insertedColumns"))
-            if not has_sql and not has_inserted:
-                return False, f"节点 {node.get('name', i)} 缺少 SQL 语句"
+            # 节点可以没有任何特殊配置（没有 SQL，没有 insertedColumns）
+            # 这种情况下节点会直接透传上游数据，不报错
+            # has_sql = bool(node.get("sql"))
+            # has_inserted = bool(node.get("config", {}).get("insertedColumns"))
+            # if not has_sql and not has_inserted:
+            #     return False, f"节点 {node.get('name', i)} 缺少 SQL 语句"
 
-            # 检查 SQL 安全性
-            sql = node.get("sql", "").upper()
-            dangerous = ["INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE"]
-            for kw in dangerous:
-                if kw in sql:
-                    return False, f"节点 {node.get('name', i)} 的 SQL 包含不允许的操作: {kw}"
+            # 检查 SQL 安全性（只有节点有 SQL 时才检查）
+            sql = node.get("sql", "") or ""
+            if sql:
+                sql_upper = sql.upper()
+                dangerous = ["INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE"]
+                for kw in dangerous:
+                    if kw in sql_upper:
+                        return False, f"节点 {node.get('name', i)} 的 SQL 包含不允许的操作: {kw}"
 
             # 检查 upstream 引用的节点是否存在
             upstream = node.get("upstream") or []
