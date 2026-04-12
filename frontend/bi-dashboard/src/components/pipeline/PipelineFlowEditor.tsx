@@ -863,13 +863,14 @@ const defaultEdgeOptions = {
 /** 与工具栏「保存」相同：从 React Flow 状态导出 PipelineNode[] + 边 */
 function buildPipelineExport(
   flowNodes: Node[],
-  flowEdges: Edge[]
+  _flowEdges: Edge[]
 ): { pipelineNodes: PipelineNode[]; graphEdges: GraphEdge[] } | null {
   if (flowNodes.length === 0) return null;
   const positions: Record<string, { x: number; y: number }> = {};
   flowNodes.forEach((n: Node) => { positions[n.id] = n.position; });
   const graphNodes = flowNodes as unknown as GraphNode[];
-  const graphEdges = flowEdges as unknown as GraphEdge[];
+  // 直接从节点读取 upstream，不再从 edges 反推（避免残留边导致脏数据）
+  const graphEdges = buildEdgesFromUpstream(graphNodes);
   const sortedIds = topologicalSort(graphNodes, graphEdges);
   const sortedNodes = sortedIds
     .map(id => graphNodes.find(n => n.id === id))
@@ -877,8 +878,9 @@ function buildPipelineExport(
   const pipelineNodes = nodesToPipelineNodes(sortedNodes, positions);
   const withUpstream = pipelineNodes.map((pn, i) => {
     const nodeId = sortedIds[i];
-    const ups = graphEdges.filter(e => e.target === nodeId).map(e => e.source);
-    return { ...pn, upstream: ups };
+    const node = graphNodes.find(n => n.id === nodeId);
+    const upstream = (node?.data.pipelineNode as Record<string, unknown>)?.upstream as string[] || [];
+    return { ...pn, upstream };
   });
   return { pipelineNodes: withUpstream as PipelineNode[], graphEdges };
 }
@@ -907,6 +909,8 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   const [panelOpen, setPanelOpen] = useState(false);
   /** 关闭面板 / 连线 / 拖拽后递增，强制底部预览刷新 */
   const [previewRefreshTick, setPreviewRefreshTick] = useState(0);
+  /** 删除节点后强制刷新 ReactFlow */
+  const [flowKey, setFlowKey] = useState(0);
 
   // Import from pipeline state
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -945,7 +949,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   );
 
   const selectedCount = useMemo(
-    () => (nodes as unknown as GraphNode[]).filter(n => n.data?.selected).length,
+    () => (nodes as unknown as GraphNode[]).filter(n => n.selected).length,
     [nodes]
   );
 
@@ -1023,44 +1027,103 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     setPreviewRefreshTick(t => t + 1);
   }, [nodes, setEdges]);
 
-  const handleNodesDelete = useCallback(() => {
-    const toDelete = (nodes as unknown as GraphNode[])
-      .filter(n => n.data?.selected)
-      .map(n => n.id);
-    if (toDelete.length === 0) {
-      message.warning('请先选中要删除的节点');
-      return;
-    }
-    // 一次性过滤：移除待删除节点，并清理其余节点的 upstream 引用
+  /** 找出所有下游节点（直接和间接依赖被删除节点的节点） */
+  const getDownstreamNodes = (
+    allNodes: GraphNode[],
+    deleted: Set<string>
+  ): Set<string> => {
+    const downstream = new Set<string>();
+    const visited = new Set<string>();
+    const findDownstream = (nodeId: string) => {
+      for (const n of allNodes) {
+        const upstream = (n.data.pipelineNode as Record<string, unknown>)?.upstream as string[] || [];
+        if (upstream.includes(nodeId) && !deleted.has(n.id) && !visited.has(n.id)) {
+          visited.add(n.id);
+          downstream.add(n.id);
+          findDownstream(n.id);
+        }
+      }
+    };
+    deleted.forEach(id => findDownstream(id));
+    return downstream;
+  };
+
+  /** 通用删除逻辑 */
+  const applyNodeDelete = useCallback((
+    toDelete: string[],
+    currentNodes: Node[]
+  ) => {
+    if (toDelete.length === 0) return;
     const deletedSet = new Set(toDelete);
-    const cleanedNodes = (nodes as unknown as GraphNode[])
+    const graphNodes = currentNodes as unknown as GraphNode[];
+
+    // 找出所有下游节点
+    const downstreamSet = getDownstreamNodes(graphNodes, deletedSet);
+
+    const cleanedNodes = graphNodes
       .filter(n => !deletedSet.has(n.id))
       .map(n => {
         const pn = n.data.pipelineNode as Record<string, unknown>;
-        const upstream = (pn.upstream as string[]) || [];
-        const filtered = upstream.filter((u: string) => !deletedSet.has(u));
-        if (filtered.length !== upstream.length) {
+
+        // 下游节点清空 upstream，保持灵活性
+        if (downstreamSet.has(n.id)) {
           return {
             ...n,
             data: {
               ...n.data,
-              pipelineNode: { ...pn, upstream: filtered },
+              pipelineNode: { ...pn, upstream: [] },
             },
           } as unknown as Node;
         }
         return n;
       });
-    // 用统一的 buildEdgesFromUpstream 重新生成 edges
+
     const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
     setNodes(cleanedNodes);
     setEdges(syncedEdges);
+    setFlowKey(k => k + 1); // 强制刷新 ReactFlow
     setPreviewRefreshTick(t => t + 1);
+
     if (selectedNodeId && toDelete.includes(selectedNodeId)) {
       setPanelOpen(false);
       setSelectedNodeId(null);
     }
     message.success(`已删除 ${toDelete.length} 个节点`);
-  }, [nodes, selectedNodeId, setNodes, setEdges]);
+  }, [setNodes, setEdges, selectedNodeId]);
+
+  // 监听 Delete/Backspace 键实现自定义删除
+  useEffect(() => {
+    if (readOnly) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      console.log('[Delete键] key=', e.key, 'target=', (e.target as HTMLElement).tagName);
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          console.log('[Delete键] 忽略：输入框内');
+          return;
+        }
+        const selectedNodes = (nodes as unknown as GraphNode[]).filter(n => n.selected);
+        console.log('[Delete键] 选中节点数:', selectedNodes.length);
+        if (selectedNodes.length > 0) {
+          e.preventDefault();
+          applyNodeDelete(selectedNodes.map(n => n.id), nodes);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, readOnly, applyNodeDelete]);
+
+  const handleNodesDelete = useCallback(() => {
+    const toDelete = (nodes as unknown as GraphNode[])
+      .filter(n => n.selected)
+      .map(n => n.id);
+    if (toDelete.length === 0) {
+      message.warning('请先选中要删除的节点');
+      return;
+    }
+    applyNodeDelete(toDelete, nodes);
+  }, [nodes, applyNodeDelete]);
 
   const handlePanelNodeUpdate = useCallback((updatedNode: GraphNode) => {
     setNodes(prev => prev.map(n =>
@@ -1072,31 +1135,10 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   }, [setNodes]);
 
   const handlePanelNodeDelete = useCallback((nodeId: string) => {
-    const deletedSet = new Set([nodeId]);
-    const cleanedNodes = (nodes as unknown as GraphNode[])
-      .filter(n => n.id !== nodeId)
-      .map(n => {
-        const pn = n.data.pipelineNode as Record<string, unknown>;
-        const upstream = (pn.upstream as string[]) || [];
-        const filtered = upstream.filter((u: string) => !deletedSet.has(u));
-        if (filtered.length !== upstream.length) {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              pipelineNode: { ...pn, upstream: filtered },
-            },
-          } as unknown as Node;
-        }
-        return n;
-      });
-    const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
-    setNodes(cleanedNodes);
-    setEdges(syncedEdges);
-    setPreviewRefreshTick(t => t + 1);
+    applyNodeDelete([nodeId], nodes);
     setPanelOpen(false);
     setSelectedNodeId(null);
-  }, [nodes, setNodes, setEdges]);
+  }, [nodes, applyNodeDelete]);
 
   const handleImportFromPipeline = useCallback(
     (importedNodes: GraphNode[], importedEdges: GraphEdge[]) => {
@@ -1195,6 +1237,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
         <div className="pipeline-flow-column">
           <div className="pipeline-flow-main">
             <ReactFlow
+            key={flowKey}
             nodes={enrichedNodes}
             edges={edges}
             onNodesChange={readOnly ? undefined : onNodesChange}
@@ -1204,7 +1247,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
             edgeTypes={undefined}
             defaultEdgeOptions={defaultEdgeOptions}
             fitView
-            deleteKeyCode={readOnly ? null : 'Delete'}
+            deleteKeyCode={null} // 禁用 React Flow 内置删除，使用自定义删除逻辑
             onNodeClick={handleNodeClick}
             onNodeDoubleClick={handleNodeDoubleClick}
             onPaneClick={handlePaneClick}
