@@ -280,16 +280,6 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     );
   }
 
-  if (node.type === 'transform') {
-    const exprs = (config.transforms as Array<{ column: string; expr: string }>) || [];
-    if (exprs.length === 0) return null;
-    return (
-      <div className="pipeline-node-card-summary">
-        {renderChip(`${exprs.length} 个表达式`)}
-      </div>
-    );
-  }
-
   if (node.type === 'merge') {
     const ups = (config.upstream_ids as string[]) || [];
     return (
@@ -384,16 +374,6 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
             </Space>
           ),
           onClick: () => onAdd('join'),
-        },
-        {
-          key: 'transform',
-          label: (
-            <Space style={{ fontSize: 12 }}>
-              <HolderOutlined style={{ color: NODE_TYPE_REGISTRY.transform?.color ?? '#52c41a' }} />
-              数据转换
-            </Space>
-          ),
-          onClick: () => onAdd('transform'),
         },
         {
           key: 'merge',

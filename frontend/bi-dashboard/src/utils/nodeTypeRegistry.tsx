@@ -63,7 +63,7 @@ export interface NodeTypeDefinition {
 
 /**
  * 新建/切换节点类型时下拉中的顺序（不含已下线的独立「过滤」类型；
- * 行筛选请用各节点预览面板的筛选，或「数据转换」节点）。
+ * 行筛选请用各节点预览面板的筛选，或「聚合」节点）。
  */
 export const EDITOR_NODE_TYPE_ORDER: string[] = [
   'source',
@@ -71,7 +71,6 @@ export const EDITOR_NODE_TYPE_ORDER: string[] = [
   'join',
   'column_select',
   'output',
-  'transform',
   'merge',
   'chart',
 ];
@@ -171,20 +170,6 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     icon: <ExportOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select'],
   },
-  transform: {
-    type: 'transform',
-    label: '数据转换',
-    labelShort: '转换',
-    color: '#52c41a',
-    bgColor: '#F6FFED',
-    borderColor: '#52c41a',
-    tagBg: '#d9f7be',
-    tagColor: '#52c41a',
-    hasPreview: true,
-    description: '对字段进行表达式转换',
-    icon: <HolderOutlined />,
-    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform'],
-  },
   merge: {
     type: 'merge',
     label: '合并节点',
@@ -197,7 +182,7 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     hasPreview: true,
     description: '纵向拼接多路数据（UNION / UNION ALL），按列位置对齐',
     icon: <ColumnHeightOutlined />,
-    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'transform', 'merge'],
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'merge'],
     cssClass: 'merge',
   },
   chart: {

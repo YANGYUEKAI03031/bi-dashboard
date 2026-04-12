@@ -284,15 +284,6 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 readOnly={readOnly}
               />
             )}
-            {pipelineNode?.type === 'transform' && (
-              <FilterNodeConfig
-                node={selectedNode}
-                upstreamNodes={upstreams}
-                allNodes={allNodes}
-                onChange={handleFormChange}
-                readOnly={readOnly}
-              />
-            )}
             {pipelineNode?.type === 'chart' && (
               <ChartNodeConfig
                 node={selectedNode}

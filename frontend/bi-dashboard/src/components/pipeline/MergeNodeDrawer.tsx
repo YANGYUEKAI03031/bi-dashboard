@@ -116,7 +116,6 @@ export function MergeNodeDrawer({ visible, sourceNodes, onConfirm, onCancel }: M
                 <span>
                   <Tag color={
                     (node.data.pipelineNode as Record<string, unknown>).type === 'source' ? 'blue' :
-                    (node.data.pipelineNode as Record<string, unknown>).type === 'transform' ? 'green' :
                     (node.data.pipelineNode as Record<string, unknown>).type === 'output' ? 'purple' : 'orange'
                   } style={{ marginRight: 6 }}>
                     {(node.data.pipelineNode as Record<string, unknown>).type as string}
