@@ -889,29 +889,92 @@ class PipelineEngine:
         if not inserted_columns:
             return f"SELECT * FROM {ref}"
 
-        # 生成 insertedColumns 的列表达式
-        new_cols: List[str] = []
+        # 构建初始可用列名列表（从上游 ref 中提取列名）
+        inner_columns: List[str] = []
+        if ref:
+            cols_match = re.match(r"^SELECT\s+(.*?)\s+FROM\s+", ref, re.IGNORECASE | re.DOTALL)
+            if cols_match:
+                col_str = cols_match.group(1).strip()
+                if col_str and col_str != "*":
+                    inner_columns = [c.strip() for c in col_str.split(",")]
+
+        # ================================================================
+        # insertedColumns 分层处理（解决 MySQL 不允许同一层 SELECT 引用尚未定义的列别名）
+        # ================================================================
+        layers: List[List[Dict[str, Any]]] = []
+        layer_available: List[List[str]] = []  # 每层的可用列集合
+
         for col_config in inserted_columns:
             if not isinstance(col_config, dict):
                 continue
             method = str(col_config.get("method", "")).strip().lower()
-            source_column = str(col_config.get("sourceColumn", "")).strip()
+            method_cfg = col_config.get("config", {})
+            expression = str(method_cfg.get("expression", "")).strip()
+            source_ref = expression or str(col_config.get("sourceColumn", "")).strip()
             new_name = str(col_config.get("name", "")).strip()
-            method_config = col_config.get("config", {})
             if not new_name:
                 continue
-            expr = PipelineEngine._build_single_inserted_column_expr(
-                method, source_column, method_config
-            )
-            if expr:
-                new_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
 
-        if not new_cols:
-            return f"SELECT * FROM {ref}"
+            # 检测该列是否引用了前面层的 insertedColumn 别名
+            depends_on_layer = -1
+            for li, avail in enumerate(layer_available):
+                for prev_name in avail:
+                    if len(prev_name) > len(source_ref):
+                        continue
+                    escaped = re.escape(prev_name)
+                    if re.search(r"(?<![`\"\w])" + escaped + r"(?![`\"\w])", source_ref):
+                        depends_on_layer = li
+                        break
+                if depends_on_layer >= 0:
+                    break
 
-        # 生成 SELECT * + 新列（ref 已经是完整子查询，不需要再加括号）
-        cols_str = ", ".join(new_cols)
-        return f"SELECT *, {cols_str} FROM {ref}"
+            target_layer = depends_on_layer + 1
+
+            while len(layers) <= target_layer:
+                layers.append([])
+                layer_available.append(list(inner_columns))
+                if target_layer > 0:
+                    for li in range(len(layers) - 1):
+                        layer_available[target_layer].extend(layer_available[li])
+
+            layers[target_layer].append(col_config)
+            layer_available[target_layer].append(new_name)
+
+        # 逐层生成嵌套子查询
+        current_sql = f"SELECT * FROM {ref}"
+        for layer_idx, layer_cols in enumerate(layers):
+            if not layer_cols:
+                continue
+
+            # 当前层可用列 = 内层原始列 + 前面所有层的 insertedColumn 别名
+            layer_all_avail: List[str] = list(inner_columns)
+            for li in range(layer_idx):
+                layer_all_avail.extend([c.get("name", "") for c in layers[li]])
+
+            layer_new_cols: List[str] = []
+            for cfg in layer_cols:
+                method = str(cfg.get("method", "")).strip().lower()
+                source_col = str(cfg.get("sourceColumn", "")).strip()
+                new_nm = str(cfg.get("name", "")).strip()
+                cfg_inner = cfg.get("config", {})
+                expr = PipelineEngine._build_single_inserted_column_expr(
+                    method, source_col, cfg_inner, layer_all_avail
+                )
+                if expr:
+                    layer_new_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_nm)}")
+                    layer_all_avail.append(new_nm)
+
+            if not layer_new_cols:
+                continue
+
+            layer_cols_str = ", ".join(layer_new_cols)
+            is_last = (layer_idx == len(layers) - 1)
+            if is_last:
+                return f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _ic"
+            else:
+                current_sql = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _layer{layer_idx}"
+
+        return current_sql
 
     @staticmethod
     def _join_preview_allowed_sql_columns(
@@ -1678,39 +1741,120 @@ class PipelineEngine:
                 else:
                     safe_cols.append(PipelineEngine._safe_identifier(old_name))
 
-        # 添加 insertedColumns 生成的新列
-        # all_available_columns 会随每个新列的生成而扩展，支持"列2引用列1"的场景
+        # ================================================================
+        # insertedColumns 分层处理
+        # 原因：MySQL 不允许同一层 SELECT 列表中引用尚未定义的列别名。
+        # 因此当 insertedColumn B 引用 insertedColumn A 时，需要将 B 放到下一层嵌套子查询中。
+        # ================================================================
         has_inserted = False
-        all_available_columns: List[str] = list(inner_columns)
+        all_ic_names: List[str] = list(inner_columns)
+
+        # 第一步：按依赖关系将 insertedColumns 分配到各层
+        # layers[0] = 无依赖的列（可直接与内层列同层）
+        # layers[N] = 依赖 layers[N-1] 中某个列的列
+        layers: List[List[Dict[str, Any]]] = []
+        # layer_available[i] = 第 i 层可用的列名集合（用于依赖检测）
+        layer_available: List[List[str]] = []
+
         for col_config in inserted_columns:
             if not isinstance(col_config, dict):
                 continue
-            method = str(col_config.get("method", "").strip()).lower()
-            source_column = str(col_config.get("sourceColumn", "")).strip()
+            method = str(col_config.get("method", "")).strip().lower()
+            method_cfg = col_config.get("config", {})
+            expression = str(method_cfg.get("expression", "")).strip()
+            source_ref = expression or str(col_config.get("sourceColumn", "")).strip()
             new_name = str(col_config.get("name", "")).strip()
-            method_config = col_config.get("config", {})
             if not new_name:
                 continue
-            expr = PipelineEngine._build_single_inserted_column_expr(
-                method, source_column, method_config, all_available_columns
-            )
-            if expr:
-                safe_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
-                has_inserted = True
-                # 将新生成的列名加入可用列列表，后续 insertedColumns 可引用
-                all_available_columns.append(new_name)
 
-        if not safe_cols:
+            # 检测该列引用了前面哪个 insertedColumn 的别名（作为完整单词）
+            depends_on_layer = -1  # -1 表示无依赖
+            for li, avail in enumerate(layer_available):
+                for prev_name in avail:
+                    if len(prev_name) > len(source_ref):
+                        continue
+                    escaped = re.escape(prev_name)
+                    if re.search(r"(?<![`\"\w])" + escaped + r"(?![`\"\w])", source_ref):
+                        depends_on_layer = li
+                        break
+                if depends_on_layer >= 0:
+                    break
+
+            target_layer = depends_on_layer + 1
+
+            # 确保层结构足够大
+            while len(layers) <= target_layer:
+                layers.append([])
+                layer_available.append(list(inner_columns))
+                # 每层初始时把前面所有层的别名也加入（供同层其他列引用）
+                if target_layer > 0:
+                    for li in range(len(layers) - 1):
+                        layer_available[target_layer].extend(layer_available[li])
+
+            layers[target_layer].append(col_config)
+            layer_available[target_layer].append(new_name)
+            has_inserted = True
+            all_ic_names.append(new_name)
+
+        if not has_inserted:
             return sql
 
-        cols_str = ", ".join(safe_cols)
+        # 第二步：逐层生成嵌套子查询
+        # 最内层 = 内层列
+        # 第0层 → SELECT *, {第0层新列} FROM (内层)
+        # 第1层 → SELECT *, {第1层新列} FROM (第0层结果)
+        # ...
+        # 最外层 → SELECT {投影列} FROM (第N层结果)  或  SELECT *, {最外层新列} FROM (第N层结果)
+        current_sql = sql
+        for layer_idx, layer_cols in enumerate(layers):
+            if not layer_cols:
+                continue
 
-        # outputColumnKeys 非空时：投影 output_keys + insertedColumns
-        if output_keys:
-            return f"SELECT {cols_str} FROM ({sql}) AS _p"
+            # 构建当前层可用的列名列表（内层列 + 前面所有层的 insertedColumn 别名）
+            layer_all_avail: List[str] = list(inner_columns)
+            for li in range(layer_idx):
+                layer_all_avail.extend([c.get("name", "") for c in layers[li]])
+            # 同层内前面已生成的列（供同层后续列引用，如同层 B 引用同层 A）
+            layer_all_avail = list(layer_all_avail)
 
-        # outputColumnKeys 为空：有 insertedColumns → SELECT *, 新列 FROM (...)
-        return f"SELECT *, {cols_str} FROM ({sql}) AS _ic"
+            layer_new_cols: List[str] = []
+            for cfg in layer_cols:
+                method = str(cfg.get("method", "")).strip().lower()
+                source_col = str(cfg.get("sourceColumn", "")).strip()
+                new_nm = str(cfg.get("name", "")).strip()
+                cfg_inner = cfg.get("config", {})
+                expr = PipelineEngine._build_single_inserted_column_expr(
+                    method, source_col, cfg_inner, layer_all_avail
+                )
+                if expr:
+                    layer_new_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_nm)}")
+                    layer_all_avail.append(new_nm)
+
+            if not layer_new_cols:
+                continue
+
+            layer_cols_str = ", ".join(layer_new_cols)
+            is_last_layer = (layer_idx == len(layers) - 1)
+
+            if is_last_layer and output_keys:
+                # 最外层且有 outputColumnKeys：做列投影
+                proj_cols: List[str] = []
+                for col in output_keys:
+                    old_nm = str(rename_map.get(col, col)).strip()
+                    if col != old_nm:
+                        proj_cols.append(f"{PipelineEngine._safe_identifier(old_nm)} AS {PipelineEngine._safe_identifier(col)}")
+                    else:
+                        proj_cols.append(PipelineEngine._safe_identifier(old_nm))
+                all_proj_str = ", ".join(proj_cols + layer_new_cols)
+                current_sql = f"SELECT {all_proj_str} FROM ({current_sql}) AS _p"
+            elif is_last_layer:
+                # 最外层无 outputColumnKeys：SELECT *
+                current_sql = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _ic"
+            else:
+                # 中间层和第一层：始终 SELECT * + 当前层新列
+                current_sql = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _layer{layer_idx}"
+
+        return current_sql
 
     # ================================================================
     # 预览用列名推断（用于 JOIN 展开）
@@ -2048,24 +2192,30 @@ class PipelineEngine:
             method_config: 方法配置
             all_available_columns: 当前作用域内所有可用的列名（用于自动包裹表达式中的列名）
         """
-        safe_source = PipelineEngine._safe_identifier(source_column)
-
         if method == "calculation":
-            return PipelineEngine._build_calculation_expr(safe_source, method_config, all_available_columns)
-        elif method == "split":
+            expression = method_config.get("expression", "")
+            if expression:
+                return PipelineEngine._build_calculation_expr(
+                    source_column, method_config, all_available_columns
+                )
+            else:
+                return PipelineEngine._build_calculation_expr(
+                    PipelineEngine._safe_identifier(source_column), method_config, all_available_columns
+                )
+        safe_source = PipelineEngine._safe_identifier(source_column)
+        if method == "split":
             return PipelineEngine._build_split_expr(safe_source, method_config)
-        elif method == "function":
+        if method == "function":
             return PipelineEngine._build_function_expr(safe_source, method_config, all_available_columns)
-        elif method == "lookup":
+        if method == "lookup":
             return PipelineEngine._build_lookup_expr(safe_source, method_config)
-        elif method == "rank":
+        if method == "rank":
             return PipelineEngine._build_rank_expr(safe_source, method_config)
-        elif method == "category":
+        if method == "category":
             return PipelineEngine._build_category_expr(safe_source, method_config)
-        elif method == "bin":
+        if method == "bin":
             return PipelineEngine._build_bin_expr(safe_source, method_config)
-        else:
-            return "NULL"
+        return "NULL"
 
     @staticmethod
     def _build_calculation_expr(
@@ -2100,8 +2250,10 @@ class PipelineEngine:
                 escaped = re.escape(col)
                 expr = re.sub(r'(?<![`"\'])(' + escaped + r')(?![`"\'])', r'`\1`', expr)
             return expr
-
-        return expression
+        else:
+            # all_available_columns 为空时，匹配表达式中所有标识符（包括中文列名）并加反引号
+            expr = re.sub(r'([\w\u4e00-\u9fff]+)', r'`\1`', expression)
+            return expr
 
     @staticmethod
     def _build_split_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
