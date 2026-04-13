@@ -86,6 +86,7 @@ function useUpstreamPreviews(upstreamNodes: GraphNode[], pipelineDataSourceId: n
         pipelineDataSourceId ?? null
       );
       if (!upNode || !ds) return;
+      hooks[idx].clearPreview();
       hooks[idx].loadPreview(
         { node: upNode, allNodes, pipelineDataSourceId: ds, limit: 30 },
         true

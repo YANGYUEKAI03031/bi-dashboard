@@ -22,6 +22,7 @@ import { ColumnSelectConfig } from './visual-nodes/ColumnSelectConfig';
 import { OutputNodeConfig } from './visual-nodes/OutputNodeConfig';
 import { MergeNodeConfig } from './visual-nodes/MergeNodeConfig';
 import { ChartNodeConfig } from './visual-nodes/ChartNodeConfig';
+import { TransposeNodeConfig } from './visual-nodes/TransposeNodeConfig';
 
 const { Text } = Typography;
 
@@ -292,6 +293,16 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 onNodeUpdate={onNodeUpdate}
+                readOnly={readOnly}
+              />
+            )}
+            {pipelineNode?.type === 'transpose' && (
+              <TransposeNodeConfig
+                node={selectedNode}
+                upstreamNodes={upstreams}
+                allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
+                onChange={handleFormChange}
                 readOnly={readOnly}
               />
             )}

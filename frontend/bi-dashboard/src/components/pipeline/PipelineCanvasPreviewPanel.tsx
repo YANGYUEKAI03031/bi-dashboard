@@ -476,15 +476,47 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
   /** 打开插入列弹窗 */
   const handleOpenInsertColumn = (sourceColumn?: string) => {
-    setInsertColumnSourceColumn(sourceColumn);
-    setInsertColumnEditConfig(undefined);
-    setInsertColumnModalOpen(true);
+    // 列数据依赖 previewData，在弹窗打开前强制立即刷新预览，确保拿到最新列信息
+    if (previewLoading || !previewData) {
+      loadPreview(
+        {
+          node: previewNode,
+          allNodes,
+          pipelineDataSourceId: resolvedDsId,
+          limit: 100,
+        },
+        true
+      ).then((result) => {
+        const cols =
+          result?.allColumns && result.allColumns.length > 0
+            ? result.allColumns
+            : (result?.columns ?? []);
+        setInsertColumnSourceColumn(sourceColumn ?? cols[0]);
+        setInsertColumnEditConfig(undefined);
+        setInsertColumnModalOpen(true);
+      });
+    } else {
+      setInsertColumnSourceColumn(sourceColumn ?? columnCatalog[0]);
+      setInsertColumnEditConfig(undefined);
+      setInsertColumnModalOpen(true);
+    }
   };
 
   /** 双击插入列标签 → 重新打开编辑 */
   const handleEditInsertColumn = (config: InsertedColumnConfig) => {
-    setInsertColumnEditConfig(config);
-    setInsertColumnModalOpen(true);
+    // 确保列数据已刷新
+    if (previewLoading || !previewData) {
+      loadPreview(
+        { node: previewNode, allNodes, pipelineDataSourceId: resolvedDsId, limit: 100 },
+        true
+      ).then(() => {
+        setInsertColumnEditConfig(config);
+        setInsertColumnModalOpen(true);
+      });
+    } else {
+      setInsertColumnEditConfig(config);
+      setInsertColumnModalOpen(true);
+    }
   };
 
   /** 插入新列回调 */

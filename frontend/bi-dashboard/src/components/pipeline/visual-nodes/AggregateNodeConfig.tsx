@@ -86,7 +86,7 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
     ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
     : undefined;
 
-  const { previewData, previewLoading, previewError, loadPreview } = useNodePreview();
+  const { previewData, previewLoading, previewError, loadPreview, clearPreview } = useNodePreview();
 
   const nodesSignature = useMemo(
     () => JSON.stringify(allNodes.map(n => ({
@@ -103,6 +103,7 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
     const key = `${upstreamNode.id}-${nodesSignature}-${upstreamDsId}`;
     if (key === loadKeyRef.current) return;
     loadKeyRef.current = key;
+    clearPreview();
     loadPreview({
       node: upstreamNode,
       allNodes,

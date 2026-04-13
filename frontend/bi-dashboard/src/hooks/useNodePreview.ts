@@ -47,7 +47,7 @@ export function useNodePreview() {
       }
 
       const pipelineNode = node.data.pipelineNode as PipelineNode;
-      const cacheKey = `${node.id}-${JSON.stringify(pipelineNode)}`;
+      const cacheKey = node.id;
       if (!immediate && cacheRef.current[cacheKey]) {
         const cached = cacheRef.current[cacheKey];
         setPreviewLoading(false);
@@ -146,6 +146,7 @@ export function useNodePreview() {
 
   const clearPreview = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    cacheRef.current = {};
     setPreviewLoading(false);
     setPreviewData(null);
     setPreviewError(null);

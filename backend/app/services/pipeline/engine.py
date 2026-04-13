@@ -1354,6 +1354,71 @@ class PipelineEngine:
         return f"`{name.replace('`', '``')}`"
 
     @staticmethod
+    def _extract_columns_from_select(sql: str) -> List[str]:
+        """
+        从 SELECT ... FROM (...) 中提取列名。
+        用于确定当前作用域内可用的列名列表，以便 insertedColumns 表达式可以引用这些列。
+        支持中文列名、复杂表达式和带 AS 别名的列。
+        """
+        sql_stripped = sql.strip()
+        if not sql_stripped.upper().startswith("SELECT"):
+            return []
+        # 匹配 SELECT ... FROM（支持子查询嵌套）
+        m = re.match(r"^SELECT\s+(.*?)(\s+FROM\s+)", sql_stripped, re.IGNORECASE | re.DOTALL)
+        if not m:
+            return []
+        cols_str = m.group(1).strip()
+        if cols_str == "*":
+            return []  # 无法推断具体列名
+
+        # 逐列解析（处理嵌套括号和 AS 别名）
+        # 策略：遇到 AS 时，检查 AS 前是否为简单函数调用
+        # - 简单函数调用如 SUM(x)、COUNT(x)：提取 AS 后的别名
+        # - 简单列引用如 count_评价文本_1：提取列名本身（去掉 AS 别名）
+        # - 其他表达式如 count_评价文本_1 + ...：提取 AS 后的别名
+        cols: List[str] = []
+        depth = 0
+        buf = ""
+        for ch in cols_str:
+            if ch == "(":
+                depth += 1
+                buf += ch
+            elif ch == ")":
+                depth -= 1
+                buf += ch
+            elif ch == "," and depth == 0:
+                col = buf.strip()
+                # 从右向左找 AS 分隔别名（支持中文别名，用 \S+ 而非 \w+）
+                as_match = re.match(r"^(.*?)\s+AS\s+(\S+)$", col, re.IGNORECASE)
+                if as_match:
+                    inner = as_match.group(1).strip()
+                    # 检查最外层是否是简单函数调用（如 SUM(x)、COUNT(x)、MAX(x)）
+                    fn_match = re.match(r"^\w+\([^)]*\)$", inner, re.IGNORECASE)
+                    if fn_match:
+                        # 函数调用 → 提取别名（如 SUM(x) AS sum_x → sum_x）
+                        col = as_match.group(2)
+                    else:
+                        # 非函数调用 → 提取原始列名（如 count_评价文本_1 AS count_评价文本_1 → count_评价文本_1）
+                        col = inner
+                cols.append(col)
+                buf = ""
+            else:
+                buf += ch
+        if buf.strip():
+            col = buf.strip()
+            as_match = re.match(r"^(.*?)\s+AS\s+(\S+)$", col, re.IGNORECASE)
+            if as_match:
+                inner = as_match.group(1).strip()
+                fn_match = re.match(r"^\w+\([^)]*\)$", inner, re.IGNORECASE)
+                if fn_match:
+                    col = as_match.group(2)
+                else:
+                    col = inner
+            cols.append(col)
+
+        return [c.strip() for c in cols if c.strip()]
+
+    @staticmethod
     def _join_on_equality_sql(left_col: str, right_col: str) -> str:
         """ON 条件两侧统一 COLLATE，避免 MySQL 1267（utf8mb4_unicode_ci / utf8mb4_0900_ai_ci 混用）。"""
         la = f"a.{PipelineEngine._safe_identifier(left_col)}"
@@ -1561,9 +1626,10 @@ class PipelineEngine:
         若含 renameMap 也支持别名映射。
 
         同时处理 insertedColumns，添加新计算的列。
+        insertedColumns 中后定义的列可以引用前面已定义的列（通过 all_available_columns 传递）。
 
-        allowed_sql_columns 非空时，只保留「内层结果中确实存在」的列（按 renameMap 映射前的
-        源列名校验），避免 JOIN 类型切换后仍引用旧列名导致 1054。
+        allowed_sql_columns 非空时，只保留「内层结果中确实存在」的列，避免 JOIN 类型切换后
+        仍引用旧列名导致 1054。
         """
         if not sql:
             return ""
@@ -1571,48 +1637,39 @@ class PipelineEngine:
         rename_map: Dict[str, str] = config.get("renameMap", {})
         inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", [])
 
+        # 从内层 SQL 中提取列名列表，用于 insertedColumns 表达式中引用列
+        # （支持中文列名、别名、前面生成的列等）
+        inner_columns: List[str] = PipelineEngine._extract_columns_from_select(sql)
+        # allowed_sql_columns 非空时，只使用在 allowed 中的列作为可用列
+        if allowed_sql_columns is not None:
+            inner_columns = [c for c in inner_columns if c in allowed_sql_columns]
+
         safe_cols: List[str] = []
 
         def _is_column_in_output(col: str) -> Optional[str]:
-            """
-            检查列是否应该出现在输出中。
-            返回 old_name AS new_name 或 old_name 或 None。
-            """
+            """检查列是否应该出现在输出中。"""
             original = str(rename_map.get(col, col)).strip()
-            # 检查原始列名是否在 allowed 中
             if allowed_sql_columns is not None and original not in allowed_sql_columns:
-                # 检查带 _b 后缀的版本
                 if f"{original}_b" not in allowed_sql_columns:
                     return None
-                # _b 后缀版本存在，但需要确保实际 SQL 中有这个列
-                # 由于我们不知道实际列名，直接返回 None 让它不被添加
                 return None
             return original
 
         # 当 outputColumnKeys 为空时，保留所有原有列（SELECT *）
-        # 只有在有 allowed_sql_columns 限制时才需要过滤
         if not output_keys:
-            # outputColumnKeys 为空，保留原有列 + insertedColumns
             if allowed_sql_columns is not None:
-                # 有列限制时，只保留存在的列
                 for col in allowed_sql_columns:
                     safe_cols.append(PipelineEngine._safe_identifier(col))
-            # else: 不加任何列（外层 SELECT * 会处理）
         else:
             keys_use: List[str] = list(output_keys)
             if allowed_sql_columns is not None:
-                # 过滤逻辑：检查列名或其带 _b 后缀的版本是否在 allowed_sql_columns 中
-                # 这样可以处理 JOIN 时右表同名列被加 _b 后缀的情况
                 def _is_column_allowed(col: str) -> bool:
                     original = str(rename_map.get(col, col)).strip()
-                    # 直接匹配
                     if original in allowed_sql_columns:
                         return True
-                    # 带 _b 后缀匹配（JOIN 时右表同名列会被加 _b 后缀）
                     if f"{original}_b" in allowed_sql_columns:
                         return True
                     return False
-                
                 keys_use = [col for col in output_keys if _is_column_allowed(col)]
             for col in keys_use:
                 old_name = rename_map.get(col, col)
@@ -1622,45 +1679,103 @@ class PipelineEngine:
                     safe_cols.append(PipelineEngine._safe_identifier(old_name))
 
         # 添加 insertedColumns 生成的新列
+        # all_available_columns 会随每个新列的生成而扩展，支持"列2引用列1"的场景
         has_inserted = False
+        all_available_columns: List[str] = list(inner_columns)
         for col_config in inserted_columns:
             if not isinstance(col_config, dict):
                 continue
-            method = str(col_config.get("method", "")).strip().lower()
+            method = str(col_config.get("method", "").strip()).lower()
             source_column = str(col_config.get("sourceColumn", "")).strip()
             new_name = str(col_config.get("name", "")).strip()
             method_config = col_config.get("config", {})
             if not new_name:
                 continue
-            expr = PipelineEngine._build_single_inserted_column_expr(method, source_column, method_config)
+            expr = PipelineEngine._build_single_inserted_column_expr(
+                method, source_column, method_config, all_available_columns
+            )
             if expr:
                 safe_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
                 has_inserted = True
+                # 将新生成的列名加入可用列列表，后续 insertedColumns 可引用
+                all_available_columns.append(new_name)
 
         if not safe_cols:
             return sql
 
         cols_str = ", ".join(safe_cols)
-        
-        # 检查内层 SQL 是否是简单的 SELECT *（不含 insertedColumns）
-        sql_upper = sql.strip().upper()
-        # 简单 SELECT * 格式：SELECT * FROM 或 SELECT * 后面只有空格/WHERE/ON 等
-        is_simple_select_star = bool(re.match(r'^SELECT\s+\*\s+(FROM|$)', sql_upper, re.IGNORECASE))
-        
-        # 如果 outputColumnKeys 为空且有 insertedColumns，需要 SELECT * + 新列
-        if not output_keys and has_inserted:
-            if is_simple_select_star:
-                # 内层是简单 SELECT *，需要包装为 SELECT *, 新列 FROM (...)
-                return f"SELECT *, {cols_str} FROM ({sql}) AS _ic"
-            # 内层已经是 SELECT *, 新列 FROM ...，直接返回（避免重复包装导致列名冲突）
-            return sql
-        return f"SELECT {cols_str} FROM ({sql}) AS _p"
+
+        # outputColumnKeys 非空时：投影 output_keys + insertedColumns
+        if output_keys:
+            return f"SELECT {cols_str} FROM ({sql}) AS _p"
+
+        # outputColumnKeys 为空：有 insertedColumns → SELECT *, 新列 FROM (...)
+        return f"SELECT *, {cols_str} FROM ({sql}) AS _ic"
 
     # ================================================================
     # 预览用列名推断（用于 JOIN 展开）
     # ================================================================
 
     @staticmethod
+    def _split_select_columns(sql: str) -> List[str]:
+        """
+        将 SELECT ... FROM 之间的列表达式按顶层逗号分割。
+        忽略括号内和字符串字面量内的逗号。
+        """
+        m = re.match(r"^SELECT\s+(.*?)\s+FROM\s+", sql, re.IGNORECASE | re.DOTALL)
+        if not m:
+            return []
+        cols_str = m.group(1)
+        parts: List[str] = []
+        depth = 0
+        in_str = False
+        str_char = ""
+        i = 0
+        while i < len(cols_str):
+            c = cols_str[i]
+            is_escaped = i > 0 and cols_str[i - 1] == "\\"
+            if c in ("'", '"', "`") and not is_escaped:
+                if not in_str:
+                    in_str = True
+                    str_char = c
+                elif c == str_char:
+                    in_str = False
+                    str_char = ""
+            if not in_str:
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                elif c == "," and depth == 0:
+                    parts.append(cols_str[:i].strip())
+                    cols_str = cols_str[i + 1 :]
+                    i = -1
+            i += 1
+        parts.append(cols_str.strip())
+        return parts
+
+    @staticmethod
+    def _extract_sql_aliases(sql: str) -> List[str]:
+        """
+        从 SELECT 语句中提取每个列表达式的最终列名。
+        格式为 'expr AS alias' 时取 alias；无 AS 时取最后一个标识符。
+        支持 groupBy 列（无 AS）、聚合别名、反引号、中文列名等。
+        """
+        aliases: List[str] = []
+        parts = PipelineEngine._split_select_columns(sql)
+        for part in parts:
+            part = part.strip()
+            # 匹配末尾的 AS alias（忽略括号内的 AS）
+            m = re.search(r"\bAS\s+([^\s,)]+)\s*$", part, re.IGNORECASE)
+            if m:
+                aliases.append(m.group(1).strip("`\"'"))
+            else:
+                # 无 AS：取最后一个标识符作为列名（如 groupBy 列）
+                identifiers = re.findall(r"\b([a-zA-Z_\u4e00-\u9fff]\w*)\b", part)
+                if identifiers:
+                    aliases.append(identifiers[-1])
+        return aliases
+
     def _preview_infer_output_columns(
         node_type: str,
         config: Dict[str, Any],
@@ -1697,11 +1812,18 @@ class PipelineEngine:
             return None
 
         if canonical == "aggregate":
+            # 优先从 node.sql 解析 AS 别名，这是实际执行的真实列名
+            node_sql: str = config.get("sql", "") or ""
+            if node_sql:
+                aliases_from_sql = PipelineEngine._extract_sql_aliases(node_sql)
+                if aliases_from_sql:
+                    return aliases_from_sql
+
             group_by: List[str] = config.get("groupBy", []) or []
             raw_aggs: List[Any] = config.get("aggregations", []) or []
             inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", []) or []
             parts: List[str] = []
-            
+
             # 如果有聚合配置，收集聚合输出列
             for c in group_by:
                 if c := str(c).strip():
@@ -1734,6 +1856,27 @@ class PipelineEngine:
                 to = str(sc.get("to", sc.get("from", "")) or "").strip()
                 if to:
                     out.append(to)
+            return out if out else None
+
+        if canonical == "transpose":
+            # 优先从 node.sql 解析 AS 别名，这是实际执行的真实列名
+            node_sql: str = config.get("sql", "") or ""
+            if node_sql:
+                aliases_from_sql = PipelineEngine._extract_sql_aliases(node_sql)
+                if aliases_from_sql:
+                    return aliases_from_sql
+
+            index_columns: List[str] = config.get("indexColumns", []) or []
+            pivot_column: str = config.get("pivotColumn", "")
+            pivot_values: List[str] = config.get("pivotValues", []) or []
+            value_columns: List[Any] = config.get("valueColumns", []) or []
+            out: List[str] = list(index_columns)
+            for vc in value_columns:
+                col_name = str(vc.get("column", "") or "").strip()
+                agg = str(vc.get("aggMethod", "MAX") or "MAX").lower()
+                for pv in pivot_values:
+                    safe_pv = str(pv).replace(" ", "_").replace("-", "_")
+                    out.append(f"{agg}_{col_name}_{safe_pv}")
             return out if out else None
 
         if canonical == "join":
@@ -1895,16 +2038,24 @@ class PipelineEngine:
         method: str,
         source_column: str,
         method_config: Dict[str, Any],
+        all_available_columns: Optional[List[str]] = None,
     ) -> Optional[str]:
-        """根据方法生成单个列的 SQL 表达式"""
+        """根据方法生成单个列的 SQL 表达式
+
+        Args:
+            method: 方法名
+            source_column: 源列名
+            method_config: 方法配置
+            all_available_columns: 当前作用域内所有可用的列名（用于自动包裹表达式中的列名）
+        """
         safe_source = PipelineEngine._safe_identifier(source_column)
 
         if method == "calculation":
-            return PipelineEngine._build_calculation_expr(safe_source, method_config)
+            return PipelineEngine._build_calculation_expr(safe_source, method_config, all_available_columns)
         elif method == "split":
             return PipelineEngine._build_split_expr(safe_source, method_config)
         elif method == "function":
-            return PipelineEngine._build_function_expr(safe_source, method_config)
+            return PipelineEngine._build_function_expr(safe_source, method_config, all_available_columns)
         elif method == "lookup":
             return PipelineEngine._build_lookup_expr(safe_source, method_config)
         elif method == "rank":
@@ -1917,15 +2068,39 @@ class PipelineEngine:
             return "NULL"
 
     @staticmethod
-    def _build_calculation_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+    def _build_calculation_expr(
+        source_column: str,
+        config: Dict[str, Any],
+        all_available_columns: Optional[List[str]] = None,
+    ) -> Optional[str]:
         """
         计算列表达式
         config.expression: 计算表达式，如 "A + B" 或 "(A + B) * 1.1"
         空表达式返回 NULL 占位，保证列结构稳定
+
+        all_available_columns: 当前作用域内所有可用的列名（上游原有列 + 前面已生成的 insertedColumns）
+        用于自动将表达式中的列名用反引号包裹，使 MySQL 能识别中文列名和别名引用。
         """
         expression = config.get("expression", "")
         if not expression:
             return "NULL"
+
+        # 如果有可用列名，将表达式中匹配到的列名用反引号包裹
+        # 避免：1) 中文列名需要反引号  2) 引用前面生成的列别名（如 count_评价文本_1）
+        if all_available_columns:
+            expr = expression
+            # 按列名长度降序排列，优先匹配长列名，避免短列名先被替换导致长列名无法匹配
+            # 例如："count_评价文本_1" 和 "评价文本" → 先匹配长的
+            for col in sorted(all_available_columns, key=len, reverse=True):
+                # 避免重复包裹（如果已经是反引号包裹的，跳过）
+                if col.startswith("`"):
+                    continue
+                # 精确替换列名（作为完整单词，避免部分匹配，如 "总计" 匹配到 "总"）
+                # 使用正则 \b 匹配单词边界
+                escaped = re.escape(col)
+                expr = re.sub(r'(?<![`"\'])(' + escaped + r')(?![`"\'])', r'`\1`', expr)
+            return expr
+
         return expression
 
     @staticmethod
@@ -1958,12 +2133,18 @@ class PipelineEngine:
         return f"NULL"
 
     @staticmethod
-    def _build_function_expr(source_column: str, config: Dict[str, Any]) -> Optional[str]:
+    def _build_function_expr(
+        source_column: str,
+        config: Dict[str, Any],
+        all_available_columns: Optional[List[str]] = None,
+    ) -> Optional[str]:
         """
         函数表达式
         支持两种模式：
         1. 结构化配置: function_name + arguments（保留旧逻辑）
-        2. 自由表达式: expression（直接透传到 SQL，列名用 `` 包裹）
+        2. 自由表达式: expression（直接透传到 SQL，列名用 `` 包裹，自动处理中文别名）
+
+        all_available_columns: 当前作用域内所有可用的列名，用于自动包裹表达式中的列名。
         """
         expression = config.get("expression", "").strip()
         function_name = config.get("function_name", "").upper()
@@ -1972,10 +2153,17 @@ class PipelineEngine:
         # 优先使用自由表达式
         if expression:
             safe_source = PipelineEngine._safe_identifier(source_column)
-            # 将占位符 # 替换为源列引用，#N 替换为第 N 个列名
             safe_expr = expression.strip()
+            # 将占位符 `` 替换为源列引用
             if safe_source:
                 safe_expr = safe_expr.replace("``", safe_source)
+            # 自动包裹表达式中的列名（支持中文列名和前面生成的别名引用）
+            if all_available_columns:
+                for col in sorted(all_available_columns, key=len, reverse=True):
+                    if col.startswith("`"):
+                        continue
+                    escaped = re.escape(col)
+                    safe_expr = re.sub(r'(?<![`"\'])(' + escaped + r')(?![`"\'])', r'`\1`', safe_expr)
             return safe_expr
 
         if not function_name:
@@ -2447,22 +2635,58 @@ class PipelineEngine:
                         if frag:
                             agg_parts.append(frag)
                 
-                # 情况1: 有聚合配置 - 正常处理
+                # 情况1: 有聚合配置 - 正常处理，同时附加 insertedColumns
                 if agg_parts:
                     gb = [str(c).strip() for c in group_by if str(c).strip()]
                     select_parts = [
                         *[PipelineEngine._safe_identifier(c) for c in gb],
                         *agg_parts,
                     ]
+                    # 构建 all_available_columns：上游列（从 ref 提取） + 聚合列别名
+                    gb_cols = list(gb)
+                    agg_aliases: List[str] = []
+                    for a in raw_aggs:
+                        if isinstance(a, dict):
+                            alias = str(a.get("alias", "") or a.get("column", "")).strip()
+                            if alias:
+                                agg_aliases.append(alias)
+                    all_avail: List[str] = list(gb_cols)
+                    all_avail.extend(agg_aliases)
+                    # 如果还有 insertedCols，也附加到聚合输出的末尾（INSERTED 列可引用聚合别名）
+                    if inserted_cols:
+                        for col_config in inserted_cols:
+                            if not isinstance(col_config, dict):
+                                continue
+                            method = str(col_config.get("method", "")).strip().lower()
+                            source_column = str(col_config.get("sourceColumn", "")).strip()
+                            new_name = str(col_config.get("name", "")).strip()
+                            method_config = col_config.get("config", {})
+                            if not new_name:
+                                continue
+                            expr = PipelineEngine._build_single_inserted_column_expr(
+                                method, source_column, method_config, all_avail
+                            )
+                            if expr:
+                                select_parts.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
+                                all_avail.append(new_name)
                     group_str = ""
                     if gb:
                         group_str = f" GROUP BY {', '.join(PipelineEngine._safe_identifier(c) for c in gb)}"
                     return f"SELECT {', '.join(select_parts)} FROM ({ref}) AS t{group_str}{_limit_clause}", []
-                
+
                 # 情况2: 无聚合但有 insertedColumns - 使用 insertedColumns 生成列
                 if inserted_cols:
                     # 生成 insertedColumns 的列表达式
                     new_cols: List[str] = []
+                    # 从 ref 提取上游列名
+                    upstream_cols: List[str] = []
+                    if ref:
+                        cols_match = re.match(r"^SELECT\s+(.*?)\s+FROM\s+", ref, re.IGNORECASE | re.DOTALL)
+                        if cols_match:
+                            col_str = cols_match.group(1).strip()
+                            if col_str != "*":
+                                upstream_cols = [c.strip() for c in col_str.split(",")]
+                    all_avail: List[str] = list(upstream_cols)
                     for col_config in inserted_cols:
                         if not isinstance(col_config, dict):
                             continue
@@ -2473,16 +2697,17 @@ class PipelineEngine:
                         if not new_name:
                             continue
                         expr = PipelineEngine._build_single_inserted_column_expr(
-                            method, source_column, method_config
+                            method, source_column, method_config, all_avail
                         )
                         if expr:
                             new_cols.append(f"{expr} AS {PipelineEngine._safe_identifier(new_name)}")
-                    
+                            all_avail.append(new_name)
+
                     if new_cols:
                         # 生成 SELECT * + 新列
                         cols_str = ", ".join(new_cols)
                         return f"SELECT *, {cols_str} FROM ({ref}) AS t{_limit_clause}", []
-                
+
                 # 情况3: 既无聚合也无 insertedColumns - 返回上游结果
                 return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
 
@@ -2586,6 +2811,32 @@ class PipelineEngine:
                     if sc.get("from")
                 ]
                 return f"SELECT {', '.join(cols)} FROM ({ref}) AS t{_limit_clause}", []
+
+        if node_type == "transpose":
+            index_columns = config.get("indexColumns", [])
+            pivot_column = config.get("pivotColumn", "")
+            pivot_values = config.get("pivotValues", [])
+            value_columns = config.get("valueColumns", [])
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                if not index_columns or not pivot_column or not pivot_values or not value_columns:
+                    return f"SELECT * FROM ({ref}) AS t{_limit_clause}", []
+                index_sql = ", ".join(PipelineEngine._safe_identifier(c) for c in index_columns)
+                case_parts: List[str] = []
+                for vc in value_columns:
+                    col = PipelineEngine._safe_identifier(vc.get("column", ""))
+                    agg = vc.get("aggMethod", "MAX")
+                    for pv in pivot_values:
+                        safe_pv = str(pv).replace("'", "''")
+                        safe_pv_col = safe_pv.replace(" ", "_").replace("-", "_")
+                        col_name = vc.get("column", "")
+                        alias = f"{agg.lower()}_{col_name}_{safe_pv_col}"
+                        alias_sql = PipelineEngine._safe_identifier(alias)
+                        case_parts.append(
+                            f"{agg}(CASE WHEN {PipelineEngine._safe_identifier(pivot_column)} = '{safe_pv}' THEN {col} END) AS {alias_sql}"
+                        )
+                select_sql = f"{index_sql}, {', '.join(case_parts)}"
+                return f"SELECT {select_sql} FROM ({ref}) AS t GROUP BY {index_sql}{_limit_clause}", []
 
         if node_type == "output":
             # Output 节点预览上游数据
@@ -2798,10 +3049,21 @@ class PipelineEngine:
             # JOIN：跳过列投影，直接保留内层展开的所有列
             # 因为 _expand_join_select_for_preview 已经将 SELECT * 展开为显式列列表
             # 如果再应用 outputColumnKeys 投影，可能会引用不存在的新列名（如 sum_星级_b）
+            # aggregate 节点：build_node_sql 已经生成了完整 SQL（包含 insertedColumns），
+            #   _apply_column_projection 不应再处理 insertedColumns（会重复）
+            #   但 outputColumnKeys 仍需处理（用于列筛选）
             if not skip_proj:
                 if canonical == "join" and allowed_proj is not None:
                     # JOIN 节点跳过列投影，保留展开后的完整列
                     pass
+                elif canonical == "aggregate":
+                    # aggregate：build_node_sql 已处理 insertedColumns，跳过 insertedColumns 处理
+                    # 仅用 outputColumnKeys 过滤输出列（不传 insertedColumns）
+                    proj_cfg = {k: v for k, v in nconfig.items()} if isinstance(nconfig, dict) else {}
+                    proj_cfg.pop("insertedColumns", None)
+                    wrapped_sql = PipelineEngine._apply_column_projection(
+                        wrapped_sql, proj_cfg, allowed_proj
+                    )
                 else:
                     wrapped_sql = PipelineEngine._apply_column_projection(
                         wrapped_sql, nconfig, allowed_proj

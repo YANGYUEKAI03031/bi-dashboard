@@ -70,9 +70,10 @@ export const EDITOR_NODE_TYPE_ORDER: string[] = [
   'aggregate',
   'join',
   'column_select',
+  'transpose',
   'output',
-  'merge',
   'chart',
+  'merge',
 ];
 
 /** 右侧配置「节点类型」下拉的选项；旧管道中的 filter 节点会额外带上 filter 一项 */
@@ -198,6 +199,20 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     description: '将上游数据可视化展示为图表',
     icon: <PieChartOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'merge'],
+  },
+  transpose: {
+    type: 'transpose',
+    label: '转置',
+    labelShort: '转置',
+    color: '#13c2c2',
+    bgColor: '#e6fffb',
+    borderColor: '#13c2c2',
+    tagBg: '#87e8de',
+    tagColor: '#08979c',
+    hasPreview: true,
+    description: '将纵向数据转为横向报表（类似 Excel 数据透视表）',
+    icon: <SwapOutlined style={{ transform: 'rotate(90deg)' }} />,
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select'],
   },
 };
 

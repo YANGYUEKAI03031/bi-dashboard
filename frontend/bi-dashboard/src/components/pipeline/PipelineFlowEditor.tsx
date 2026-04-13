@@ -41,6 +41,11 @@ import { PipelineCanvasPreviewPanel } from './PipelineCanvasPreviewPanel';
 import { CompactNodePreview } from './CompactNodePreview';
 import { getNodeTypeDef, NODE_TYPE_REGISTRY } from '../../utils/nodeTypeRegistry';
 
+interface ValueColumnConfig {
+  column: string;
+  aggMethod: 'MAX' | 'SUM' | 'COUNT' | 'AVG';
+}
+
 interface PipelineFlowEditorProps {
   nodes: PipelineNode[];
   pipelineDataSourceId?: number | null;
@@ -320,6 +325,22 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     );
   }
 
+  if (node.type === 'transpose') {
+    const indexCols = (config.indexColumns as string[]) || [];
+    const pivotCol = (config.pivotColumn as string) || '';
+    const pivotVals = (config.pivotValues as string[]) || [];
+    const valueCols = (config.valueColumns as ValueColumnConfig[]) || [];
+    return (
+      <div className="pipeline-node-card-summary">
+        {renderChip('转置')}
+        {indexCols.length > 0 && renderChip(indexCols[0], indexCols.length > 1 ? `+${indexCols.length - 1}` : '索引', true)}
+        {pivotCol && renderChip(pivotCol, '透视', true)}
+        {pivotVals.length > 0 && renderChip(pivotVals[0], pivotVals.length > 1 ? `+${pivotVals.length - 1}` : '值', true)}
+        {valueCols.length > 0 && renderChip(valueCols[0].column, valueCols.length > 1 ? `+${valueCols.length - 1}` : '列', true)}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -386,14 +407,14 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
           onClick: () => onAdd('merge'),
         },
         {
-          key: 'chart',
+          key: 'transpose',
           label: (
             <Space style={{ fontSize: 12 }}>
-              <PieChartOutlined style={{ color: NODE_TYPE_REGISTRY.chart?.color ?? '#722ed1' }} />
-              数据可视化
+              <SwapOutlined style={{ color: NODE_TYPE_REGISTRY.transpose?.color ?? '#13c2c2' }} />
+              数据转置
             </Space>
           ),
-          onClick: () => onAdd('chart'),
+          onClick: () => onAdd('transpose'),
         },
       ],
     },
@@ -411,6 +432,16 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
             </Space>
           ),
           onClick: () => onAdd('output'),
+        },
+        {
+          key: 'chart',
+          label: (
+            <Space style={{ fontSize: 12 }}>
+              <PieChartOutlined style={{ color: NODE_TYPE_REGISTRY.chart?.color ?? '#722ed1' }} />
+              数据可视化
+            </Space>
+          ),
+          onClick: () => onAdd('chart'),
         },
       ],
     },
