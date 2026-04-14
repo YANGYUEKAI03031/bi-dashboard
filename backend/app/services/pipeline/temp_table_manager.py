@@ -61,6 +61,31 @@ def _serialize_value(value: Any) -> str:
     return f"'{escaped}'"
 
 
+# 格式 -> (MySQL 类型, CAST 表达式模板)
+_FORMAT_TYPE_MAP: Dict[str, Tuple[str, str]] = {
+    "date":      ("DATE",           "CAST(`{col}` AS DATE)"),
+    "datetime":  ("DATETIME(3)",    "CAST(`{col}` AS DATETIME(3))"),
+    "number":    ("DECIMAL(20,4)",  "CAST(`{col}` AS DECIMAL(20,4))"),
+    "percent":   ("DECIMAL(20,4)",  "(`{col}` * 100)"),
+    "string":    ("TEXT",           "CAST(`{col}` AS CHAR)"),
+}
+
+
+def _build_cast_expression(col: str, format: str) -> Tuple[str, str]:
+    """
+    根据格式生成 CAST 表达式和 MySQL 列类型。
+
+    Returns:
+        (cast_expr, mysql_type)
+    """
+    entry = _FORMAT_TYPE_MAP.get(format)
+    if entry:
+        mysql_type, expr_template = entry
+        return expr_template.format(col=col), mysql_type
+    # 自动格式不做转换，使用原列
+    return f"`{col}`", "TEXT"
+
+
 class TempTableManager:
     """
     临时表管理器
@@ -372,21 +397,24 @@ class TempTableManager:
         self,
         step_id: str,
         sql: str,
-        sample_rows: int = 5
+        sample_rows: int = 5,
+        column_formats: Optional[Dict[str, str]] = None
     ) -> Tuple[int, List[str]]:
         """
         直接通过 INSERT...SELECT 写入列式临时表，不走 Python 逐行搬运。
 
         流程：
         1. 发现源 SQL 的 schema（列名 + MySQL 类型）
-        2. 创建列式临时表
-        3. INSERT...SELECT 一次性写入
-        4. 返回行数
+        2. 根据 column_formats 应用格式转换（CAST）
+        3. 创建列式临时表（使用正确的类型）
+        4. INSERT...SELECT 一次性写入
+        5. 返回行数
 
         Args:
             step_id: 步骤标识（如 'step_0'）
             sql: SELECT 语句
             sample_rows: schema 发现采样行数
+            column_formats: 列格式配置 {col_name: format_type}，format_type 为 'date'|'datetime'|'number'|'percent'|'string'
 
         Returns:
             (row_count, columns)
@@ -397,10 +425,23 @@ class TempTableManager:
             logger.warning(f"步骤 {step_id} 无列信息，跳过写入")
             return 0, []
 
-        # Step 2: 创建列式持久表（跨连接可访问）
+        # Step 2: 应用格式转换，确定最终列类型
+        final_col_types: List[str] = []
+        if column_formats:
+            for col in columns:
+                fmt = column_formats.get(col)
+                if fmt:
+                    _, mysql_type = _build_cast_expression(col, fmt)
+                    final_col_types.append(mysql_type)
+                else:
+                    final_col_types.append(col_types[columns.index(col)] if columns.index(col) < len(col_types) else "TEXT")
+        else:
+            final_col_types = col_types
+
+        # Step 3: 创建列式持久表（跨连接可访问）
         tbl_name = f"tmp_pipeline_{self.exec_id}_{step_id.replace('step_', '')}"
         col_defs = ", ".join(
-            f"`{c.replace('`', '``')}` {ct}" for c, ct in zip(columns, col_types)
+            f"`{c.replace('`', '``')}` {ct}" for c, ct in zip(columns, final_col_types)
         )
         create_sql = f"""
         CREATE TABLE IF NOT EXISTS {tbl_name} (
@@ -417,10 +458,23 @@ class TempTableManager:
         # 立即注册，即使后续 INSERT...SELECT 失败也能被 cleanup_temp_table 清理
         self._struct_tables[step_id] = (tbl_name, columns)
 
-        # Step 3: INSERT...SELECT（MySQL 内部完成数据搬运）
+        # Step 4: 构建带 CAST 的 SELECT 列表
         safe_sql = sql.rstrip().rstrip(';')
+        select_exprs: List[str] = []
+        for col in columns:
+            if column_formats and col in column_formats:
+                cast_expr, _ = _build_cast_expression(col, column_formats[col])
+                select_exprs.append(f"{cast_expr} AS `{col.replace('`', '``')}`")
+            else:
+                select_exprs.append(f"`{col.replace('`', '``')}`")
+        
+        # INSERT 时使用原列名列表（表创建时已用正确类型）
         safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
-        insert_sql = f"INSERT INTO {tbl_name} ({safe_cols}) {safe_sql}"
+        if column_formats:
+            insert_sql = f"INSERT INTO {tbl_name} ({safe_cols}) SELECT {', '.join(select_exprs)} FROM ({safe_sql}) AS _src"
+        else:
+            insert_sql = f"INSERT INTO {tbl_name} ({safe_cols}) {safe_sql}"
+
         try:
             result = await self.connection.execute(text(insert_sql))
             await self.connection.commit()
@@ -432,7 +486,7 @@ class TempTableManager:
             logger.error(f"INSERT...SELECT 失败 (step={step_id}): {e}")
             raise
 
-        logger.info(f"步骤 {step_id} INSERT...SELECT 完成: {row_count} 行")
+        logger.info(f"步骤 {step_id} INSERT...SELECT 完成: {row_count} 行, 格式转换: {column_formats}")
         return row_count, columns
 
     async def get_row_count(self, step_id: str) -> int:

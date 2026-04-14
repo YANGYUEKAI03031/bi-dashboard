@@ -373,6 +373,7 @@ class PipelineEngine:
                                 sql=actual_sql,
                                 step_id=step_id,
                                 execution_id=execution.id,
+                                node_config=node_config,  # 传递节点配置以应用格式转换
                             )
 
                         # 更新 node_id -> step_id 映射
@@ -550,6 +551,7 @@ class PipelineEngine:
         sql: str,
         step_id: str,
         execution_id: int,
+        node_config: Optional[Dict[str, Any]] = None,
         sample_rows: int = 5
     ) -> Tuple[int, List[str]]:
         """
@@ -557,21 +559,30 @@ class PipelineEngine:
 
         流程：
         1. 发现源 SQL 的 schema（列名 + MySQL 类型）
-        2. 创建列式临时表
-        3. INSERT...SELECT 一次性写入
-        4. 用 COUNT(*) 估算进度
-        5. 标记完成
+        2. 根据 node_config.previewColumnFormats 应用格式转换
+        3. 创建列式临时表
+        4. INSERT...SELECT 一次性写入
+        5. 用 COUNT(*) 估算进度
+        6. 标记完成
 
         Args:
             conn: 数据库连接
             sql: 要执行的 SELECT 语句
             step_id: 步骤 ID
             execution_id: 执行记录 ID
+            node_config: 节点配置，包含 previewColumnFormats
             sample_rows: schema 发现采样行数
 
         Returns:
             (total_rows, columns)
         """
+        # 提取列格式配置
+        column_formats: Optional[Dict[str, str]] = None
+        if node_config and isinstance(node_config, dict):
+            column_formats = node_config.get('previewColumnFormats')
+            if column_formats and not isinstance(column_formats, dict):
+                column_formats = None
+
         # 阶段 1: 报告"估算行数"
         sql_stripped = sql.rstrip().rstrip(';')
         has_union = re.search(r'\bUNION\b', sql_stripped, re.IGNORECASE)
@@ -590,7 +601,9 @@ class PipelineEngine:
             estimated = 0
 
         # 阶段 2: INSERT...SELECT
-        row_count, columns = await self.temp_manager.insert_via_select(step_id, sql, sample_rows)
+        row_count, columns = await self.temp_manager.insert_via_select(
+            step_id, sql, sample_rows, column_formats
+        )
 
         # 阶段 3: 完成后更新进度
         await self._update_step_progress(execution_id, step_id, row_count)
