@@ -98,6 +98,9 @@ export interface ChartNodeConfig {
 
   /** Metric card specific: label text */
   metricLabel: string;
+
+  /** 列格式化配置（字段名 -> 显示格式） */
+  previewColumnFormats?: Record<string, string>;
 }
 
 /** Metric card filter definition */
@@ -174,6 +177,7 @@ export const DEFAULT_CHART_CONFIG: ChartNodeConfig = {
   metricUnit: '',
   metricDecimals: 2,
   metricLabel: '',
+  previewColumnFormats: undefined,
 };
 
 /** Chart type display labels */

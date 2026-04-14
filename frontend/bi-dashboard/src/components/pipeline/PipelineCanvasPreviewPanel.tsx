@@ -23,7 +23,6 @@ import { InsertColumnModal, InsertedColumnConfig } from './InsertColumnModal';
 import { ChartNodePreview } from './visual-nodes/ChartNodePreview';
 import { useNodePreview } from '../../hooks/useNodePreview';
 import { PREVIEW_COLUMN_DISPLAY_AUTO } from '../../constants/previewColumnDisplay';
-import { getPreviewColumnFormatsFromConfig } from '../../utils/previewDisplayUtils';
 import {
   ChartNodeConfig,
   DEFAULT_CHART_CONFIG,
@@ -264,7 +263,19 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
   const previewConfigKey = useMemo(() => {
     if (!previewNode) return '';
-    return JSON.stringify((previewNode.data.pipelineNode as PipelineNode)?.config ?? {}) + `:tick:${refreshTick}`;
+    const pn = previewNode.data.pipelineNode as PipelineNode | undefined;
+    const config = pn?.config || {};
+    // 包含所有可能影响预览的配置，包括列格式
+    return JSON.stringify({
+      xField: config.xField,
+      yFields: config.yFields,
+      chartType: config.chartType,
+      previewColumnFormats: config.previewColumnFormats,
+      outputColumnKeys: config.outputColumnKeys,
+      rowFilterConditions: config.rowFilterConditions,
+      rowFilterLogic: config.rowFilterLogic,
+      insertedColumns: config.insertedColumns,
+    }) + `:tick:${refreshTick}`;
   }, [previewNode, refreshTick]);
 
   const graphTopologySig = useMemo(() => {
@@ -351,6 +362,63 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       ? previewData.allColumns
       : dataCols;
 
+  // 合并所有上游节点的 previewColumnFormats
+  const mergedPreviewFormats = useMemo((): Record<string, string> | undefined => {
+    if (!previewNode || !allNodes) return undefined;
+
+    // 首先收集当前节点的 formats
+    const currentFormats = ((pipelineNode?.config as Record<string, unknown>)?.previewColumnFormats) as Record<string, string> | undefined;
+    const result: Record<string, string> = {};
+
+    // 如果当前节点有格式设置，优先使用
+    if (currentFormats && typeof currentFormats === 'object') {
+      Object.assign(result, currentFormats);
+    }
+
+    // 如果结果已满（当前节点设置了所有列的格式），直接返回
+    const colsSet = new Set(columnCatalog);
+    const formattedCols = new Set(Object.keys(result));
+    if (formattedCols.size >= colsSet.size && [...colsSet].every(c => formattedCols.has(c))) {
+      return Object.keys(result).length > 0 ? result : undefined;
+    }
+
+    // 否则，从上游节点继承格式（按拓扑顺序）
+    // 获取所有上游节点（递归）
+    const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+      const node = allNodes.find(n => n.id === nodeId);
+      if (!node) return [];
+      const pn = node.data.pipelineNode as PipelineNode | undefined;
+      const upstream = pn?.upstream || [];
+      let ids: string[] = [];
+      for (const upId of upstream) {
+        ids.push(upId);
+        ids = ids.concat(getUpstreamIds(upId, visited));
+      }
+      return ids;
+    };
+
+    const upstreamIds = getUpstreamIds(previewNode.id);
+    // 按拓扑顺序（从源头到当前）合并格式
+    for (const upId of upstreamIds) {
+      const upNode = allNodes.find(n => n.id === upId);
+      if (!upNode) continue;
+      const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
+      const upFormats = (upPn?.config as Record<string, unknown>)?.previewColumnFormats as Record<string, string> | undefined;
+      if (upFormats && typeof upFormats === 'object') {
+        // 只合并当前列目录中存在的列
+        for (const [col, fmt] of Object.entries(upFormats)) {
+          if (colsSet.has(col) && !(col in result)) {
+            result[col] = fmt;
+          }
+        }
+      }
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  }, [previewNode, allNodes, pipelineNode?.config, columnCatalog]);
+
   useEffect(() => {
     if (!previewNode) return;
     const cat =
@@ -411,9 +479,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
   };
 
-  const previewColumnFormats = pipelineNode?.config
-    ? getPreviewColumnFormatsFromConfig(pipelineNode.config)
-    : undefined;
+  const previewColumnFormats = mergedPreviewFormats;
 
   const handlePreviewColumnFormatChange = (columnKey: string, format: string) => {
     if (!previewNode || !onNodeUpdate) {
@@ -632,6 +698,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       metricUnit: (cfg.metricUnit as string) || '',
       metricDecimals: (cfg.metricDecimals as number) || 2,
       metricLabel: (cfg.metricLabel as string) || '',
+      previewColumnFormats: (cfg.previewColumnFormats as Record<string, string>) || undefined,
     };
   }, [isChartNode, pipelineNode?.config]);
 
@@ -819,6 +886,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             previewData={previewData}
             loading={previewLoading}
             height={350}
+            columnFormats={previewColumnFormats}
           />
         </div>
       )}

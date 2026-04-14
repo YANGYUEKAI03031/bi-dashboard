@@ -5,6 +5,7 @@
 import React, { useMemo } from 'react';
 import { Spin, Empty, Alert, Typography } from 'antd';
 import { BarChartOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { ChartFactory, ChartConfig } from '../../charts/ChartFactory';
 import {
   ChartNodeConfig as ChartNodeConfigType,
@@ -24,6 +25,8 @@ interface ChartNodePreviewProps {
   previewData: PreviewData | null;
   loading?: boolean;
   height?: number;
+  /** 列格式化配置（从节点 config.previewColumnFormats 传入） */
+  columnFormats?: Record<string, string>;
 }
 
 /** Build chart config from node config */
@@ -119,11 +122,95 @@ function getValidationError(config: ChartNodeConfigType): string | null {
   return null;
 }
 
+/** 根据列格式转换单行数据 */
+function transformRowByFormats(
+  row: Record<string, unknown>,
+  formats: Record<string, string>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...row };
+
+  Object.keys(result).forEach(key => {
+    const format = formats[key];
+    if (!format || format === 'auto') return;
+
+    const value = result[key];
+    if (value === null || value === undefined) return;
+
+    switch (format) {
+      case 'string': {
+        // 文本：任何值都转成字符串
+        result[key] = String(value);
+        break;
+      }
+
+      case 'number': {
+        // 数字：确保是数值类型
+        if (typeof value === 'number') {
+          result[key] = value;
+        } else {
+          const num = Number(String(value).trim());
+          result[key] = Number.isNaN(num) ? value : num;
+        }
+        break;
+      }
+
+      case 'date': {
+        // 日期：统一为 YYYY-MM-DD 格式
+        if (typeof value === 'number') {
+          // 时间戳
+          result[key] = dayjs(value).format('YYYY-MM-DD');
+        } else if (typeof value === 'string') {
+          // 如果是完整日期时间，截取日期部分
+          if (value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            result[key] = value.slice(0, 10);
+          } else {
+            // 其他格式，尝试 dayjs 解析
+            const parsed = dayjs(value);
+            result[key] = parsed.isValid() ? parsed.format('YYYY-MM-DD') : value;
+          }
+        } else if (value instanceof Date) {
+          result[key] = dayjs(value).format('YYYY-MM-DD');
+        }
+        break;
+      }
+
+      case 'datetime': {
+        // 日期时间：统一为 YYYY-MM-DD HH:mm:ss 格式
+        if (typeof value === 'number') {
+          result[key] = dayjs(value).format('YYYY-MM-DD HH:mm:ss');
+        } else if (typeof value === 'string') {
+          const parsed = dayjs(value);
+          result[key] = parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : value;
+        } else if (value instanceof Date) {
+          result[key] = dayjs(value).format('YYYY-MM-DD HH:mm:ss');
+        }
+        break;
+      }
+
+      case 'percent': {
+        // 百分比：将小数（0-1 范围）乘以 100
+        const num = Number(value);
+        if (!Number.isNaN(num)) {
+          result[key] = num * 100;
+        }
+        break;
+      }
+
+      default:
+        // 未知格式（如 auto），保持原值
+        break;
+    }
+  });
+
+  return result;
+}
+
 export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
   nodeConfig,
   previewData,
   loading = false,
   height = 350,
+  columnFormats,
 }) => {
   // Normalize node config
   const config = useMemo<ChartNodeConfigType>(() => {
@@ -141,8 +228,11 @@ export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
     if (!previewData || !previewData.rows.length) {
       return [];
     }
-    return previewData.rows;
-  }, [previewData]);
+    
+    // 应用列格式化转换
+    const formats = columnFormats || {};
+    return previewData.rows.map(row => transformRowByFormats(row, formats));
+  }, [previewData, columnFormats]);
 
   // Build chart config
   const chartConfig = useMemo<ChartConfig>(() => {

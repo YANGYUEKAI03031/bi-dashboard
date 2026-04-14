@@ -170,6 +170,20 @@ class PipelineService:
                         update_data[key] = value
 
             if update_data:
+                # 检测被删除的 chart 节点
+                deleted_chart_nodes = []
+                if 'nodes' in update_fields:
+                    old_nodes = getattr(pipeline, 'nodes', []) or []
+                    if isinstance(old_nodes, str):
+                        import json
+                        try:
+                            old_nodes = json.loads(old_nodes)
+                        except json.JSONDecodeError:
+                            old_nodes = []
+                    old_chart_ids = {n.get('id') for n in old_nodes if n.get('type') == 'chart'}
+                    new_chart_ids = {n.get('id') for n in update_fields['nodes'] if n.get('type') == 'chart'}
+                    deleted_chart_nodes = list(old_chart_ids - new_chart_ids)
+
                 update_data['updated_at'] = datetime.utcnow()
                 stmt = (
                     update(DataPipeline)
@@ -179,6 +193,17 @@ class PipelineService:
                 await self.db.execute(stmt)
                 await self.db.commit()
                 await self.db.refresh(pipeline)
+
+                # 归档被删除的 chart 节点关联的图表
+                if deleted_chart_nodes:
+                    try:
+                        from app.services.chart_service import ChartService
+                        chart_service = ChartService(self.db)
+                        for node_id in deleted_chart_nodes:
+                            await chart_service.archive_chart_by_node(pipeline_id, node_id)
+                            logger.info(f"更新管道时归档已删除节点的图表: pipeline_id={pipeline_id}, node_id={node_id}")
+                    except Exception as archive_err:
+                        logger.warning(f"更新管道时归档图表失败: {archive_err}")
 
             logger.info(f"更新管道成功: {pipeline.name} (ID: {pipeline.id})")
             return pipeline
@@ -209,6 +234,15 @@ class PipelineService:
             )
             await self.db.execute(stmt)
             await self.db.commit()
+
+            # 归档该 pipeline 所有关联的图表
+            try:
+                from app.services.chart_service import ChartService
+                chart_service = ChartService(self.db)
+                archived_count = await chart_service.archive_charts_by_pipeline(pipeline_id)
+                logger.info(f"删除管道时归档图表: pipeline_id={pipeline_id}, archived_count={archived_count}")
+            except Exception as archive_err:
+                logger.warning(f"删除管道时归档图表失败: {archive_err}")
 
             logger.info(f"删除管道成功: {pipeline.name} (ID: {pipeline.id})")
             return True

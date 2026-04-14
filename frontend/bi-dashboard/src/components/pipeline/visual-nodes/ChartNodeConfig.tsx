@@ -102,6 +102,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
       metricUnit: (config.metricUnit as string) || '',
       metricDecimals: (config.metricDecimals as number) || 2,
       metricLabel: (config.metricLabel as string) || '',
+      previewColumnFormats: (config.previewColumnFormats as Record<string, string>) || undefined,
     };
   }, [pipelineNode?.config]);
 

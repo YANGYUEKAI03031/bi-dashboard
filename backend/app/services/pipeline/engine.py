@@ -1054,11 +1054,12 @@ class PipelineEngine:
             layer_cols_str = ", ".join(layer_new_cols)
             is_last = (layer_idx == len(layers) - 1)
             if is_last:
-                return f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _ic"
+                result = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _ic"
+                return PipelineEngine._apply_column_formats(result, config)
             else:
                 current_sql = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _layer{layer_idx}"
 
-        return current_sql
+        return PipelineEngine._apply_column_formats(current_sql, config)
 
     @staticmethod
     def _join_preview_allowed_sql_columns(
@@ -1205,7 +1206,9 @@ class PipelineEngine:
         # 没有 SQL 也没有 insertedColumns - 直接使用上游临时表（透传）
         if not sql:
             # 直接返回上游引用，占位符已在 upstream_refs 中展开
-            return f"SELECT * FROM {upstream_refs[0]}"
+            result = f"SELECT * FROM {upstream_refs[0]}"
+            # 应用 previewColumnFormats 格式转换
+            return PipelineEngine._apply_column_formats(result, config)
 
         is_union_merge = bool(
             merge_type and merge_type.lower() in ("union", "union all")
@@ -1785,6 +1788,83 @@ class PipelineEngine:
         return f"SELECT * FROM ({sql}) AS _r{where}"
 
     @staticmethod
+    def _build_column_format_expr(col_expr: str, col_name: str, fmt: str) -> str:
+        """
+        根据预览格式生成 MySQL 表达式。
+
+        Args:
+            col_expr: 列表达式（如 '`col_name`' 或 'DATE(`col`) AS `col`'）
+            col_name: 列名（用于别名）
+            fmt: 预览格式（来自 previewColumnFormats）
+
+        Returns:
+            格式化后的表达式，如 'DATE(`col`) AS `col`'
+        """
+        if fmt == 'date':
+            return f"DATE({col_expr}) AS {PipelineEngine._safe_identifier(col_name)}"
+        elif fmt == 'datetime':
+            # DATE() 在 MySQL 中返回 'YYYY-MM-DD' 格式
+            # 对于 datetime 类型，需要保留时间部分，使用 CAST 转换为 DATE 会丢失时间
+            # 使用 DATE(col) 只取日期部分（如果前端只需要日期）
+            return f"DATE({col_expr}) AS {PipelineEngine._safe_identifier(col_name)}"
+        elif fmt == 'percent':
+            # 百分比格式：value * 100
+            return f"({col_expr} * 100) AS {PipelineEngine._safe_identifier(col_name)}"
+        elif fmt == 'number':
+            # 数字格式：保持原样（已处理了）
+            return col_expr
+        elif fmt == 'string':
+            # 文本格式：转换为字符串
+            return f"CAST({col_expr} AS CHAR) AS {PipelineEngine._safe_identifier(col_name)}"
+        # auto 或其他未知格式：保持原样
+        return col_expr
+
+    @staticmethod
+    def _apply_column_formats(sql: str, config: Dict[str, Any]) -> str:
+        """
+        根据 previewColumnFormats 对 SELECT 列应用格式转换。
+        这会在外层包装一个 SELECT，应用日期提取、百分比转换等。
+        """
+        formats: Dict[str, str] = config.get("previewColumnFormats", {})
+        if not formats:
+            return sql
+
+        sql_stripped = sql.strip()
+        if not sql_stripped.upper().startswith("SELECT"):
+            return sql
+
+        # 提取列名列表
+        cols = PipelineEngine._extract_columns_from_select(sql_stripped)
+        if not cols:
+            return sql
+
+        # 检查是否有需要格式化的列
+        cols_to_format = [c for c in cols if c in formats]
+        if not cols_to_format:
+            return sql
+
+        # 构建 SELECT 列表达式
+        select_parts: List[str] = []
+        for col in cols:
+            safe_col = PipelineEngine._safe_identifier(col)
+            fmt = formats.get(col)
+            if fmt and fmt != 'auto':
+                # 需要格式化的列
+                expr = PipelineEngine._build_column_format_expr(safe_col, col, fmt)
+                select_parts.append(expr)
+            else:
+                # 不需要格式化的列
+                select_parts.append(safe_col)
+
+        cols_str = ", ".join(select_parts)
+        # 提取 FROM 及之后的部分
+        m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+        if not m:
+            return sql
+        from_part = m.group(1)
+        return f"SELECT {cols_str}{from_part}"
+
+    @staticmethod
     def _apply_column_projection(
         sql: str,
         config: Dict[str, Any],
@@ -1797,6 +1877,8 @@ class PipelineEngine:
 
         同时处理 insertedColumns，添加新计算的列。
         insertedColumns 中后定义的列可以引用前面已定义的列（通过 all_available_columns 传递）。
+
+        同时处理 previewColumnFormats，应用列格式转换（日期提取、百分比转换等）。
 
         allowed_sql_columns 非空时，只保留「内层结果中确实存在」的列，避免 JOIN 类型切换后
         仍引用旧列名导致 1054。
@@ -1904,7 +1986,8 @@ class PipelineEngine:
             all_ic_names.append(new_name)
 
         if not has_inserted:
-            return sql
+            # 没有 insertedColumns，但仍需检查是否有 previewColumnFormats
+            return PipelineEngine._apply_column_formats(sql, config)
 
         # 第二步：逐层生成嵌套子查询
         # 最内层 = 内层列
@@ -1960,6 +2043,9 @@ class PipelineEngine:
             else:
                 # 中间层和第一层：始终 SELECT * + 当前层新列
                 current_sql = f"SELECT *, {layer_cols_str} FROM ({current_sql}) AS _layer{layer_idx}"
+
+        # 应用 previewColumnFormats 格式转换（日期提取、百分比转换等）
+        current_sql = PipelineEngine._apply_column_formats(current_sql, config)
 
         return current_sql
 

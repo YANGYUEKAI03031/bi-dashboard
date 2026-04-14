@@ -737,6 +737,105 @@ class ChartService:
             await self.db.rollback()
             logger.error(f"删除图表失败: {str(e)}")
             raise Exception(f"删除图表失败: {str(e)}")
+
+    async def archive_charts_by_pipeline(self, pipeline_id: int) -> int:
+        """
+        归档指定 pipeline 关联的所有图表（软删除）。
+        
+        Args:
+            pipeline_id: 管道 ID
+            
+        Returns:
+            被归档的图表数量
+        """
+        try:
+            # 查找该 pipeline 关联的所有未归档图表
+            stmt = select(VisualizationCard).where(
+                VisualizationCard.pipeline_id == pipeline_id,
+                VisualizationCard.archived == False
+            )
+            result = await self.db.execute(stmt)
+            charts = list(result.scalars().all())
+            
+            if not charts:
+                logger.info(f"管道 {pipeline_id} 没有关联的图表需要归档")
+                return 0
+            
+            archived_count = 0
+            now = datetime.utcnow()
+            
+            for chart in charts:
+                # 移除仪表盘中对该图表的引用
+                from app.models.dashboard import DashboardCard, DashboardFilterBinding
+                card_ids_stmt = select(DashboardCard.id).where(DashboardCard.chart_id == chart.id)
+                card_ids_result = await self.db.execute(card_ids_stmt)
+                card_ids = [r[0] for r in card_ids_result.all()]
+                if card_ids:
+                    await self.db.execute(delete(DashboardFilterBinding).where(DashboardFilterBinding.card_id.in_(card_ids)))
+                    await self.db.execute(delete(DashboardCard).where(DashboardCard.chart_id == chart.id))
+                
+                # 软删除：标记为已归档
+                chart.archived = True
+                chart.updated_at = now
+                archived_count += 1
+                
+                logger.info(f"归档管道图表: chart_id={chart.id}, chart_name={chart.name}, pipeline_id={pipeline_id}")
+            
+            await self.db.commit()
+            logger.info(f"管道 {pipeline_id} 的图表归档完成: {archived_count} 条")
+            return archived_count
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"归档管道图表失败: {str(e)}")
+            raise Exception(f"归档管道图表失败: {str(e)}")
+
+    async def archive_chart_by_node(self, pipeline_id: int, focus_node_id: str) -> int:
+        """
+        归档指定节点关联的图表（用于节点删除时归档对应图表）。
+        
+        Args:
+            pipeline_id: 管道 ID
+            focus_node_id: 节点 ID
+            
+        Returns:
+            被归档的图表数量（通常为 0 或 1）
+        """
+        try:
+            # 查找该节点关联的图表
+            stmt = select(VisualizationCard).where(
+                VisualizationCard.pipeline_id == pipeline_id,
+                VisualizationCard.focus_node_id == focus_node_id,
+                VisualizationCard.archived == False
+            )
+            result = await self.db.execute(stmt)
+            chart = result.scalar_one_or_none()
+            
+            if not chart:
+                logger.info(f"节点 {focus_node_id} 没有关联的图表需要归档")
+                return 0
+            
+            # 移除仪表盘中对该图表的引用
+            from app.models.dashboard import DashboardCard, DashboardFilterBinding
+            card_ids_stmt = select(DashboardCard.id).where(DashboardCard.chart_id == chart.id)
+            card_ids_result = await self.db.execute(card_ids_stmt)
+            card_ids = [r[0] for r in card_ids_result.all()]
+            if card_ids:
+                await self.db.execute(delete(DashboardFilterBinding).where(DashboardFilterBinding.card_id.in_(card_ids)))
+                await self.db.execute(delete(DashboardCard).where(DashboardCard.chart_id == chart.id))
+            
+            # 软删除：标记为已归档
+            chart.archived = True
+            chart.updated_at = datetime.utcnow()
+            await self.db.commit()
+            
+            logger.info(f"归档节点图表: chart_id={chart.id}, chart_name={chart.name}, node_id={focus_node_id}")
+            return 1
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"归档节点图表失败: {str(e)}")
+            raise Exception(f"归档节点图表失败: {str(e)}")
     
     async def execute_chart_query(self, chart: VisualizationCard, filter_params: Dict[str, Any] = None) -> List[Dict]:
         """执行图表的SQL查询（支持筛选器参数 - 自动生成WHERE条件）"""

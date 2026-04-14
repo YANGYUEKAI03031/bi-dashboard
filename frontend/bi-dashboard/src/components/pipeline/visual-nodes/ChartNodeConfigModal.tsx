@@ -2,7 +2,7 @@
  * Chart node configuration modal for Pipeline integration
  * Reuses core logic from VisualizationBuilder for chart configuration
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Modal, Form, Select, Switch, Input, InputNumber,
   Radio, Button, Space, Divider, Typography, Alert,
@@ -31,9 +31,14 @@ import {
   MetricFilterExprNode,
 } from '../../../types/chartNode';
 import {
+  PREVIEW_COLUMN_DISPLAY_OPTIONS,
+  PREVIEW_COLUMN_DISPLAY_AUTO,
+} from '../../../constants/previewColumnDisplay';
+import {
   inferMetricFieldTypesFromSampleRows,
   type MetricFieldKind,
 } from '../../../utils/chartMetric';
+import dayjs from 'dayjs';
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -50,6 +55,80 @@ interface ChartNodeConfigModalProps {
   onSave: (config: ChartNodeConfigType) => void;
   onCancel: () => void;
   readOnly?: boolean;
+}
+
+/** 根据列格式转换单行数据 */
+function transformRowByFormats(
+  row: Record<string, unknown>,
+  formats: Record<string, string>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...row };
+
+  Object.keys(result).forEach(key => {
+    const format = formats[key];
+    if (!format || format === 'auto') return;
+
+    const value = result[key];
+    if (value === null || value === undefined) return;
+
+    switch (format) {
+      case 'string': {
+        result[key] = String(value);
+        break;
+      }
+
+      case 'number': {
+        if (typeof value === 'number') {
+          result[key] = value;
+        } else {
+          const num = Number(String(value).trim());
+          result[key] = Number.isNaN(num) ? value : num;
+        }
+        break;
+      }
+
+      case 'date': {
+        if (typeof value === 'number') {
+          result[key] = dayjs(value).format('YYYY-MM-DD');
+        } else if (typeof value === 'string') {
+          if (value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            result[key] = value.slice(0, 10);
+          } else {
+            const parsed = dayjs(value);
+            result[key] = parsed.isValid() ? parsed.format('YYYY-MM-DD') : value;
+          }
+        } else if (value instanceof Date) {
+          result[key] = dayjs(value).format('YYYY-MM-DD');
+        }
+        break;
+      }
+
+      case 'datetime': {
+        if (typeof value === 'number') {
+          result[key] = dayjs(value).format('YYYY-MM-DD HH:mm:ss');
+        } else if (typeof value === 'string') {
+          const parsed = dayjs(value);
+          result[key] = parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : value;
+        } else if (value instanceof Date) {
+          result[key] = dayjs(value).format('YYYY-MM-DD HH:mm:ss');
+        }
+        break;
+      }
+
+      case 'percent': {
+        const num = Number(value);
+        if (!Number.isNaN(num)) {
+          result[key] = num * 100;
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  });
+
+  return result;
 }
 
 /** Chart type definitions with icons */
@@ -100,6 +179,8 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   const [form] = Form.useForm();
   const [config, setConfig] = useState<ChartNodeConfigType>(DEFAULT_CHART_CONFIG);
   const [previewData, setPreviewData] = useState<Record<string, unknown>[]>([]);
+  // 转换后的图表数据（应用了列格式）
+  const [formattedChartData, setFormattedChartData] = useState<Record<string, unknown>[]>([]);
   const [fieldTypes, setFieldTypes] = useState<Record<string, MetricFieldKind>>({});
   const [availableFields, setAvailableFields] = useState<string[]>([]);
 
@@ -224,6 +305,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     if (!open) return;
     if (!upstreamPreviewData?.rows?.length) {
       setPreviewData([]);
+      setFormattedChartData([]);
       setAvailableFields([]);
       setFieldTypes({});
       return;
@@ -236,6 +318,11 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     setPreviewData(rows);
     setAvailableFields(columns);
     setFieldTypes(inferMetricFieldTypesFromSampleRows(rows, columns));
+
+    // 应用列格式转换
+    const formats = config.previewColumnFormats || {};
+    const formatted = rows.map(row => transformRowByFormats(row, formats));
+    setFormattedChartData(formatted);
 
     setConfig((prev) => {
       if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
@@ -288,6 +375,22 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     setConfig(newConfig);
   };
 
+  // Handle column format change
+  const handleColumnFormatChange = (field: string, format: string) => {
+    setConfig(prev => {
+      const newFormats = { ...(prev.previewColumnFormats || {}) };
+      if (format === PREVIEW_COLUMN_DISPLAY_AUTO) {
+        delete newFormats[field];
+      } else {
+        newFormats[field] = format;
+      }
+      return {
+        ...prev,
+        previewColumnFormats: Object.keys(newFormats).length > 0 ? newFormats : undefined,
+      };
+    });
+  };
+
   // Handle save
   const handleSave = () => {
     const finalConfig: ChartNodeConfigType = {
@@ -296,6 +399,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       graphMetrics: config.yFields,
       xAxisTitle: config.xAxisTitle || config.xField || 'X轴',
       yAxisTitle: config.yAxisTitle || config.yFields[0] || 'Y轴',
+      // columnFormats 已经在 config 中，会自动包含
     };
     onSave(finalConfig);
   };
@@ -616,6 +720,56 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
         <Divider />
 
+        {/* 列格式设置区域 */}
+        <div className="column-format-section">
+          <Text strong style={{ marginBottom: 12, display: 'block' }}>
+            列格式设置
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+            设置各列的数据显示格式（仅影响图表预览展示，不改变原始数据）
+          </Text>
+
+          <div className="column-format-table">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#fafafa' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', width: '40%' }}>列名</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>显示格式</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableFields.map((field) => {
+                  const currentFormat = config.previewColumnFormats?.[field] || PREVIEW_COLUMN_DISPLAY_AUTO;
+                  return (
+                    <tr key={field} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px 12px' }}>{field}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <Select
+                          value={currentFormat}
+                          onChange={(val) => handleColumnFormatChange(field, val)}
+                          options={PREVIEW_COLUMN_DISPLAY_OPTIONS}
+                          style={{ width: 120 }}
+                          size="small"
+                          disabled={readOnly}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {availableFields.length === 0 && (
+              <Empty
+                description="暂无可用字段"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                style={{ padding: '20px 0' }}
+              />
+            )}
+          </div>
+        </div>
+
+        <Divider />
+
         {/* Chart Preview */}
         <div className="chart-preview-section">
           <Text strong style={{ marginBottom: 12, display: 'block' }}>
@@ -693,8 +847,15 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
         .chart-node-config-modal .field-mapping-section,
         .chart-node-config-modal .chart-settings-section,
+        .chart-node-config-modal .column-format-section,
         .chart-node-config-modal .chart-preview-section {
           margin-bottom: 16px;
+        }
+
+        .chart-node-config-modal .column-format-table {
+          border: 1px solid #e8e8e8;
+          border-radius: 6px;
+          overflow: hidden;
         }
 
         .chart-node-config-modal .chart-preview-container {

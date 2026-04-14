@@ -10,6 +10,7 @@ import {
   PREVIEW_COLUMN_DISPLAY_NUMBER,
   PREVIEW_COLUMN_DISPLAY_DATE,
   PREVIEW_COLUMN_DISPLAY_DATETIME,
+  PREVIEW_COLUMN_DISPLAY_PERCENT,
 } from '../constants/previewColumnDisplay';
 import { isNil } from './isNil';
 
@@ -42,6 +43,9 @@ export function resolvePreviewColumnDisplayType(
     }
     if (ov === PREVIEW_COLUMN_DISPLAY_NUMBER) {
       return 'decimal';
+    }
+    if (ov === PREVIEW_COLUMN_DISPLAY_PERCENT) {
+      return 'percent';
     }
     if (ov === PREVIEW_COLUMN_DISPLAY_DATE) {
       return 'date';
@@ -76,6 +80,15 @@ export function formatPreviewCellValue(value: unknown, resolvedType: string): Re
       return String(value);
     }
     return String(n);
+  }
+  if (t === 'percent') {
+    const n = Number(String(value).trim());
+    if (!Number.isFinite(n)) {
+      return String(value);
+    }
+    // 将小数值转换为百分比显示，例如 0.123 -> 12.3%
+    const percent = n * 100;
+    return `${percent.toFixed(2)}%`;
   }
   if (t === 'date' || t === 'datetime' || t === 'timestamp') {
     const d = dayjs(String(value));
