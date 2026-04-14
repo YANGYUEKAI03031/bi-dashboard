@@ -7,69 +7,16 @@ import {
 import {
   PlusOutlined, PlayCircleOutlined, DeleteOutlined, EyeOutlined,
   ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined,
-  ClockCircleOutlined, EditOutlined, ExperimentOutlined
+  ClockCircleOutlined, EditOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { PipelineService, PipelineResponse, ExecutionResponse, PipelineNode } from '../services/pipelineService';
 import { DataSourceService } from '../services/dataSourceService';
 import { PipelineFlowEditor, PipelineFlowEditorHandle } from '../components/pipeline/PipelineFlowEditor';
-import { GraphEdge } from '../utils/graphUtils';
 import {
   getFirstSourceDataSourceId,
   hydrateSourceNodesWithPipelineDataSource,
 } from '../utils/pipelineDataSourceUtils';
-
-/** 从 SQL 文本中提取每个列表达式的名称（与后端 _extract_sql_aliases 保持一致） */
-function splitSelectColumns(sql: string): string[] {
-  const m = sql.match(/^SELECT\s+(.*?)\s+FROM\s+/is);
-  if (!m) return [];
-  let colsStr = m[1];
-  const parts: string[] = [];
-  let depth = 0;
-  let inStr = false;
-  let strChar = '';
-  let i = 0;
-  while (i < colsStr.length) {
-    const c = colsStr[i];
-    const isEscaped = i > 0 && colsStr[i - 1] === '\\';
-    if (c === "'" || c === '"' || c === '`') {
-      if (!inStr) { inStr = true; strChar = c; }
-      else if (!isEscaped && c === strChar) { inStr = false; strChar = ''; }
-    }
-    if (!inStr) {
-      if (c === '(') { depth++; }
-      else if (c === ')') { depth--; }
-      else if (c === ',' && depth === 0) {
-        parts.push(colsStr.slice(0, i).trim());
-        colsStr = colsStr.slice(i + 1);
-        i = -1;
-      }
-    }
-    i++;
-  }
-  parts.push(colsStr.trim());
-  return parts;
-}
-
-function extractSqlAliases(sql: string): string[] {
-  const aliases: string[] = [];
-  const parts = splitSelectColumns(sql);
-  for (const part of parts) {
-    const trimmed = part.trim();
-    // 匹配末尾的 AS alias
-    const m = trimmed.match(/\bAS\s+([^\s,)]+)\s*$/i);
-    if (m) {
-      aliases.push(m[1].replace(/^[`'"]|[`'"]$/g, ''));
-    } else {
-      // 无 AS：取最后一个标识符
-      const identifiers = trimmed.match(/\b([a-zA-Z_\u4e00-\u9fff]\w*)\b/g);
-      if (identifiers && identifiers.length > 0) {
-        aliases.push(identifiers[identifiers.length - 1]);
-      }
-    }
-  }
-  return aliases;
-}
 
 /**
  * 从节点列表中提取第一个启用了自动触发的源节点配置
@@ -146,13 +93,6 @@ export const PipelineTestPage: React.FC = () => {
   const [runForm] = Form.useForm();
   /** 拉取画布当前节点（弹窗「创建/保存」时与工具栏「保存」一致，避免父 state 未同步） */
   const flowEditorRef = useRef<PipelineFlowEditorHandle>(null);
-  const [chainTestRunning, setChainTestRunning] = useState<string | null>(null);
-  const [chainTestResult, setChainTestResult] = useState<{
-    aggNodeColumns?: string[];
-    agg2NodeColumns?: string[];
-    sql?: string;
-    error?: string;
-  } | null>(null);
 
   /** 与数据源管理页一致：多库时首条为系统默认，管道选其余业务库；仅有一个库时可用该库 */
   const pipelineDataSources = useMemo(() => {
@@ -285,153 +225,6 @@ export const PipelineTestPage: React.FC = () => {
       setPreviewData({ columns: [], rows: [] });
     } finally {
       setPreviewLoading(false);
-    }
-  };
-
-  /**
-   * 测试 aggregate/transpose 节点生成的新列是否能被下游节点引用。
-   * 通过 /pipeline/preview 接口直接发送节点图，验证 _preview_infer_output_columns
-   * 能否从 node.sql 中正确解析出 AS 别名。
-   */
-  const runChainTest = async (testType: 'aggregate_agg' | 'transpose_agg') => {
-    setChainTestRunning(testType);
-    setChainTestResult(null);
-    try {
-      const ds = pipelineDataSources.length > 0 ? pipelineDataSources[0] : dataSources[0];
-      if (!ds) {
-        throw new Error('无可用数据源，请先在数据源管理中添加数据源');
-      }
-
-      const baseColumns = ['region', 'product', 'amount'];
-      let nodes: any[];
-      let focusNodeId: string;
-
-      if (testType === 'aggregate_agg') {
-        // 场景: Source -> Aggregate(生成 sum_amount) -> Aggregate2(引用 sum_amount)
-        focusNodeId = 'node_agg2';
-        nodes = [
-          {
-            id: 'node_source',
-            type: 'source',
-            name: '测试数据源',
-            config: {
-              tableName: ds.name,
-              sourceSchemaColumns: baseColumns,
-              outputColumnKeys: baseColumns,
-            },
-          },
-          {
-            id: 'node_agg1',
-            type: 'aggregate',
-            name: '聚合节点',
-            config: {
-              groupBy: ['region'],
-              aggregations: [
-                { column: 'amount', func: 'sum', alias: 'sum_amount' },
-                { column: 'amount', func: 'count', alias: 'count_amount' },
-              ],
-              // 模拟前端生成的 node.sql（实际预览时会从这里解析别名）
-              sql: 'SELECT region, SUM(amount) AS sum_amount, COUNT(amount) AS count_amount FROM {prev_table} GROUP BY region',
-            },
-          },
-          {
-            id: 'node_agg2',
-            type: 'aggregate',
-            name: '下游聚合节点',
-            config: {
-              groupBy: ['region'],
-              aggregations: [
-                { column: 'sum_amount', func: 'sum', alias: 'total_sum_amount' },
-              ],
-              sql: 'SELECT region, SUM(sum_amount) AS total_sum_amount FROM {prev_table} GROUP BY region',
-            },
-          },
-        ];
-      } else {
-        // 场景: Source -> Transpose -> Aggregate(引用 transpose 生成的列)
-        focusNodeId = 'node_agg_after_transpose';
-        nodes = [
-          {
-            id: 'node_source',
-            type: 'source',
-            name: '测试数据源',
-            config: {
-              tableName: ds.name,
-              sourceSchemaColumns: baseColumns,
-              outputColumnKeys: baseColumns,
-            },
-          },
-          {
-            id: 'node_transpose',
-            type: 'transpose',
-            name: '转置节点',
-            config: {
-              indexColumns: ['product'],
-              pivotColumn: 'region',
-              pivotValues: ['东区', '西区'],
-              valueColumns: [{ column: 'amount', aggMethod: 'SUM' }],
-              // 模拟前端生成的 node.sql
-              sql: 'SELECT product, SUM(CASE WHEN region = \'东区\' THEN amount END) AS sum_amount_东区, SUM(CASE WHEN region = \'西区\' THEN amount END) AS sum_amount_西区 FROM {prev_table} GROUP BY product',
-            },
-          },
-          {
-            id: 'node_agg_after_transpose',
-            type: 'aggregate',
-            name: '下游聚合节点',
-            config: {
-              groupBy: ['product'],
-              aggregations: [
-                { column: 'sum_amount_东区', func: 'sum', alias: 'total_东区' },
-              ],
-              sql: 'SELECT product, SUM(sum_amount_东区) AS total_东区 FROM {prev_table} GROUP BY product',
-            },
-          },
-        ];
-      }
-
-      const edges = nodes.length === 3
-        ? [
-            { source: 'node_source', target: nodes[1].id },
-            { source: nodes[1].id, target: nodes[2].id },
-          ]
-        : [
-            { source: 'node_source', target: 'node_transpose' },
-            { source: 'node_transpose', target: 'node_agg_after_transpose' },
-          ];
-
-      const res = await fetch('http://localhost:8000/api/v1/pipeline/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          node_type: nodes.find(n => n.id === focusNodeId)?.type || 'aggregate',
-          config: nodes.find(n => n.id === focusNodeId)?.config || {},
-          source_data_source_id: ds.id,
-          limit: 10,
-          graph_nodes: Object.fromEntries(nodes.map(n => [n.id, n])),
-          graph_edges: edges,
-          focus_node_id: focusNodeId,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-        throw new Error(err.detail || `请求失败: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const agg1 = nodes.length === 3 ? nodes[1] : null;
-      const focusNode = nodes.find(n => n.id === focusNodeId);
-
-      setChainTestResult({
-        aggNodeColumns: agg1 ? extractSqlAliases(agg1.config.sql) : undefined,
-        agg2NodeColumns: data.columns || [],
-        sql: data.sql_generated || data.sql || undefined,
-        error: undefined,
-      });
-    } catch (error: any) {
-      setChainTestResult({ error: error.message || '测试执行失败' });
-    } finally {
-      setChainTestRunning(null);
     }
   };
 
@@ -620,73 +413,6 @@ export const PipelineTestPage: React.FC = () => {
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
-      </Card>
-
-      {/* 节点列链式引用测试（验证 aggregate/transpose 生成的新列可被下游节点引用） */}
-      <Card
-        title="节点列链式引用测试"
-        extra={
-          <Space>
-            <Button
-              icon={<ExperimentOutlined />}
-              onClick={() => runChainTest('aggregate_agg')}
-              loading={chainTestRunning !== null}
-            >
-              测试 Aggregate 新列链式引用
-            </Button>
-            <Button
-              icon={<ExperimentOutlined />}
-              onClick={() => runChainTest('transpose_agg')}
-              loading={chainTestRunning !== null}
-            >
-              测试 Transpose 新列链式引用
-            </Button>
-          </Space>
-        }
-        style={{ marginTop: 16 }}
-      >
-        {chainTestResult ? (
-          <div>
-            {chainTestResult.error ? (
-              <Alert type="error" message="测试失败" description={chainTestResult.error} showIcon />
-            ) : (
-              <Alert
-                type="success"
-                message="测试通过"
-                description={
-                  <Space direction="vertical">
-                    <span>聚合节点输出列: <Tag>{chainTestResult.aggNodeColumns?.join(', ')}</Tag></span>
-                    <span>下游 Aggregate 输出列: <Tag>{chainTestResult.agg2NodeColumns?.join(', ')}</Tag></span>
-                    {chainTestResult.sql && (
-                      <details>
-                        <summary style={{ cursor: 'pointer', marginBottom: 4 }}>查看生成的 SQL</summary>
-                        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, maxHeight: 300, overflow: 'auto' }}>
-                          {chainTestResult.sql}
-                        </pre>
-                      </details>
-                    )}
-                  </Space>
-                }
-                showIcon
-              />
-            )}
-            <Button icon={<ReloadOutlined />} style={{ marginTop: 8 }} onClick={() => setChainTestResult(null)}>
-              清除结果
-            </Button>
-          </div>
-        ) : (
-          <Alert
-            type="info"
-            message="点击上方按钮运行测试"
-            description={
-              <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-                <li><b>Aggregate 新列链式引用</b>：Source → Aggregate(生成 sum_金额 列) → Aggregate2(引用 sum_金额)</li>
-                <li><b>Transpose 新列链式引用</b>：Source → Transpose(生成聚合列) → Aggregate(引用转置列)</li>
-              </ul>
-            }
-            showIcon
-          />
-        )}
       </Card>
 
       {/* 创建/编辑管道弹窗 */}
