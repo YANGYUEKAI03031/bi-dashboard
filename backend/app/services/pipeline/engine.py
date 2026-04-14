@@ -181,6 +181,9 @@ class PipelineEngine:
 
                 # 跨步骤累加进度（避免每步从 ORM 重置导致覆盖库中已有步骤）
                 all_step_progress: Dict[str, Any] = dict(execution.step_progress or {})
+                
+                # 维护 node_columns 字典，供下游 JOIN 展开使用（与 build_chained_sql 一致）
+                node_columns: Dict[str, Optional[List[str]]] = {}
 
                 for node in sorted_nodes:
                     node_id = node.get("id") or f"node_{step_idx}"
@@ -240,20 +243,35 @@ class PipelineEngine:
                             node_config,
                         )
 
-                        # 与预览折叠 SQL（build_chained_sql）一致：行筛选、列选、插入列（insertedColumns）
-                        # 来自 config，而非写死在 node.sql。仅替换占位符而不合并 config 时，插入列不会进临时表/输出表。
+                        # 与 build_chained_sql 保持完全一致的处理逻辑
+                        # 核心原则：Pipeline 执行应复用预览折叠 SQL 的生成逻辑
+                        # 关键：build_node_sql 已正确处理 insertedColumns，
+                        #      _apply_column_projection 也会再次处理 insertedColumns，
+                        #      但 aggregate 节点 build_node_sql 已包含 insertedColumns，不应重复处理
                         if canonical_type != "output":
-                            # 标记是否需要在 _apply_column_projection 中处理 insertedColumns
-                            # 如果节点没有 SQL 且有 insertedColumns，_build_step_sql 已生成完整 SQL，跳过 insertedColumns 处理
                             node_has_own_sql = bool(node_sql)
-                            if not node_has_own_sql and config.get("insertedColumns"):
-                                # 节点自己生成 insertedColumns SQL，跳过外层再处理
+                            
+                            if canonical_type == "join":
+                                # JOIN 节点：跳过列投影，避免 outputColumnKeys 中保存的旧列名
+                                # 引发 1054 错误。因为 build_node_sql 已经展开 SELECT * 为显式列了。
                                 pass
-                            elif canonical_type == "join":
-                                # JOIN 节点：跳过列投影，避免 outputColumnKeys 中保存的旧列名（如 sum_星级_b）
-                                # 引发 1054 错误。因为 _build_step_sql 已经展开 SELECT * 为显式列了。
+                            elif canonical_type == "aggregate":
+                                # aggregate：build_node_sql 已处理 insertedColumns，跳过 insertedColumns 处理
+                                # 仅用 outputColumnKeys 过滤输出列（不传 insertedColumns）
+                                wrapped = PipelineEngine._apply_row_filter(
+                                    actual_sql, node_config
+                                )
+                                proj_cfg = {k: v for k, v in node_config.items()} if isinstance(node_config, dict) else {}
+                                proj_cfg.pop("insertedColumns", None)
+                                actual_sql = PipelineEngine._apply_column_projection(
+                                    wrapped, proj_cfg, None
+                                )
+                            elif not node_has_own_sql and node_config.get("insertedColumns"):
+                                # 节点没有 SQL 但有 insertedColumns：build_node_sql 已生成完整 SQL，
+                                # _apply_column_projection 也会处理 insertedColumns，跳过外层处理避免重复嵌套
                                 pass
                             else:
+                                # 有 SQL 的节点或普通节点：按正常流程处理
                                 actual_sql = PipelineEngine._apply_row_filter(
                                     actual_sql, node_config
                                 )
@@ -360,6 +378,27 @@ class PipelineEngine:
                         # 更新 node_id -> step_id 映射
                         node_step_map[node_id] = step_id
 
+                        # 推断当前节点输出列，供下游 JOIN 展开使用（与 build_chained_sql 一致）
+                        output_keys = node_config.get("outputColumnKeys", []) or []
+                        if output_keys:
+                            node_columns[node_id] = list(output_keys)
+                        else:
+                            # 使用 _preview_infer_output_columns 推断列
+                            upstream_cols_list: List[Optional[List[str]]] = []
+                            for up_id in upstream:
+                                if up_id in node_columns:
+                                    upstream_node_col = node_columns[up_id]
+                                    if upstream_node_col is not None:
+                                        upstream_cols_list.append(upstream_node_col)
+                                    else:
+                                        upstream_cols_list.append(None)
+                                else:
+                                    upstream_cols_list.append(None)
+                            inferred = PipelineEngine._preview_infer_output_columns(
+                                canonical_type, node_config, upstream_cols_list, merge_type
+                            )
+                            node_columns[node_id] = inferred
+                        
                         # 记录完成
                         completed_steps.append({
                             "step_id": step_id,
@@ -810,12 +849,16 @@ class PipelineEngine:
         upstream_step_ids: List[str],
         struct_table_map: Dict[str, Tuple[str, List[str]]],
         on_right_cols: Optional[List[str]] = None,
+        join_type: str = "inner",
     ) -> str:
         """
         将关联 SQL 中的 SELECT * 展开为显式列。
 
-        LEFT JOIN 语义：结果 = 左表全部列 + 右表不含 ON 右表列的列。
+        LEFT/RIGHT JOIN 语义：结果 = 左/右表全部列 + 另一表不含 ON 列的列。
         例如 ON a.id = b.ref_id → 右表的 ref_id 不出现在结果中（id 已来自左表）。
+        
+        对于 LEFT/RIGHT JOIN，若只知一表列，另一表用 a.* / b.* + _b 后缀别名避免冲突。
+        与 _expand_join_select_for_preview 逻辑保持一致。
 
         若不传 on_right_cols，仅做向后兼容的去重（同名列只保留一个）。
         """
@@ -827,12 +870,16 @@ class PipelineEngine:
             return sql
         _, left_cols = lc
         _, right_cols = rc
-        if not left_cols or not right_cols:
+        if not left_cols and not right_cols:
             return sql
         up = sql.upper()
         if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
             return sql
-        sel = PipelineEngine._join_explicit_select_list(left_cols, right_cols, on_right_cols)
+
+        # 与 _expand_join_select_for_preview 保持一致的展开逻辑
+        sel = PipelineEngine._join_explicit_select_list(
+            left_cols, right_cols, on_right_cols, join_type
+        )
         return re.sub(
             r"SELECT\s+\*\s+FROM\s+",
             f"SELECT {sel} FROM ",
@@ -845,22 +892,59 @@ class PipelineEngine:
         left_cols: List[str],
         right_cols: List[str],
         on_right_cols: Optional[List[str]] = None,
+        join_type: str = "inner",
     ) -> str:
         """
         生成 JOIN 结果的显式列列表。
 
-        LEFT JOIN: 左表全列 + 右表列（排除右表 ON 列，因为左表 ON 列已在结果中）。
-        无 on_right_cols 时：仅去重同名列（左表优先）。
+        展开规则（与 _expand_join_select_for_preview 一致）：
+        - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列及与左表同名列）。
+        - 仅右表列已知：a.* + 右表显式列（排除 ON 右列，右表列加 _b 后缀别名）。
+        - 仅左表列已知：LEFT/RIGHT JOIN 用左显式列 + 右表显式列（排除 ON 右列，加 _b 别名）。
+        - 两侧均未知：不展开。
+
+        无 on_right_cols 时：左表全列 + 右表列（排除同名）。
         """
-        left_set = set(left_cols)
+        left_set = set(left_cols) if left_cols else set()
+        right_set = set(right_cols) if right_cols else set()
         on_right_set = set(on_right_cols) if on_right_cols else set()
-        parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-        for c in right_cols:
-            if c not in left_set:
-                # 排除右表 ON 列（左表对应列已在结果中）
-                if c not in on_right_set:
+        
+        # 两侧列均已知
+        if left_cols and right_cols:
+            parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+            for c in right_cols:
+                if c not in left_set and c not in on_right_set:
                     parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
-        return ", ".join(parts)
+            return ", ".join(parts)
+        
+        # 仅右表列已知
+        if right_cols and not left_cols:
+            right_parts = []
+            for c in right_cols:
+                if c not in on_right_set:
+                    b_expr = f"b.{PipelineEngine._safe_identifier(c)}"
+                    alias = PipelineEngine._safe_identifier(f"{c}_b")
+                    right_parts.append(f"{b_expr} AS {alias}")
+            sel = f"a.*, {', '.join(right_parts)}" if right_parts else "a.*"
+            return sel
+        
+        # 仅左表列已知
+        if left_cols and not right_cols:
+            if join_type in ("left", "right") and on_right_cols:
+                sel_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+                for c in right_cols or []:
+                    if c not in on_right_set:
+                        sel_parts.append(
+                            f"b.{PipelineEngine._safe_identifier(c)} AS {PipelineEngine._safe_identifier(c)}_b"
+                        )
+            else:
+                # INNER 且右列未知：直接用 b.*
+                sel_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
+                sel_parts.append("b.*")
+            return ", ".join(sel_parts)
+        
+        # 两侧均未知：不展开
+        return "a.*, b.*"
 
     @staticmethod
     def _build_sql_from_inserted_columns(
@@ -1168,26 +1252,49 @@ class PipelineEngine:
                     placeholder, _upstream_ref_for_placeholder(placeholder, i)
                 )
 
+        # INNER JOIN：若仅左表可推断列、右表不可（上游顺序常为「聚合→源表」），
+        # 交换两侧子查询，使「列未知」在 AS a，便于展开为 a.* + b 显式列
+        # 并排除 ON 右列（与 build_chained_sql 逻辑一致）
+        lc_info = struct_table_map.get(upstream_step_ids[0]) if upstream_step_ids else None
+        rc_info = struct_table_map.get(upstream_step_ids[1]) if len(upstream_step_ids) > 1 else None
+        lc_cols = lc_info[1] if lc_info else None
+        rc_cols = rc_info[1] if rc_info else None
+        
+        if canonical_type == "join" and not is_union_merge:
+            jt_pre = str(node_config.get("joinType", "inner")).lower() if node_config else "inner"
+            if jt_pre == "inner" and lc_cols and not rc_cols:
+                # 左表列已知、右表列未知，交换两侧
+                upstream_step_ids = upstream_step_ids[::-1]
+                upstream_refs = upstream_refs[::-1]
+                # 交换后重新获取
+                lc_cols, rc_cols = rc_cols, lc_cols
+
         # 对于 JOIN 类型，需要展开 SELECT * 为显式列（避免同名列冲突）
         # 但对于 UNION 类型的 merge 节点，不展开 SELECT *，因为 UNION 按位置合并列
         if canonical_type == "join" and not is_union_merge:
-            # 从 ON 子句中提取右表列（如 ON a.id = b.ref_id → ref_id）
+            # 优先从 config.joinKeys 提取 rightCol（与 build_chained_sql 一致）
+            # 回退从 SQL ON 子句提取
             on_right_cols: List[str] = []
-            on_match = re.search(r"\bON\s+(.+?)(?:\s+WHERE|\s+GROUP|\s+HAVING|\s+ORDER|\s+LIMIT|\s+UNION|$)", sql, re.IGNORECASE | re.DOTALL)
-            if on_match:
-                on_expr = on_match.group(1)
-                # 匹配 b.col 或 "b"."col" 或 `b`.`col`
-                right_col_pattern = re.compile(
-                    r"\b(?:b\.)[`\"']?([a-zA-Z0-9_]+)[`\"']?|"
-                    r"(?:b\) AS b\s*\.\s*([a-zA-Z0-9_]+))",
-                    re.IGNORECASE
-                )
-                # 更直接地匹配 ON a.xxx = b.yyy 中的 b.xxx
-                for m in re.finditer(r"b\.[`\"']?([a-zA-Z0-9_]+)[`\"']?", on_expr, re.IGNORECASE):
-                    if m.group(1):
-                        on_right_cols.append(m.group(1))
+            join_keys = node_config.get("joinKeys", []) if node_config else []
+            if join_keys:
+                for k in join_keys:
+                    if isinstance(k, dict):
+                        rc = str(k.get("rightCol", "") or "").strip()
+                        if rc:
+                            on_right_cols.append(rc)
+            # 回退：从 ON 子句提取
+            if not on_right_cols:
+                on_match = re.search(r"\bON\s+(.+?)(?:\s+WHERE|\s+GROUP|\s+HAVING|\s+ORDER|\s+LIMIT|\s+UNION|$)", sql, re.IGNORECASE | re.DOTALL)
+                if on_match:
+                    on_expr = on_match.group(1)
+                    for m in re.finditer(r"b\.[`\"']?([a-zA-Z0-9_]+)[`\"']?", on_expr, re.IGNORECASE):
+                        if m.group(1):
+                            on_right_cols.append(m.group(1))
+            
+            jt_pre = str(node_config.get("joinType", "inner")).lower() if node_config else "inner"
             sql = PipelineEngine._expand_join_select_stars(
-                sql, upstream_step_ids, struct_table_map, on_right_cols if on_right_cols else None
+                sql, upstream_step_ids, struct_table_map, 
+                on_right_cols if on_right_cols else None, jt_pre
             )
 
         # 没有占位符时：SQL 本身是 SELECT FROM 列式上游表（需要别名）
