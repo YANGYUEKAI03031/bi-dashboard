@@ -45,6 +45,8 @@ interface NodePreviewTableProps {
   onDeleteColumn?: (columnKey: string) => void;
   /** 重命名列回调 */
   onRenameColumn?: (oldName: string, newName: string) => void;
+  /** 列重命名映射：原始列名 -> 重命名后列名（仅影响显示） */
+  columnRenames?: Record<string, string>;
   /** 已插入的列配置列表（双击可编辑） */
   insertedColumns?: InsertedColumnConfig[];
   /** 双击插入列标签回调 */
@@ -77,6 +79,7 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   onInsertColumn,
   onDeleteColumn,
   onRenameColumn,
+  columnRenames,
   insertedColumns,
   onEditInsertColumn,
 }) => {
@@ -237,6 +240,9 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
         </Tooltip>
       );
     }
+    // 获取重命名后的显示名称
+    const displayName = columnRenames?.[col] || col;
+    
     return {
       title: (
         <Dropdown
@@ -251,7 +257,7 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
             }}
           >
             {typeChip}
-            <span style={{ fontSize: 12 }}>{col}</span>
+            <span style={{ fontSize: 12 }}>{displayName}</span>
           </div>
         </Dropdown>
       ),

@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip, Alert, Checkbox, Divider, Modal, Radio,
+  Input, Tooltip, Alert, Checkbox, Divider, Modal, Radio, message,
 } from 'antd';
 import {
   ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
@@ -419,6 +419,63 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     return Object.keys(result).length > 0 ? result : undefined;
   }, [previewNode, allNodes, pipelineNode?.config, previewConfigKey, columnCatalog]);
 
+  // 获取列重命名映射（原始列名 -> 重命名后列名）
+  // 包含当前节点的重命名 + 从上游节点继承的重命名
+  const columnRenames = useMemo((): Record<string, string> | undefined => {
+    if (!previewNode || !allNodes) return undefined;
+    
+    const result: Record<string, string> = {};
+
+    // 首先收集当前节点的列重命名
+    if (pipelineNode?.config) {
+      const cfg = pipelineNode.config as Record<string, unknown>;
+      const currentRenames = cfg.columnRenames as Record<string, string> | undefined;
+      if (currentRenames && typeof currentRenames === 'object') {
+        Object.assign(result, currentRenames);
+      }
+    }
+
+    // 如果当前节点已覆盖所有列，直接返回
+    const colsSet = new Set(columnCatalog);
+    if (colsSet.size > 0 && Object.keys(result).length >= colsSet.size) {
+      return Object.keys(result).length > 0 ? result : undefined;
+    }
+
+    // 从上游节点继承重命名（按拓扑顺序）
+    const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+      const node = allNodes.find(n => n.id === nodeId);
+      if (!node) return [];
+      const pn = node.data.pipelineNode as PipelineNode | undefined;
+      const upstream = pn?.upstream || [];
+      let ids: string[] = [];
+      for (const upId of upstream) {
+        ids.push(upId);
+        ids = ids.concat(getUpstreamIds(upId, visited));
+      }
+      return ids;
+    };
+
+    const upstreamIds = getUpstreamIds(previewNode.id);
+    for (const upId of upstreamIds) {
+      const upNode = allNodes.find(n => n.id === upId);
+      if (!upNode) continue;
+      const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
+      const upRenames = (upPn?.config as Record<string, unknown>)?.columnRenames as Record<string, string> | undefined;
+      if (upRenames && typeof upRenames === 'object') {
+        for (const [original, renamed] of Object.entries(upRenames)) {
+          // 只继承当前列目录中存在的列，且当前节点未覆盖
+          if (colsSet.has(original) && !(original in result)) {
+            result[original] = renamed;
+          }
+        }
+      }
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  }, [previewNode, allNodes, pipelineNode?.config, columnCatalog]);
+
   useEffect(() => {
     if (!previewNode) return;
     const cat =
@@ -635,6 +692,41 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   /** 表格右键插入列回调 */
   const handleTableInsertColumn = (config: InsertedColumnConfig) => {
     handleOpenInsertColumn(config.sourceColumn);
+  };
+
+  /** 重命名列回调 */
+  const handleRenameColumn = (oldName: string, newName: string) => {
+    if (!previewNode || !onNodeUpdate) return;
+    if (oldName === newName) return;
+    
+    const pn = previewNode.data.pipelineNode as Record<string, unknown>;
+    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const prevRenames = (cfg.columnRenames as Record<string, string>) || {};
+    
+    // 检查新名称是否与现有列名冲突（排除自己）
+    const conflictColumn = previewData?.columns.find(
+      col => col !== oldName && col === newName
+    );
+    if (conflictColumn) {
+      message.error(`列名 "${newName}" 已存在，请使用其他名称`);
+      return;
+    }
+    
+    const newRenames = { ...prevRenames, [oldName]: newName };
+    const newCfg = {
+      ...cfg,
+      columnRenames: newRenames,
+    };
+    
+    onNodeUpdate({
+      ...previewNode,
+      data: {
+        ...previewNode.data,
+        pipelineNode: { ...pn, config: newCfg },
+      },
+    });
+    
+    message.success(`列 "${oldName}" 已重命名为 "${newName}"`);
   };
 
   /** 删除列回调 */
@@ -907,6 +999,8 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             onColumnFormatChange={onNodeUpdate ? handlePreviewColumnFormatChange : undefined}
             onInsertColumn={onNodeUpdate ? handleTableInsertColumn : undefined}
             onDeleteColumn={onNodeUpdate ? handleDeleteColumn : undefined}
+            onRenameColumn={onNodeUpdate ? handleRenameColumn : undefined}
+            columnRenames={columnRenames}
             insertedColumns={(pipelineNode?.config as Record<string, unknown>)?.insertedColumns as InsertedColumnConfig[] | undefined}
             onEditInsertColumn={onNodeUpdate ? handleEditInsertColumn : undefined}
           />

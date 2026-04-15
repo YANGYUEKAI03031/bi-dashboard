@@ -184,6 +184,8 @@ class PipelineEngine:
                 
                 # 维护 node_columns 字典，供下游 JOIN 展开使用（与 build_chained_sql 一致）
                 node_columns: Dict[str, Optional[List[str]]] = {}
+                # 维护上游客的 columnRenames，供 output 节点应用列重命名
+                upstream_column_renames: Dict[str, Dict[str, str]] = {}  # node_id -> { original: renamed }
 
                 for node in sorted_nodes:
                     node_id = node.get("id") or f"node_{step_idx}"
@@ -306,7 +308,29 @@ class PipelineEngine:
                                 raise ValueError(
                                     f"不支持的写入模式: {write_mode}（应为 replace | append | upsert）"
                                 )
+                            
+                            # 收集所有上游客的 columnRenames，用于应用列重命名
+                            merged_renames: Dict[str, str] = {}
+                            for up_id in (upstream or []):
+                                if up_id in upstream_column_renames:
+                                    merged_renames.update(upstream_column_renames[up_id])
+                            # 当前节点自己的 columnRenames（优先级更高）
+                            current_renames = node_config.get("columnRenames", {})
+                            if current_renames:
+                                merged_renames.update(current_renames)
+                            
+                            # 详细日志
+                            logger.info(f"[OUTPUT DEBUG] Node: {node_name} ({node_id})")
+                            logger.info(f"[OUTPUT DEBUG] Upstream IDs: {upstream}")
+                            logger.info(f"[OUTPUT DEBUG] Merged renames: {merged_renames}")
+                            
+                            # 应用列重命名到 SQL
                             select_sql = actual_sql.rstrip().rstrip(";")
+                            
+                            if merged_renames:
+                                # 提取 SQL 中的列名
+                                cols = PipelineEngine._extract_columns_from_select(select_sql)
+                                select_sql = PipelineEngine._apply_column_renames(select_sql, merged_renames)
 
                             # 先查出当前库中是否存在目标表
                             exist_res = await conn.execute(text(
@@ -400,6 +424,21 @@ class PipelineEngine:
                             )
                             node_columns[node_id] = inferred
                         
+                        # 收集当前节点的 columnRenames，供下游节点使用
+                        # upstream_column_renames[node_id] = { original: renamed }
+                        collected_renames: Dict[str, str] = {}
+                        for up_id in (upstream or []):
+                            if up_id in upstream_column_renames:
+                                collected_renames.update(upstream_column_renames[up_id])
+                        # 当前节点自己的 columnRenames
+                        current_renames = node_config.get("columnRenames", {})
+                        if current_renames:
+                            collected_renames.update(current_renames)
+                        upstream_column_renames[node_id] = collected_renames
+                        logger.info(f"[RENAME COLLECT] Node: {node_name} ({node_id}), type: {canonical_type}, "
+                                   f"upstream: {upstream}, own renames: {current_renames}, "
+                                   f"collected: {collected_renames}")
+
                         # 记录完成
                         completed_steps.append({
                             "step_id": step_id,
@@ -1878,6 +1917,113 @@ class PipelineEngine:
         return f"SELECT {cols_str}{from_part}"
 
     @staticmethod
+    def _apply_column_renames(
+        sql: str,
+        renames: Dict[str, str],
+    ) -> str:
+        """
+        应用列重命名：将 SQL 中的原始列名替换为重命名后的列名（作为别名）。
+
+        Args:
+            sql: 原始 SQL
+            renames: { original_column_name: renamed_column_name }
+
+        Returns:
+            重命名后的 SQL
+        """
+        if not sql or not renames:
+            return sql
+
+        sql_stripped = sql.strip()
+        if not sql_stripped.upper().startswith("SELECT"):
+            return sql
+
+        # 提取列名列表（从最外层 SELECT ... FROM）
+        cols = PipelineEngine._extract_columns_from_select(sql_stripped)
+        # 去掉反引号，用于后续匹配
+        cols = [c.replace('`', '') for c in cols]
+        
+        # 如果最外层是 SELECT *，需要深入到最内层子查询获取实际列名
+        if not cols:
+            cols = PipelineEngine._extract_columns_from_nested_select(sql_stripped)
+        
+        if not cols:
+            return sql
+
+        # 检查是否有需要重命名的列
+        cols_to_rename = [c for c in cols if c in renames]
+        if not cols_to_rename:
+            return sql
+
+        # 构建 SELECT 列表达式
+        select_parts: List[str] = []
+        for col in cols:
+            safe_col = PipelineEngine._safe_identifier(col)
+            new_name = renames.get(col)
+            if new_name and new_name != col:
+                safe_new = PipelineEngine._safe_identifier(new_name)
+                select_parts.append(f"{safe_col} AS {safe_new}")
+            else:
+                select_parts.append(safe_col)
+
+        cols_str = ", ".join(select_parts)
+        
+        # 如果最外层是 SELECT *，需要替换成 SELECT new_cols FROM (inner_sql)
+        if sql_stripped.upper().startswith("SELECT *"):
+            # 提取 FROM 及之后的部分
+            m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+            if m:
+                from_part = m.group(1)
+                return f"SELECT {cols_str}{from_part}"
+        
+        # 普通情况：替换 SELECT ... 部分
+        m = re.match(r'^SELECT\s+.*?(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+        if not m:
+            return sql
+        from_part = m.group(1)
+        return f"SELECT {cols_str}{from_part}"
+    
+    @staticmethod
+    def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> List[str]:
+        """
+        从嵌套 SELECT 中提取最内层的实际列名。
+        例如：SELECT * FROM (SELECT * FROM (SELECT a, b FROM t) AS x) AS y
+        返回: ['a', 'b']
+        """
+        depth = 0
+        for _ in range(max_depth):
+            # 查找 SELECT ... FROM ( 模式
+            m = re.search(r'SELECT\s+\*\s+FROM\s+\(', sql, re.IGNORECASE)
+            if not m:
+                # 没有 SELECT * FROM ( 了，提取当前层的列名
+                cols = PipelineEngine._extract_columns_from_select(sql)
+                # 去掉反引号用于匹配
+                return [c.replace('`', '') for c in cols]
+            depth += 1
+            # 找到最内层子查询的位置
+            # 需要匹配括号对
+            start = m.end() - 1  # '(' 的位置
+            depth_count = 1
+            i = start + 1
+            while i < len(sql) and depth_count > 0:
+                if sql[i] == '(' and (i == 0 or sql[i-1] != '`'):
+                    depth_count += 1
+                elif sql[i] == ')' and (i == 0 or sql[i-1] != '`'):
+                    depth_count -= 1
+                i += 1
+            # 提取最内层子查询
+            inner = sql[start+1:i-1]
+            # 在最内层子查询中找 SELECT 列名
+            cols = PipelineEngine._extract_columns_from_select(inner)
+            # 去掉反引号用于匹配
+            cols = [c.replace('`', '') for c in cols]
+            if cols:
+                return cols
+            # 如果最内层也是 SELECT *，继续往内找
+            sql = inner
+        return []
+
+    @staticmethod
     def _apply_column_projection(
         sql: str,
         config: Dict[str, Any],
@@ -1900,6 +2046,11 @@ class PipelineEngine:
             return ""
         output_keys: List[str] = config.get("outputColumnKeys", [])
         rename_map: Dict[str, str] = config.get("renameMap", {})
+        # 支持 columnRenames（前端存储的列重命名格式：{ original: renamed }）
+        column_renames: Dict[str, str] = config.get("columnRenames", {})
+        # 合并 renameMap 和 columnRenames（columnRenames 优先级更高，因为是后设置的重命名）
+        for orig, renamed in column_renames.items():
+            rename_map[renamed] = orig  # renameMap 格式是 { output_alias: original_name }
         inserted_columns: List[Dict[str, Any]] = config.get("insertedColumns", [])
 
         # 从内层 SQL 中提取列名列表，用于 insertedColumns 表达式中引用列
