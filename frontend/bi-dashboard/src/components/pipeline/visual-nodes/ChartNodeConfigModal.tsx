@@ -45,6 +45,8 @@ const { TextArea } = Input;
 
 interface PreviewData {
   columns: string[];
+  /** 完整列名（不受 outputColumnKeys 限制，供图表列选择器展示） */
+  allColumns?: string[];
   rows: Record<string, unknown>[];
 }
 
@@ -52,6 +54,8 @@ interface ChartNodeConfigModalProps {
   open: boolean;
   nodeConfig: ChartNodeConfigType | null;
   upstreamPreviewData: PreviewData | null;
+  /** 列重命名映射：原始列名 -> 重命名后列名（图表配置弹窗显示用） */
+  columnRenames?: Record<string, string>;
   onSave: (config: ChartNodeConfigType) => void;
   onCancel: () => void;
   readOnly?: boolean;
@@ -172,6 +176,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   open,
   nodeConfig,
   upstreamPreviewData,
+  columnRenames,
   onSave,
   onCancel,
   readOnly = false,
@@ -211,14 +216,28 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
   /** 与 VisualizationBuilder 一致的智能默认字段 */
   const applySmartDefaults = useCallback(
-    (prev: ChartNodeConfigType, rows: Record<string, unknown>[], columns: string[]): ChartNodeConfigType => {
+    (
+      prev: ChartNodeConfigType,
+      rows: Record<string, unknown>[],
+      columns: string[],
+      renamedToOriginal: Record<string, string> = {}
+    ): ChartNodeConfigType => {
       if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
       if (!rows.length || !columns.length) return prev;
       const sample = rows[0];
 
+      // 根据列名获取样本值：优先查找原始列名（rows 的 key），其次查找重命名后列名
+      const getSampleValue = (col: string): unknown => {
+        // 先尝试原始列名（renamedToOriginal[col] 给出原始列名）
+        const originalCol = renamedToOriginal[col] || col;
+        if (originalCol in sample) return sample[originalCol];
+        // 兼容：如果直接使用 col 也能获取到值（某些情况下可能没有 rename）
+        return sample[col];
+      };
+
       if (prev.chartType === 'metric') {
         const numericFirst = columns.find((col) => {
-          const v = sample[col];
+          const v = getSampleValue(col);
           return (
             typeof v === 'number' ||
             (typeof v === 'string' && isNumericString(v))
@@ -234,7 +253,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
       if (prev.chartType === 'scatter') {
         const nums = columns.filter((col) => {
-          const v = sample[col];
+          const v = getSampleValue(col);
           return typeof v === 'number' || (typeof v === 'string' && isNumericString(v));
         });
         const yPair =
@@ -255,7 +274,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       }
 
       const suitableXFields = columns.filter((field) => {
-        const sampleValue = sample[field];
+        const sampleValue = getSampleValue(field);
         return (
           typeof sampleValue === 'string' ||
           sampleValue instanceof Date ||
@@ -266,7 +285,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
       let suitableYFields = columns
         .filter((field) => {
-          const sampleValue = sample[field];
+          const sampleValue = getSampleValue(field);
           return (
             typeof sampleValue === 'number' ||
             (typeof sampleValue === 'string' && isNumericString(sampleValue))
@@ -300,6 +319,22 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     return !isNaN(num) && val.toString().trim() !== '';
   };
 
+  // 应用列重命名映射：将原始列名转换为重命名后的列名
+  const getRenamedField = (originalCol: string): string => {
+    if (!columnRenames) return originalCol;
+    return columnRenames[originalCol] || originalCol;
+  };
+
+  // 创建反向映射：重命名后列名 -> 原始列名（用于从 rows 中获取值）
+  const renamedToOriginal = useMemo((): Record<string, string> => {
+    if (!columnRenames) return {};
+    const map: Record<string, string> = {};
+    for (const [original, renamed] of Object.entries(columnRenames)) {
+      map[renamed] = original;
+    }
+    return map;
+  }, [columnRenames]);
+
   // Process preview sample rows（与图表构建器相同：X/Y 下拉共用全部列）
   useEffect(() => {
     if (!open) return;
@@ -311,22 +346,51 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       return;
     }
     const rows = upstreamPreviewData.rows;
-    const columns =
-      upstreamPreviewData.columns?.length > 0
+    // 图表列选择器：优先使用 allColumns（完整列名），并应用 columnRenames 重命名
+    // columns 用于表格预览列展示（受 outputColumnKeys 影响）
+    const rawColumns =
+      upstreamPreviewData.allColumns?.length > 0
+        ? upstreamPreviewData.allColumns
+        : upstreamPreviewData.columns?.length > 0
+          ? upstreamPreviewData.columns
+          : Object.keys(rows[0] || {});
+    // 应用列重命名映射
+    const columns = rawColumns.map(col => getRenamedField(col));
+
+    // 字段类型推断使用原始列名（因为 rows 的 key 是原始列名）
+    const rawColsForTypes = upstreamPreviewData.allColumns?.length > 0
+      ? upstreamPreviewData.allColumns
+      : upstreamPreviewData.columns?.length > 0
         ? upstreamPreviewData.columns
         : Object.keys(rows[0] || {});
-    setPreviewData(rows);
-    setAvailableFields(columns);
-    setFieldTypes(inferMetricFieldTypesFromSampleRows(rows, columns));
+    setFieldTypes(inferMetricFieldTypesFromSampleRows(rows, rawColsForTypes));
 
     // 应用列格式转换
     const formats = config.previewColumnFormats || {};
     const formatted = rows.map(row => transformRowByFormats(row, formats));
-    setFormattedChartData(formatted);
+
+    // 如果有列重命名，需要创建包含重命名后列名的图表数据
+    // 因为 config.xField/yFields 使用的是重命名后的列名
+    let chartData = formatted;
+    if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
+      chartData = formatted.map(row => {
+        const newRow: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(row)) {
+          const renamedKey = getRenamedField(key);
+          newRow[renamedKey] = value;
+        }
+        return newRow;
+      });
+    }
+
+    setPreviewData(rows);
+    setAvailableFields(columns);
+    setFormattedChartData(chartData);
 
     setConfig((prev) => {
       if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
-      const next = applySmartDefaults(prev, rows, columns);
+      // 传入反向映射，用于智能默认配置时从 rows 中正确获取值
+      const next = applySmartDefaults(prev, rows, columns, renamedToOriginal);
       queueMicrotask(() => {
         form.setFieldsValue({
           chartType: next.chartType,
@@ -344,15 +408,29 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       });
       return next;
     });
-  }, [open, upstreamPreviewData, applySmartDefaults, form]);
+  }, [open, upstreamPreviewData, applySmartDefaults, form, columnRenames]);
 
   // 监听列格式变化，重新计算图表数据
   useEffect(() => {
     if (!open || !upstreamPreviewData?.rows?.length) return;
     const formats = config.previewColumnFormats || {};
     const formatted = upstreamPreviewData.rows.map(row => transformRowByFormats(row, formats));
-    setFormattedChartData(formatted);
-  }, [config.previewColumnFormats, open, upstreamPreviewData]);
+
+    // 如果有列重命名，需要创建包含重命名后列名的图表数据
+    let chartData = formatted;
+    if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
+      chartData = formatted.map(row => {
+        const newRow: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(row)) {
+          const renamedKey = getRenamedField(key);
+          newRow[renamedKey] = value;
+        }
+        return newRow;
+      });
+    }
+
+    setFormattedChartData(chartData);
+  }, [config.previewColumnFormats, open, upstreamPreviewData, renamedToOriginal]);
 
   // 监听外部 nodeConfig.previewColumnFormats 变化，同步内部 config
   useEffect(() => {
@@ -363,15 +441,28 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         ...prev,
         previewColumnFormats: externalFormats,
       }));
-      // 同时更新格式化后的图表数据
+      // 同时更新格式化后的图表数据（应用列重命名）
       if (upstreamPreviewData?.rows?.length) {
         const formatted = upstreamPreviewData.rows.map(row =>
           transformRowByFormats(row, externalFormats || {})
         );
-        setFormattedChartData(formatted);
+
+        let chartData = formatted;
+        if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
+          chartData = formatted.map(row => {
+            const newRow: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(row)) {
+              const renamedKey = getRenamedField(key);
+              newRow[renamedKey] = value;
+            }
+            return newRow;
+          });
+        }
+
+        setFormattedChartData(chartData);
       }
     }
-  }, [nodeConfig?.previewColumnFormats, open]);
+  }, [nodeConfig?.previewColumnFormats, open, renamedToOriginal]);
 
   // Handle form value changes
   const handleFormChange = (changedValues: any) => {

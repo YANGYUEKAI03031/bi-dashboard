@@ -110,6 +110,59 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
   const upstreamPreview = useNodePreview();
   const [modalPreviewData, setModalPreviewData] = useState<PreviewData | null>(null);
 
+  /**
+   * 计算列重命名映射：收集当前图表节点的重命名 + 从上游节点继承的重命名
+   * 用于图表配置弹窗的列选择显示重命名后的列名
+   */
+  const modalColumnRenames = useMemo((): Record<string, string> | undefined => {
+    if (!allNodes) return undefined;
+
+    const result: Record<string, string> = {};
+
+    // 收集当前节点的列重命名（图表节点自己的 config）
+    if (pipelineNode?.config) {
+      const cfg = pipelineNode.config as Record<string, unknown>;
+      const currentRenames = cfg.columnRenames as Record<string, string> | undefined;
+      if (currentRenames && typeof currentRenames === 'object') {
+        Object.assign(result, currentRenames);
+      }
+    }
+
+    // 从上游节点继承重命名（按拓扑顺序）
+    const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
+      if (visited.has(nodeId)) return [];
+      visited.add(nodeId);
+      const n = allNodes.find((nd) => nd.id === nodeId);
+      if (!n) return [];
+      const pn = n.data.pipelineNode as PipelineNode | undefined;
+      const upstream = pn?.upstream || [];
+      let ids: string[] = [];
+      for (const upId of upstream) {
+        ids.push(upId);
+        ids = ids.concat(getUpstreamIds(upId, visited));
+      }
+      return ids;
+    };
+
+    const upstreamIds = getUpstreamIds(node.id);
+    for (const upId of upstreamIds) {
+      const upNode = allNodes.find((n) => n.id === upId);
+      if (!upNode) continue;
+      const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
+      const upRenames = (upPn?.config as Record<string, unknown>)?.columnRenames as Record<string, string> | undefined;
+      if (upRenames && typeof upRenames === 'object') {
+        for (const [original, renamed] of Object.entries(upRenames)) {
+          // 只继承当前没有覆盖的列
+          if (!(original in result)) {
+            result[original] = renamed;
+          }
+        }
+      }
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  }, [node.id, allNodes, pipelineNode?.config]);
+
   const loadChartPreviewForModal = useCallback(async () => {
     if (!resolvedDsId) {
       message.warning('请先为管道配置业务数据源');
@@ -300,6 +353,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
         open={modalOpen}
         nodeConfig={nodeConfig || DEFAULT_CHART_CONFIG}
         upstreamPreviewData={modalPreviewData ?? upstreamPreview.previewData}
+        columnRenames={modalColumnRenames}
         onSave={handleSaveConfig}
         onCancel={handleModalClose}
         readOnly={readOnly}
