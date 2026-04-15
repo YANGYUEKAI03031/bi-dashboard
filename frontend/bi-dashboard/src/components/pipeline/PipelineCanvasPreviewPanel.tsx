@@ -417,7 +417,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
 
     return Object.keys(result).length > 0 ? result : undefined;
-  }, [previewNode, allNodes, pipelineNode?.config, columnCatalog]);
+  }, [previewNode, allNodes, pipelineNode?.config, previewConfigKey, columnCatalog]);
 
   useEffect(() => {
     if (!previewNode) return;

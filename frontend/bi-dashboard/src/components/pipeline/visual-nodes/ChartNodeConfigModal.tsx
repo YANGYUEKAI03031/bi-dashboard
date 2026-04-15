@@ -346,6 +346,33 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     });
   }, [open, upstreamPreviewData, applySmartDefaults, form]);
 
+  // 监听列格式变化，重新计算图表数据
+  useEffect(() => {
+    if (!open || !upstreamPreviewData?.rows?.length) return;
+    const formats = config.previewColumnFormats || {};
+    const formatted = upstreamPreviewData.rows.map(row => transformRowByFormats(row, formats));
+    setFormattedChartData(formatted);
+  }, [config.previewColumnFormats, open, upstreamPreviewData]);
+
+  // 监听外部 nodeConfig.previewColumnFormats 变化，同步内部 config
+  useEffect(() => {
+    if (!open || !nodeConfig) return;
+    const externalFormats = nodeConfig.previewColumnFormats;
+    if (externalFormats !== config.previewColumnFormats) {
+      setConfig(prev => ({
+        ...prev,
+        previewColumnFormats: externalFormats,
+      }));
+      // 同时更新格式化后的图表数据
+      if (upstreamPreviewData?.rows?.length) {
+        const formatted = upstreamPreviewData.rows.map(row =>
+          transformRowByFormats(row, externalFormats || {})
+        );
+        setFormattedChartData(formatted);
+      }
+    }
+  }, [nodeConfig?.previewColumnFormats, open]);
+
   // Handle form value changes
   const handleFormChange = (changedValues: any) => {
     const newConfig = { ...config, ...changedValues };
@@ -373,22 +400,6 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         : config.xGroupByEnabled,
     };
     setConfig(newConfig);
-  };
-
-  // Handle column format change
-  const handleColumnFormatChange = (field: string, format: string) => {
-    setConfig(prev => {
-      const newFormats = { ...(prev.previewColumnFormats || {}) };
-      if (format === PREVIEW_COLUMN_DISPLAY_AUTO) {
-        delete newFormats[field];
-      } else {
-        newFormats[field] = format;
-      }
-      return {
-        ...prev,
-        previewColumnFormats: Object.keys(newFormats).length > 0 ? newFormats : undefined,
-      };
-    });
   };
 
   // Handle save
@@ -718,58 +729,6 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
           </Form>
         </div>
 
-        <Divider />
-
-        {/* 列格式设置区域 */}
-        <div className="column-format-section">
-          <Text strong style={{ marginBottom: 12, display: 'block' }}>
-            列格式设置
-          </Text>
-          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
-            设置各列的数据显示格式（仅影响图表预览展示，不改变原始数据）
-          </Text>
-
-          <div className="column-format-table">
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#fafafa' }}>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8', width: '40%' }}>列名</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>显示格式</th>
-                </tr>
-              </thead>
-              <tbody>
-                {availableFields.map((field) => {
-                  const currentFormat = config.previewColumnFormats?.[field] || PREVIEW_COLUMN_DISPLAY_AUTO;
-                  return (
-                    <tr key={field} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '8px 12px' }}>{field}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <Select
-                          value={currentFormat}
-                          onChange={(val) => handleColumnFormatChange(field, val)}
-                          options={PREVIEW_COLUMN_DISPLAY_OPTIONS}
-                          style={{ width: 120 }}
-                          size="small"
-                          disabled={readOnly}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {availableFields.length === 0 && (
-              <Empty
-                description="暂无可用字段"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                style={{ padding: '20px 0' }}
-              />
-            )}
-          </div>
-        </div>
-
-        <Divider />
-
         {/* Chart Preview */}
         <div className="chart-preview-section">
           <Text strong style={{ marginBottom: 12, display: 'block' }}>
@@ -791,7 +750,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
           ) : (
             <div className="chart-preview-container">
               <ChartFactory
-                data={previewData}
+                data={formattedChartData.length > 0 ? formattedChartData : previewData}
                 config={buildChartConfig()}
                 style={{ height: 300 }}
               />
@@ -847,7 +806,6 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
         .chart-node-config-modal .field-mapping-section,
         .chart-node-config-modal .chart-settings-section,
-        .chart-node-config-modal .column-format-section,
         .chart-node-config-modal .chart-preview-section {
           margin-bottom: 16px;
         }
