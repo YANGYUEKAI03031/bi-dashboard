@@ -287,50 +287,19 @@
   padding: 0;
 }
 
-/* Grid Layout */
+/* Grid Layout - 与 DashboardEditorPage 保持一致 */
 .reports-dashboard-view .react-grid-layout {
   position: relative;
+  min-height: 600px;
 }
 
 .reports-dashboard-view .react-grid-item {
-  transition: all 200ms ease;
-  transition-property: left, top, width, height;
+  transition: none;
 }
 
 .reports-dashboard-view .react-grid-item > div {
   width: 100%;
   height: 100%;
-}
-
-/* 仪表盘视图中的卡片 */
-.reports-dashboard-view .ant-card {
-  box-shadow: var(--shadow-sm);
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--theme-border);
-  background: #ffffff;
-  transition: box-shadow var(--transition-fast),
-              transform var(--transition-spring);
-}
-
-.reports-dashboard-view .ant-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.reports-dashboard-view .ant-card-head {
-  border-bottom: 1px solid var(--theme-border);
-  padding: var(--space-sm) var(--space-md);
-}
-
-.reports-dashboard-view .ant-card-head-title {
-  font-size: 16px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.reports-dashboard-view .ant-card-body {
-  overflow: hidden;
-  padding: var(--space-md);
 }
 
 /* ── 响应式 ── */

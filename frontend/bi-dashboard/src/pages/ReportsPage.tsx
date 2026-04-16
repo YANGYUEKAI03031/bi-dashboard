@@ -240,7 +240,7 @@ const ChartCardComponent: React.FC<{
   const xField = viz.x_field ?? (Array.isArray(viz.graph_dimensions) ? viz.graph_dimensions[0] : undefined);
   const yFields = viz.y_fields ?? (Array.isArray(viz.graph_metrics) ? viz.graph_metrics : undefined);
 
-  // 联动改为“仅高亮、不变更数据”：所有图表始终用全量数据，由 ChartFactory 根据 selectedXValue 做高亮/变暗
+  // 联动改为"仅高亮、不变更数据"：所有图表始终用全量数据，由 ChartFactory 根据 selectedXValue 做高亮/变暗
   const chartDataForDisplay = displayData;
 
   return (
@@ -504,12 +504,27 @@ const DashboardView: React.FC<{
     }
   };
 
-  // 统计每一行有多少张卡片，用于判断“该行是否只有 1 张图”，从而做视觉居中
-  const rowCardCount = new Map<number, number>();
-  cards.forEach(card => {
-    const row = Number.isFinite(card.card_row) ? (card.card_row as number) : 0;
-    rowCardCount.set(row, (rowCardCount.get(row) || 0) + 1);
-  });
+  // 构建 mergedLayout：widgets 的标题 + cards 的图表，使用 card 位置信息
+  const mergedLayout = [
+    ...cards.map(card => ({
+      i: card.id.toString(),
+      x: Number.isFinite(card.card_col) ? (card.card_col as number) : 0,
+      y: Number.isFinite(card.card_row) ? (card.card_row as number) : 0,
+      w: Number.isFinite(card.size_x) ? card.size_x : 6,
+      h: Number.isFinite(card.size_y) ? card.size_y : 4,
+      static: true,
+    })),
+    ...widgets
+      .filter((w: any) => w && w.type === 'title')
+      .map(w => ({
+        i: w.id,
+        x: Number.isFinite(w.card_col) ? (w.card_col as number) : 0,
+        y: Number.isFinite(w.card_row) ? (w.card_row as number) : 0,
+        w: Number.isFinite(w.size_x) ? w.size_x : 12,
+        h: Number.isFinite(w.size_y) ? w.size_y : 2,
+        static: true,
+      })),
+  ];
 
   return (
     <div className="reports-dashboard-view">
@@ -613,28 +628,8 @@ const DashboardView: React.FC<{
         </div>
       )}
 
-      {/* 标题组件 */}
-      {widgets
-        .filter((w: any) => w && w.type === 'title')
-        .map((w: any) => (
-          <div key={w.id} style={{ marginBottom: 16 }}>
-            <Card size="small" style={{ height: '100%' }}>
-              <div style={{ textAlign: w.align || 'left' }}>
-                <Title level={w.level || 1} style={{ margin: 0 }}>
-                  {w.title}
-                </Title>
-                {w.subtitle && (
-                  <Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
-                    {w.subtitle}
-                  </Paragraph>
-                )}
-              </div>
-            </Card>
-          </div>
-        ))}
-
-      {/* 图表网格布局 */}
-      {cards.length > 0 ? (
+      {/* 标题组件和图表网格布局 - 与 DashboardEditorPage 保持一致 */}
+      {widgets.length > 0 || cards.length > 0 ? (
         <AutoWidthGridLayout
           cols={12}
           rowHeight={80}
@@ -643,30 +638,30 @@ const DashboardView: React.FC<{
           isResizable={false}
           compactType={null}
           preventCollision={true}
-          layout={cards.map(card => {
-            const totalCols = 12;
-            const w = Number.isFinite(card.size_x) ? card.size_x : 6;
-            const hasExplicitCol = Number.isFinite(card.card_col);
-            let x = hasExplicitCol ? (card.card_col as number) : 0;
-            const row = Number.isFinite(card.card_row) ? (card.card_row as number) : 0;
-            const countInRow = rowCardCount.get(row) || 0;
-
-            // 仅在“该行只有一张卡片”且「没有显式列位置」或「列为 0」时，做一次“视觉居中”。
-            // 这样不会改动数据库里的卡片坐标，只影响报表中心的展示效果。
-            if (countInRow === 1 && (!hasExplicitCol || x === 0)) {
-              x = Math.max(0, Math.floor((totalCols - w) / 2));
-            }
-
-            return {
-              i: card.id.toString(),
-              x,
-              y: row,
-              w,
-              h: Number.isFinite(card.size_y) ? card.size_y : 4,
-              static: true,
-            };
-          })}
+          layout={mergedLayout}
         >
+          {widgets
+            .filter((w: any) => w && w.type === 'title')
+            .map((w: any) => (
+              <div key={w.id}>
+                <Card
+                  size="small"
+                  style={{ height: '100%' }}
+                  bodyStyle={{ height: '100%' }}
+                >
+                  <div style={{ textAlign: w.align }}>
+                    <Title level={w.level || 1} style={{ margin: 0 }}>
+                      {w.title}
+                    </Title>
+                    {w.subtitle && (
+                      <Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                        {w.subtitle}
+                      </Paragraph>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            ))}
           {cards.map(card => (
             <div key={card.id.toString()}>
               <Card
@@ -676,7 +671,6 @@ const DashboardView: React.FC<{
                     <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
                   </div>
                 }
-                // 让报表页的卡片与编辑页保持一致：卡片填满网格单元，图表区域用 flex 垂直拉满
                 style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                 bodyStyle={{
                   flex: 1,
@@ -766,7 +760,7 @@ export const ReportsPage: React.FC = () => {
     return s;
   };
 
-  // 图表联动（像筛选器一样）：点击只会“设置/更新筛选值”，不会因为同值再次触发而自动取消
+  // 图表联动（像筛选器一样）：点击只会"设置/更新筛选值"，不会因为同值再次触发而自动取消
   // 取消筛选通过：点击页面空白处 / 点击清除按钮
   const handleChartLinkClick = (chartId: number | null, value: any, fieldName?: string) => {
     const nextVal = value == null ? null : normalizeLinkValue(value);
@@ -790,7 +784,7 @@ export const ReportsPage: React.FC = () => {
     setChartLinkSourceChartId(chartId ?? null);
   };
 
-  // 点击页面“非图表区域”时清除联动筛选（符合“点其它地方取消”，避免 hover/误触取消）
+  // 点击页面"非图表区域"时清除联动筛选（符合"点其它地方取消"，避免 hover/误触取消）
   useEffect(() => {
     if (chartLinkValue == null) return;
     const onDocMouseDown = (ev: MouseEvent) => {
@@ -1025,7 +1019,7 @@ export const ReportsPage: React.FC = () => {
     const id = Number(dashboardId);
     setActiveDashboardId(id);
     setFilterValues({}); // 切换仪表盘时重置筛选状态
-    setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致“暂无数据”
+    setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致"暂无数据"
 
     (loadBatchChartData as any).lastRequestKey = undefined;
     const dash = dashboardDetails.get(id);
@@ -1085,11 +1079,11 @@ export const ReportsPage: React.FC = () => {
   };
 
   const handleCreateFromTab = () => {
-    // 在具体报表页中，+ 号用于“添加仪表盘到当前报表页”
+    // 在具体报表页中，+ 号用于"添加仪表盘到当前报表页"
     if (pageId) {
       openAddDashboardModalForReportPage();
     } else {
-      // 在 /reports 总览页中，仍然保留“创建新仪表盘”的能力
+      // 在 /reports 总览页中，仍然保留"创建新仪表盘"的能力
       setCreateModalVisible(true);
     }
   };
