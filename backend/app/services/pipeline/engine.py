@@ -1741,6 +1741,40 @@ class PipelineEngine:
         return [row[0] for row in result.fetchall()]
 
     @staticmethod
+    def _get_date_preset_expression(preset: str) -> tuple:
+        """根据快捷日期选项获取开始和结束日期"""
+        from datetime import datetime, timedelta
+        from dateutil.relativedelta import relativedelta
+
+        today = datetime.now().date()
+        yesterday = today - timedelta(days=1)
+        fmt = "%Y-%m-%d"
+
+        presets = {
+            "today": (today, today),
+            "yesterday": (yesterday, yesterday),
+            "last_7_days": (today - timedelta(days=6), today),
+            "last_30_days": (today - timedelta(days=29), today),
+            "this_month": (today.replace(day=1), (today + relativedelta(months=1) - timedelta(days=1))),
+            "last_month": ((today - relativedelta(months=1)).replace(day=1),
+                          (today - timedelta(days=today.day))),
+            "this_year": (today.replace(month=1, day=1), today.replace(month=12, day=31)),
+            "last_year": ((today.replace(year=today.year - 1, month=1, day=1)),
+                         (today.replace(year=today.year - 1, month=12, day=31))),
+            # 昨日基准的快捷选项
+            "yesterday_last_7_days": (yesterday - timedelta(days=6), yesterday),
+            "yesterday_last_30_days": (yesterday - timedelta(days=29), yesterday),
+            "yesterday_last_90_days": (yesterday - timedelta(days=89), yesterday),
+            "yesterday_last_month": ((yesterday - relativedelta(months=1)).replace(day=1),
+                                    (yesterday - timedelta(days=yesterday.day))),
+        }
+
+        dates = presets.get(preset)
+        if dates:
+            return (dates[0].strftime(fmt), dates[1].strftime(fmt))
+        return None
+
+    @staticmethod
     def _build_filter_sql(
         table_ref: str,
         conditions: List[Dict[str, Any]],
@@ -1757,6 +1791,39 @@ class PipelineEngine:
             col = PipelineEngine._safe_identifier(col_name)
             op = str(cond.get("operator", "eq"))
             val = str(cond.get("value", ""))
+
+            # 日期快捷操作符
+            if op == "preset":
+                preset = str(cond.get("preset", ""))
+                if preset:
+                    dates = PipelineEngine._get_date_preset_expression(preset)
+                    if dates:
+                        clauses.append(f"{col} BETWEEN '{dates[0]}' AND '{dates[1]}'")
+                continue
+
+            if op == "before":
+                preset = str(cond.get("preset", ""))
+                if preset:
+                    dates = PipelineEngine._get_date_preset_expression(preset)
+                    if dates:
+                        clauses.append(f"{col} < '{dates[0]}'")
+                continue
+
+            if op == "after":
+                preset = str(cond.get("preset", ""))
+                if preset:
+                    dates = PipelineEngine._get_date_preset_expression(preset)
+                    if dates:
+                        clauses.append(f"{col} > '{dates[1]}'")
+                continue
+
+            if op == "between":
+                range_start = str(cond.get("rangeStart", ""))
+                range_end = str(cond.get("rangeEnd", ""))
+                if range_start and range_end:
+                    clauses.append(f"{col} BETWEEN '{range_start}' AND '{range_end}'")
+                continue
+
             if op == "eq":
                 clauses.append(f"{col} = '{val}'")
             elif op == "ne":

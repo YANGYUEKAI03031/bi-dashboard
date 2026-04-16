@@ -236,6 +236,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 node={selectedNode}
                 upstreamNodes={upstreams}
                 allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 readOnly={readOnly}
               />

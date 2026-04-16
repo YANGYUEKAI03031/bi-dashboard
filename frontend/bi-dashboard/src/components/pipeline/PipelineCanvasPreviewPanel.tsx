@@ -6,14 +6,12 @@
  * config.rowFilterConditions / config.rowFilterLogic），均由后端折叠 SQL 时应用。
  */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import {
-  Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
+import { Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
   Input, Tooltip, Alert, Checkbox, Divider, Modal, Radio, message,
-} from 'antd';
-import {
-  ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined,
-  TableOutlined, BarChartOutlined,
-} from '@ant-design/icons';
+  DatePicker } from 'antd';
+import { CalendarOutlined, ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined, TableOutlined, BarChartOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+
 import { GraphNode, GraphEdge } from '../../utils/graphUtils';
 import { PipelineNode } from '../../services/pipelineService';
 import { getNodeTypeDef } from '../../utils/nodeTypeRegistry';
@@ -28,7 +26,9 @@ import {
   DEFAULT_CHART_CONFIG,
   ChartType,
 } from '../../types/chartNode';
+import { DATE_PRESETS, getDatePresetExpression } from './visual-nodes/FilterNodeConfig';
 
+const { RangePicker } = DatePicker;
 const { Text } = Typography;
 
 export interface Condition {
@@ -36,7 +36,18 @@ export interface Condition {
   column: string;
   operator: string;
   value: string;
+  preset?: string;  // 日期快捷选项
+  rangeStart?: string;
+  rangeEnd?: string;
 }
+
+// 日期类型专用的相对日期操作符
+const DATE_FILTER_OPERATORS = [
+  { label: '早于', value: 'before' },
+  { label: '晚于', value: 'after' },
+  { label: '介于', value: 'between' },
+  { label: '快捷日期', value: 'preset' },
+];
 
 export const FILTER_OPERATORS = [
   { label: '等于', value: 'eq' },
@@ -58,9 +69,7 @@ interface PipelineCanvasPreviewPanelProps {
   allNodes: GraphNode[];
   allEdges: GraphEdge[];
   pipelineDataSourceId?: number | null;
-  /** 画布侧关闭面板 / 连线 / 拖拽后递增，强制预览刷新 */
   refreshTick?: number;
-  /** 节点配置变更时写回画布状态，触发预览重载 */
   onNodeUpdate?: (updatedNode: GraphNode) => void;
 }
 
@@ -68,17 +77,36 @@ interface PipelineCanvasPreviewPanelProps {
 function ConditionRow({
   cond,
   columns,
+  columnTypes,
   readOnly,
   onChange,
   onRemove,
 }: {
   cond: Condition;
   columns: string[];
+  columnTypes?: Record<string, string>;
   readOnly: boolean;
   onChange: (updated: Condition) => void;
   onRemove: () => void;
 }) {
-  const needsValue = cond.operator !== 'isNull' && cond.operator !== 'isNotNull';
+  const colType = columnTypes?.[cond.column];
+  const isDateType = colType === 'date' || colType === 'datetime';
+
+  // 日期类型：使用日期专用操作符 + 标准操作符
+  const availableOps = isDateType
+    ? [...DATE_FILTER_OPERATORS, ...FILTER_OPERATORS.filter(op => !['isNull', 'isNotNull'].includes(op.value))]
+    : FILTER_OPERATORS;
+
+  const needsValue = !['isNull', 'isNotNull'].includes(cond.operator);
+  const isDateComparison = isDateType && needsValue;
+  const isPresetOp = cond.operator === 'preset';
+  const isBetweenOp = cond.operator === 'between';
+  const isBeforeAfterOp = cond.operator === 'before' || cond.operator === 'after';
+  const needsQuickDate = isPresetOp;
+  const needsRangePicker = isBetweenOp;
+  const needsDatePicker = isDateComparison && !needsQuickDate && !needsRangePicker;
+  const showNormalInput = needsValue && !isDateComparison;
+
   return (
     <Space size={4} style={{ marginBottom: 6 }} wrap>
       <Select
@@ -86,7 +114,7 @@ function ConditionRow({
         placeholder="字段"
         style={{ width: 110 }}
         value={cond.column || undefined}
-        onChange={(v) => onChange({ ...cond, column: v })}
+        onChange={(v) => onChange({ ...cond, column: v, operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined })}
         options={columns.map((c) => ({ label: c, value: c }))}
         showSearch
         allowClear
@@ -97,11 +125,11 @@ function ConditionRow({
         placeholder="条件"
         style={{ width: 90 }}
         value={cond.operator || undefined}
-        onChange={(v) => onChange({ ...cond, operator: v })}
-        options={FILTER_OPERATORS}
+        onChange={(v) => onChange({ ...cond, operator: v, value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined })}
+        options={availableOps.map(op => ({ label: op.label, value: op.value }))}
         disabled={readOnly}
       />
-      {needsValue && (
+      {showNormalInput && (
         <Input
           size="small"
           placeholder="值"
@@ -110,6 +138,55 @@ function ConditionRow({
           onChange={(e) => onChange({ ...cond, value: e.target.value })}
           disabled={readOnly}
         />
+      )}
+      {/* 日期比较操作符对应的值输入 */}
+      {needsDatePicker && (
+        <DatePicker
+          size="small"
+          style={{ width: 130 }}
+          value={dayjs(cond.value || cond.rangeStart)}
+          onChange={(date) => onChange({ ...cond, value: date?.format('YYYY-MM-DD') || '', rangeStart: undefined, rangeEnd: undefined, preset: undefined })}
+          format="YYYY-MM-DD"
+          placeholder="选择日期"
+          disabled={readOnly}
+        />
+      )}
+      {/* 快捷日期（preset）下拉选择 */}
+      {needsQuickDate && (
+        <Select
+          size="small"
+          placeholder="快捷日期"
+          style={{ width: 140 }}
+          value={cond.preset || undefined}
+          onChange={(v) => onChange({ ...cond, preset: v, value: '', rangeStart: '', rangeEnd: '' })}
+          options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+          suffixIcon={<CalendarOutlined />}
+          disabled={readOnly}
+        />
+      )}
+      {/* 介于（between）- 两个日期选择器 */}
+      {needsRangePicker && (
+        <Space size={4}>
+          <DatePicker
+            size="small"
+            style={{ width: 110 }}
+            value={cond.rangeStart ? dayjs(cond.rangeStart) : null}
+            onChange={(date) => onChange({ ...cond, rangeStart: date?.format('YYYY-MM-DD') || '' })}
+            format="YYYY-MM-DD"
+            placeholder="开始"
+            disabled={readOnly}
+          />
+          <span style={{ color: '#999', fontSize: 11 }}>至</span>
+          <DatePicker
+            size="small"
+            style={{ width: 110 }}
+            value={cond.rangeEnd ? dayjs(cond.rangeEnd) : null}
+            onChange={(date) => onChange({ ...cond, rangeEnd: date?.format('YYYY-MM-DD') || '' })}
+            format="YYYY-MM-DD"
+            placeholder="结束"
+            disabled={readOnly}
+          />
+        </Space>
       )}
       {!readOnly && (
         <Button
@@ -127,6 +204,7 @@ function ConditionRow({
 /** 筛选条件编辑器浮层 */
 function FilterEditor({
   columns,
+  columnTypes,
   conditions,
   logic,
   readOnly,
@@ -136,6 +214,7 @@ function FilterEditor({
   onCancel,
 }: {
   columns: string[];
+  columnTypes?: Record<string, string>;
   conditions: Condition[];
   logic: string;
   readOnly: boolean;
@@ -148,7 +227,7 @@ function FilterEditor({
   const addCondition = () =>
     onConditionsChange([
       ...conditions,
-      { id: `cond_${Date.now()}`, column: '', operator: '', value: '' },
+      { id: `cond_${Date.now()}`, column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined },
     ]);
   return (
     <div style={{ width: 380 }}>
@@ -180,6 +259,7 @@ function FilterEditor({
             key={cond.id}
             cond={cond}
             columns={columns}
+            columnTypes={columnTypes}
             readOnly={readOnly}
             onChange={(updated) =>
               onConditionsChange(
@@ -190,7 +270,7 @@ function FilterEditor({
               onConditionsChange(
                 conditions.length > 1
                   ? conditions.filter((c) => c.id !== cond.id)
-                  : [{ id: cond.id, column: '', operator: '', value: '' }]
+                  : [{ id: cond.id, column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined }]
               )
             }
           />
@@ -265,7 +345,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     if (!previewNode) return '';
     const pn = previewNode.data.pipelineNode as PipelineNode | undefined;
     const config = pn?.config || {};
-    // 包含所有可能影响预览的配置，包括列格式
     return JSON.stringify({
       xField: config.xField,
       yFields: config.yFields,
@@ -299,6 +378,17 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         .join('\n'),
     [allNodes]
   );
+
+  const columnTypesMap = useMemo((): Record<string, string> => {
+    if (!previewData?.columns || !previewData.columnTypes) {
+      return {};
+    }
+    const map: Record<string, string> = {};
+    previewData.columns.forEach((col, idx) => {
+      map[col] = previewData.columnTypes?.[idx] || 'string';
+    });
+    return map;
+  }, [previewData?.columns, previewData?.columnTypes]);
 
   useEffect(() => {
     if (!previewNode || !nodeDef?.hasPreview) {
@@ -337,14 +427,14 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   );
 
   const [localConditions, setLocalConditions] = useState<Condition[]>([
-    { id: 'cond_0', column: '', operator: '', value: '' },
+    { id: 'cond_0', column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined },
   ]);
   const [localLogic, setLocalLogic] = useState<string>('AND');
 
   useEffect(() => {
     if (!previewNode) return;
     const conds = [...savedRowConditions];
-    setLocalConditions(conds.length > 0 ? conds : [{ id: 'cond_0', column: '', operator: '', value: '' }]);
+    setLocalConditions(conds.length > 0 ? conds : [{ id: 'cond_0', column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined }]);
     setLocalLogic(savedRowLogic || 'AND');
   }, [previewNode?.id, previewConfigKey]);
 
@@ -383,7 +473,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
 
     // 否则，从上游节点继承格式（按拓扑顺序）
-    // 获取所有上游节点（递归）
     const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
       if (visited.has(nodeId)) return [];
       visited.add(nodeId);
@@ -400,14 +489,12 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     };
 
     const upstreamIds = getUpstreamIds(previewNode.id);
-    // 按拓扑顺序（从源头到当前）合并格式
     for (const upId of upstreamIds) {
       const upNode = allNodes.find(n => n.id === upId);
       if (!upNode) continue;
       const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
       const upFormats = (upPn?.config as Record<string, unknown>)?.previewColumnFormats as Record<string, string> | undefined;
       if (upFormats && typeof upFormats === 'object') {
-        // 只合并当前列目录中存在的列
         for (const [col, fmt] of Object.entries(upFormats)) {
           if (colsSet.has(col) && !(col in result)) {
             result[col] = fmt;
@@ -419,14 +506,11 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     return Object.keys(result).length > 0 ? result : undefined;
   }, [previewNode, allNodes, pipelineNode?.config, previewConfigKey, columnCatalog]);
 
-  // 获取列重命名映射（原始列名 -> 重命名后列名）
-  // 包含当前节点的重命名 + 从上游节点继承的重命名
   const columnRenames = useMemo((): Record<string, string> | undefined => {
     if (!previewNode || !allNodes) return undefined;
-    
+
     const result: Record<string, string> = {};
 
-    // 首先收集当前节点的列重命名
     if (pipelineNode?.config) {
       const cfg = pipelineNode.config as Record<string, unknown>;
       const currentRenames = cfg.columnRenames as Record<string, string> | undefined;
@@ -435,13 +519,11 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       }
     }
 
-    // 如果当前节点已覆盖所有列，直接返回
     const colsSet = new Set(columnCatalog);
     if (colsSet.size > 0 && Object.keys(result).length >= colsSet.size) {
       return Object.keys(result).length > 0 ? result : undefined;
     }
 
-    // 从上游节点继承重命名（按拓扑顺序）
     const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
       if (visited.has(nodeId)) return [];
       visited.add(nodeId);
@@ -465,7 +547,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       const upRenames = (upPn?.config as Record<string, unknown>)?.columnRenames as Record<string, string> | undefined;
       if (upRenames && typeof upRenames === 'object') {
         for (const [original, renamed] of Object.entries(upRenames)) {
-          // 只继承当前列目录中存在的列，且当前节点未覆盖
           if (colsSet.has(original) && !(original in result)) {
             result[original] = renamed;
           }
@@ -509,7 +590,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     visibleColumnKeys.length < columnCatalog.length &&
     !catalogAllSelected;
 
-  /** 列选变更：同步写入节点 config.outputColumnKeys 并触发 onNodeUpdate */
   const handleColumnSelect = (keys: string[]) => {
     if (!previewNode) return;
     const catalog = columnCatalog;
@@ -569,7 +649,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     });
   };
 
-  /** 筛选条件变更 */
   const handleConditionsChange = (cs: Condition[]) => {
     setLocalConditions(cs);
   };
@@ -578,7 +657,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     setLocalLogic(l);
   };
 
-  /** 确认筛选：写入 config.rowFilterConditions / rowFilterLogic 并关闭浮层 */
   const handleFilterConfirm = () => {
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
@@ -597,9 +675,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     setFilterOpen(false);
   };
 
-  /** 打开插入列弹窗 */
   const handleOpenInsertColumn = (sourceColumn?: string) => {
-    // 列数据依赖 previewData，在弹窗打开前强制立即刷新预览，确保拿到最新列信息
     if (previewLoading || !previewData) {
       loadPreview(
         {
@@ -625,9 +701,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
   };
 
-  /** 双击插入列标签 → 重新打开编辑 */
   const handleEditInsertColumn = (config: InsertedColumnConfig) => {
-    // 确保列数据已刷新
     if (previewLoading || !previewData) {
       loadPreview(
         { node: previewNode, allNodes, pipelineDataSourceId: resolvedDsId, limit: 100 },
@@ -642,22 +716,18 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
   };
 
-  /** 插入新列回调 */
   const handleInsertColumn = (config: InsertedColumnConfig) => {
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
     const cfg = { ...(pn.config as Record<string, unknown> || {}) };
     const existingCols = (cfg.insertedColumns as InsertedColumnConfig[]) || [];
 
-    // 生成唯一 id
     const configWithId = { ...config, id: config.id || `ic_${Date.now()}_${Math.random().toString(36).slice(2)}` };
 
     let newCols: InsertedColumnConfig[];
     if (insertColumnEditConfig?.id) {
-      // 编辑模式：替换
       newCols = existingCols.map((c) => (c.id === insertColumnEditConfig.id ? configWithId : c));
     } else {
-      // 新增模式
       newCols = [...existingCols, configWithId];
     }
 
@@ -672,7 +742,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     setInsertColumnModalOpen(false);
   };
 
-  /** 删除插入列 */
   const handleDeleteInsertColumn = (configId: string) => {
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
@@ -689,21 +758,18 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     });
   };
 
-  /** 表格右键插入列回调 */
   const handleTableInsertColumn = (config: InsertedColumnConfig) => {
     handleOpenInsertColumn(config.sourceColumn);
   };
 
-  /** 重命名列回调 */
   const handleRenameColumn = (oldName: string, newName: string) => {
     if (!previewNode || !onNodeUpdate) return;
     if (oldName === newName) return;
-    
+
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
     const cfg = { ...(pn.config as Record<string, unknown> || {}) };
     const prevRenames = (cfg.columnRenames as Record<string, string>) || {};
-    
-    // 检查新名称是否与现有列名冲突（排除自己）
+
     const conflictColumn = previewData?.columns.find(
       col => col !== oldName && col === newName
     );
@@ -711,13 +777,13 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       message.error(`列名 "${newName}" 已存在，请使用其他名称`);
       return;
     }
-    
+
     const newRenames = { ...prevRenames, [oldName]: newName };
     const newCfg = {
       ...cfg,
       columnRenames: newRenames,
     };
-    
+
     onNodeUpdate({
       ...previewNode,
       data: {
@@ -725,11 +791,10 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         pipelineNode: { ...pn, config: newCfg },
       },
     });
-    
+
     message.success(`列 "${oldName}" 已重命名为 "${newName}"`);
   };
 
-  /** 删除列回调 */
   const handleDeleteColumn = (columnKey: string) => {
     if (!previewNode || !onNodeUpdate) return;
     Modal.confirm({
@@ -742,10 +807,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         const cfg = { ...(pn.config as Record<string, unknown> || {}) };
         const outputKeys = (cfg.outputColumnKeys as string[]) || [];
         const newOutputKeys = outputKeys.filter((k) => k !== columnKey);
-        const newCfg = {
-          ...cfg,
-          outputColumnKeys: newOutputKeys,
-        };
+        const newCfg = { ...cfg, outputColumnKeys: newOutputKeys };
         onNodeUpdate({
           ...previewNode,
           data: {
@@ -762,7 +824,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const showLoading = previewLoading && !previewData;
   const isChartNode = pipelineNode?.type === 'chart';
 
-  // 提取图表节点配置
   const chartNodeConfig = useMemo<ChartNodeConfig | null>(() => {
     if (!isChartNode || !pipelineNode?.config) return null;
     const cfg = pipelineNode.config as Record<string, unknown>;
@@ -823,7 +884,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
           {title}
         </Text>
         <div className="pipeline-canvas-preview-toolbar-right">
-          {/* 图表/表格切换（仅图表节点显示） */}
           {isChartNode && (
             <Radio.Group
               value={previewMode}
@@ -891,7 +951,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             </Popover>
           )}
 
-          {/* 行筛选入口 */}
           <Popover
             trigger="click"
             open={filterOpen}
@@ -900,6 +959,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             content={
               <FilterEditor
                 columns={columnCatalog}
+                columnTypes={columnTypesMap}
                 conditions={localConditions}
                 logic={localLogic}
                 readOnly={!onNodeUpdate}
@@ -922,7 +982,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             </Tooltip>
           </Popover>
 
-          {/* 插入新列按钮 */}
           {columnCatalog.length > 0 && (
             <Tooltip title="插入新列">
               <Button
@@ -970,7 +1029,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
       )}
 
-      {/* 图表预览模式 */}
       {isChartNode && previewMode === 'chart' && (
         <div className="pipeline-canvas-preview-chart-wrap">
           <ChartNodePreview
@@ -983,7 +1041,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         </div>
       )}
 
-      {/* 表格预览模式 */}
       {showTable && previewMode === 'table' && (
         <div className="pipeline-canvas-preview-table-wrap" ref={tableWrapRef}>
           <NodePreviewTable
@@ -1011,7 +1068,6 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
       )}
 
-      {/* 插入列弹窗 */}
       <InsertColumnModal
         visible={insertColumnModalOpen}
         columns={columnCatalog}
