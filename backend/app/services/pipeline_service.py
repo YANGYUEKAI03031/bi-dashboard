@@ -170,8 +170,9 @@ class PipelineService:
                         update_data[key] = value
 
             if update_data:
-                # 检测被删除的 chart 节点
+                # 检测被删除的 chart 节点和 output 节点
                 deleted_chart_nodes = []
+                deleted_output_nodes = []  # {node_id: target_table_name}
                 if 'nodes' in update_fields:
                     old_nodes = getattr(pipeline, 'nodes', []) or []
                     if isinstance(old_nodes, str):
@@ -183,6 +184,16 @@ class PipelineService:
                     old_chart_ids = {n.get('id') for n in old_nodes if n.get('type') == 'chart'}
                     new_chart_ids = {n.get('id') for n in update_fields['nodes'] if n.get('type') == 'chart'}
                     deleted_chart_nodes = list(old_chart_ids - new_chart_ids)
+
+                    # 检测被删除的 output 节点及其目标表
+                    old_output_nodes = {
+                        n.get('id'): n.get('config', {}).get('targetTable', '')
+                        for n in old_nodes if n.get('type') == 'output'
+                    }
+                    new_output_ids = {n.get('id') for n in update_fields['nodes'] if n.get('type') == 'output'}
+                    for node_id, target_table in old_output_nodes.items():
+                        if node_id not in new_output_ids and target_table:
+                            deleted_output_nodes.append({'node_id': node_id, 'target_table': target_table})
 
                 update_data['updated_at'] = datetime.utcnow()
                 stmt = (
@@ -204,6 +215,44 @@ class PipelineService:
                             logger.info(f"更新管道时归档已删除节点的图表: pipeline_id={pipeline_id}, node_id={node_id}")
                     except Exception as archive_err:
                         logger.warning(f"更新管道时归档图表失败: {archive_err}")
+
+                # 删除被删除的 output 节点对应的目标表
+                if deleted_output_nodes:
+                    logger.info(f"=== 检测到 {len(deleted_output_nodes)} 个 OUTPUT 节点被删除 ===")
+                    try:
+                        from sqlalchemy import text
+                        from app.services.chart_service import _get_db_engine
+                        source_ds_id = pipeline.source_data_source_id
+                        if source_ds_id:
+                            db_model = await self.db.get(Database, source_ds_id)
+                            if db_model:
+                                engine = await _get_db_engine(db_model)
+                                async with engine.connect() as conn:
+                                    for item in deleted_output_nodes:
+                                        target_table = item['target_table']
+                                        node_id = item['node_id']
+                                        logger.info(f"准备删除 OUTPUT 节点目标表: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}")
+                                        try:
+                                            check_res = await conn.execute(text(
+                                                "SELECT COUNT(*) FROM information_schema.TABLES "
+                                                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl"
+                                            ), {"tbl": target_table})
+                                            if check_res.fetchone()[0] > 0:
+                                                await conn.execute(text(f"DROP TABLE IF EXISTS `{target_table}`"))
+                                                await conn.commit()
+                                                logger.info(f"✅ 删除 OUTPUT 节点时清理目标表成功: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}")
+                                            else:
+                                                logger.warning(f"⚠️ OUTPUT 节点目标表不存在: table={target_table}")
+                                        except Exception as drop_err:
+                                            logger.error(f"❌ 删除 OUTPUT 节点时清理目标表失败: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}, error={drop_err}")
+                            else:
+                                logger.warning(f"⚠️ 数据源不存在，无法清理 OUTPUT 节点目标表: source_data_source_id={source_ds_id}")
+                        else:
+                            logger.warning(f"⚠️ 管道没有配置数据源，无法清理 OUTPUT 节点目标表")
+                    except Exception as drop_err:
+                        logger.error(f"❌ 删除 OUTPUT 节点时清理目标表失败: {drop_err}")
+                else:
+                    logger.info(f"=== 没有检测到被删除的 OUTPUT 节点 ===")
 
             logger.info(f"更新管道成功: {pipeline.name} (ID: {pipeline.id})")
             return pipeline
