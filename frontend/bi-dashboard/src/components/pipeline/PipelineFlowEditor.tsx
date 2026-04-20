@@ -20,7 +20,7 @@ import {
   Position,
   BackgroundVariant,
 } from '@xyflow/react';
-import { Button, Space, message, Dropdown, Modal, Table, Alert, Checkbox } from 'antd';
+import { Button, Space, message, Dropdown, Modal, Table, Alert, Checkbox, Input } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import {
@@ -61,6 +61,65 @@ export type PipelineFlowEditorHandle = {
 
 function generateId(): string {
   return `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** OUTPUT 节点删除确认输入组件 */
+interface OutputDeleteConfirmInputProps {
+  outputNodes: Array<{ id: string; name: string; tableName: string }>;
+  onConfirm: (confirmedTables: Set<string>) => void;
+  onCancel: () => void;
+}
+
+function OutputDeleteConfirmInput({ outputNodes, onConfirm, onCancel }: OutputDeleteConfirmInputProps) {
+  // 跟踪每个 OUTPUT 节点输入的值
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
+  const handleInputChange = (nodeId: string, value: string) => {
+    setInputValues(prev => ({ ...prev, [nodeId]: value }));
+  };
+
+  // 检查是否所有 OUTPUT 节点的输入都正确
+  const allConfirmed = outputNodes.every(n => {
+    if (!n.tableName) return true; // 没有配置表名的跳过验证
+    return inputValues[n.id] === n.tableName;
+  });
+
+  const handleConfirm = () => {
+    const confirmedTables = new Set<string>();
+    outputNodes.forEach(n => {
+      if (inputValues[n.id] === n.tableName) {
+        confirmedTables.add(n.tableName);
+      }
+    });
+    onConfirm(confirmedTables);
+  };
+
+  return (
+    <div>
+      {outputNodes.map(node => (
+        <div key={node.id} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+            {node.name}
+            {!node.tableName && <span style={{ color: '#999' }}>（未配置目标表）</span>}
+          </div>
+          {node.tableName && (
+            <Input
+              placeholder={`请输入 "${node.tableName}" 确认删除`}
+              value={inputValues[node.id] || ''}
+              onChange={e => handleInputChange(node.id, e.target.value)}
+              status={inputValues[node.id] && inputValues[node.id] !== node.tableName ? 'error' : undefined}
+            />
+          )}
+        </div>
+      ))}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+        <Button onClick={onCancel}>取消</Button>
+        <Button type="primary" danger disabled={!allConfirmed} onClick={handleConfirm}>
+          确认删除
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Node Card — Coze-style ────────────────────────────────────────────────
@@ -1102,13 +1161,48 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   };
 
   /** 通用删除逻辑 */
+  // OUTPUT 节点删除确认状态
+  const [outputDeleteConfirm, setOutputDeleteConfirm] = useState<{
+    visible: boolean;
+    outputNodes: Array<{ id: string; name: string; tableName: string }>;
+    pendingDeleteIds: string[];
+  }>({ visible: false, outputNodes: [], pendingDeleteIds: [] });
+
   const applyNodeDelete = useCallback((
     toDelete: string[],
-    currentNodes: Node[]
+    currentNodes: Node[],
+    confirmed: boolean = false
   ) => {
     if (toDelete.length === 0) return;
     const deletedSet = new Set(toDelete);
     const graphNodes = currentNodes as unknown as GraphNode[];
+
+    // 检查是否有 OUTPUT 节点
+    const outputNodesToDelete = graphNodes
+      .filter(n => deletedSet.has(n.id))
+      .filter(n => {
+        const pn = n.data.pipelineNode as Record<string, unknown>;
+        return pn?.type === 'output';
+      })
+      .map(n => {
+        const pn = n.data.pipelineNode as Record<string, unknown>;
+        const config = (pn?.config || {}) as Record<string, unknown>;
+        return {
+          id: n.id,
+          name: (pn?.name as string) || '未命名输出节点',
+          tableName: (config?.targetTable as string) || '',
+        };
+      });
+
+    // 如果有待删除的 OUTPUT 节点且未确认，显示确认弹窗
+    if (outputNodesToDelete.length > 0 && !confirmed) {
+      setOutputDeleteConfirm({
+        visible: true,
+        outputNodes: outputNodesToDelete,
+        pendingDeleteIds: toDelete,
+      });
+      return;
+    }
 
     // 找出所有下游节点
     const downstreamSet = getDownstreamNodes(graphNodes, deletedSet);
@@ -1378,7 +1472,54 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
             readOnly={readOnly}
           />
         )}
-      </div>
+        </div>
+
+        {/* OUTPUT 节点删除确认弹窗 */}
+        <Modal
+          title={<span style={{ color: '#ff4d4f' }}>⚠️ 删除输出节点警告</span>}
+          open={outputDeleteConfirm.visible}
+          onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
+          footer={null}
+          width={500}
+          destroyOnClose
+        >
+          <Alert
+            type="warning"
+            showIcon
+            message="即将删除以下输出节点，关联的表格数据将被删除！"
+            style={{ marginBottom: 16 }}
+          />
+          <div style={{ marginBottom: 16 }}>
+            {outputDeleteConfirm.outputNodes.map(node => (
+              <div key={node.id} style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7e6', borderRadius: 4, border: '1px solid #ffe58f' }}>
+                <div style={{ fontWeight: 500 }}>{node.name}</div>
+                <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                  目标表：<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 3 }}>{node.tableName || '(未指定)'}</code>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>请输入每个目标表的表名进行确认：</div>
+            <OutputDeleteConfirmInput
+              outputNodes={outputDeleteConfirm.outputNodes}
+              onConfirm={(confirmedTables) => {
+                // 验证所有 OUTPUT 节点都已确认
+                const allConfirmed = outputDeleteConfirm.outputNodes.every(
+                  n => !n.tableName || confirmedTables.has(n.tableName)
+                );
+                if (!allConfirmed) {
+                  message.error('请输入正确的表名进行确认');
+                  return;
+                }
+                setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] });
+                // 执行删除
+                applyNodeDelete(outputDeleteConfirm.pendingDeleteIds, nodes, true);
+              }}
+              onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
+            />
+          </div>
+        </Modal>
 
       {/* Import nodes modal */}
       {!readOnly && (

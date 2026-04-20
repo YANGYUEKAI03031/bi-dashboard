@@ -386,9 +386,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                         };
                         onChange();
                       }}
-                      options={tableColumns
-                        .filter(col => ['datetime', 'timestamp', 'date', 'int', 'bigint'].includes(col.type.toLowerCase()))
-                        .map(col => ({
+                      options={tableColumns.map(col => ({
                           label: `${col.name} (${col.type})`,
                           value: col.name,
                         }))}
@@ -573,12 +571,10 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                         };
                         onChange();
                       }}
-                      options={tableColumns
-                        .filter(col => ['datetime', 'timestamp', 'date', 'int', 'bigint'].includes(col.type.toLowerCase()))
-                        .map(col => ({
-                          label: `${col.name} (${col.type})`,
-                          value: col.name,
-                        }))}
+                      options={tableColumns.map(col => ({
+                        label: `${col.name} (${col.type})`,
+                        value: col.name,
+                      }))}
                     />
                   </Form.Item>
 
