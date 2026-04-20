@@ -305,73 +305,93 @@ class PipelineEngine:
                                     f"不支持的写入模式: {write_mode}（应为 replace | append | upsert）"
                                 )
 
-                            # 收集所有上游客的 columnRenames，用于应用列重命名
-                            merged_renames: Dict[str, str] = {}
-                            for up_id in (upstream or []):
-                                if up_id in upstream_column_renames:
-                                    merged_renames.update(upstream_column_renames[up_id])
-                            # 当前节点自己的 columnRenames（优先级更高）
-                            current_renames = node_config.get("columnRenames", {})
-                            if current_renames:
-                                merged_renames.update(current_renames)
-
-                            # 收集上游客的 outputColumnKeys，用于导出时只导出预览列
+                            # 收集上游客的输出列和重命名配置，用于正确投影列
+                            # 策略1: 优先从 config.outputColumnKeys 获取（前端设置的列选择）
+                            # 策略2: 从 node_columns 字典获取（执行引擎推断的输出列）
+                            # 同时收集上游客的 columnRenames 用于列重命名
                             upstream_output_keys: List[str] = []
+                            upstream_config: Dict[str, Any] = {}
+                            upstream_renames: Dict[str, str] = {}  # {原始列名: 重命名后列名}
+
                             for up_id in (upstream or []):
+                                # 策略1: 从 config.outputColumnKeys 获取
                                 up_node = nodes_dict.get(up_id) if 'nodes_dict' in dir() else None
                                 if up_node:
                                     up_cfg = up_node.get("config") or {}
                                     up_keys = up_cfg.get("outputColumnKeys", [])
                                     if up_keys:
                                         upstream_output_keys = list(up_keys)
+                                        upstream_config = up_cfg
                                         break
 
-                            # 构建 select_sql，优先使用上游客的 outputColumnKeys
+                                # 策略2: 从 node_columns 字典获取（执行引擎推断的输出列）
+                                if not upstream_output_keys and up_id in node_columns and node_columns[up_id]:
+                                    upstream_output_keys = list(node_columns[up_id])
+
+                                # 收集上游客的重命名映射（从 upstream_column_renames）
+                                if up_id in upstream_column_renames:
+                                    upstream_renames.update(upstream_column_renames[up_id])
+
+                            # 构建最终要导出的 SQL
                             select_sql = actual_sql.rstrip().rstrip(";")
+
                             if upstream_output_keys:
-                                # 收集所有上游客的重命名映射（从 renameMap）
+                                # 收集所有重命名映射：{原始列名: 重命名后列名}
                                 all_renames: Dict[str, str] = {}
-                                for up_id in (upstream or []):
-                                    up_node_data = None
-                                    for n in nodes:
-                                        if n.get("id") == up_id:
-                                            up_node_data = n
-                                            break
-                                    if up_node_data:
-                                        up_cfg = up_node_data.get("config") or {}
-                                        up_rename_map = up_cfg.get("renameMap") or {}
-                                        all_renames.update(up_rename_map)
-                                all_renames.update(merged_renames)
+                                # 从 upstream_config 的 renameMap 和 columnRenames
+                                up_rename_map = upstream_config.get("renameMap", {}) if upstream_config else {}
+                                up_column_renames = upstream_config.get("columnRenames", {}) if upstream_config else {}
+                                all_renames.update(upstream_renames)
+                                # 从当前节点自己的 columnRenames（优先级最高）
+                                current_renames = node_config.get("columnRenames", {})
+                                all_renames.update(current_renames)
 
-                                # 将 outputColumnKeys 转换为实际列名（考虑重命名）
-                                output_cols_for_select: List[str] = []
+                                logger.info(f"[OUTPUT] Using upstream output keys: {upstream_output_keys}")
+                                logger.info(f"[OUTPUT] All renames: {all_renames}")
+
+                                # 构建投影列列表
+                                proj_cols: List[str] = []
                                 for col in upstream_output_keys:
+                                    # 查找该列是否有重命名
                                     if col in all_renames:
-                                        output_cols_for_select.append(f"`{col.replace('`', '``')}` AS `{all_renames[col].replace('`', '``')}`")
+                                        new_name = all_renames[col]
+                                        proj_cols.append(f"`{col.replace('`', '``')}` AS `{new_name.replace('`', '``')}`")
                                     else:
-                                        output_cols_for_select.append(f"`{col.replace('`', '``')}`")
+                                        proj_cols.append(f"`{col.replace('`', '``')}`")
 
-                                # 检查 select_sql 是否已经是 SELECT * 形态
-                                if re.match(r'^\s*SELECT\s+\*\s+FROM\s*\(', select_sql, re.IGNORECASE):
-                                    # 替换 SELECT * 为显式列列表
+                                proj_cols_str = ", ".join(proj_cols)
+
+                                # 找到最内层 SELECT 的 FROM，替换列列表
+                                # SQL 形态通常是: SELECT * FROM (...最内层子查询...) AS _up0) AS _n
+                                # 我们需要找到最内层的 SELECT * 并替换
+                                import re
+                                # 匹配最内层的 SELECT * FROM (
+                                inner_select_pattern = r'(SELECT\s+\*\s+FROM\s*\()'
+                                match = re.search(inner_select_pattern, select_sql, re.IGNORECASE)
+                                if match:
                                     select_sql = re.sub(
-                                        r'^\s*SELECT\s+\*\s+FROM\s*\(',
-                                        f"SELECT {', '.join(output_cols_for_select)} FROM (",
+                                        inner_select_pattern,
+                                        f"SELECT {proj_cols_str} FROM (",
                                         select_sql,
                                         count=1,
                                         flags=re.IGNORECASE
                                     )
-                                    logger.info(f"[OUTPUT] Using upstream outputColumnKeys: {upstream_output_keys}")
+                                    logger.info(f"[OUTPUT] Projected columns: {proj_cols_str[:200]}...")
+                                else:
+                                    # 如果没有找到 SELECT * FROM (，直接在开头加 SELECT
+                                    logger.warning(f"[OUTPUT] Could not find SELECT * pattern, wrapping with subquery")
+                                    select_sql = f"SELECT {proj_cols_str} FROM ({select_sql}) AS _proj"
+                            else:
+                                # 无 upstream_output_keys 时，应用当前节点的 columnRenames
+                                current_renames = node_config.get("columnRenames", {})
+                                if current_renames:
+                                    select_sql = PipelineEngine._apply_column_renames(select_sql, current_renames)
 
                             logger.info(f"[OUTPUT DEBUG] Node: {node_name} ({node_id})")
                             logger.info(f"[OUTPUT DEBUG] Upstream IDs: {upstream}")
-                            logger.info(f"[OUTPUT DEBUG] Merged renames: {merged_renames}")
                             logger.info(f"[OUTPUT DEBUG] Upstream output keys: {upstream_output_keys}")
-
-                            if merged_renames:
-                                # 提取 SQL 中的列名
-                                cols = PipelineEngine._extract_columns_from_select(select_sql)
-                                select_sql = PipelineEngine._apply_column_renames(select_sql, merged_renames)
+                            sql_preview = select_sql[:300] + "..." if len(select_sql) > 300 else select_sql
+                            logger.info(f"[OUTPUT DEBUG] Final select_sql: {sql_preview}")
 
                             # 先查出当前库中是否存在目标表
                             exist_res = await conn.execute(text(
