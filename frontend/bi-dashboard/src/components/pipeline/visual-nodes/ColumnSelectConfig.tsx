@@ -2,15 +2,17 @@
  * ColumnSelectConfig - Visual column selection + rename for "Select Columns" nodes.
  * Drag-and-drop style two-panel column selector.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Form, Input, Button, Divider, Tag, Typography,
-  Alert, Transfer, Checkbox, Card,
+  Alert, Transfer, Checkbox, Card, Spin,
 } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { getDataTypeInfo } from '../../../utils/nodeTypeRegistry';
+import { useNodePreview } from '../../../hooks/useNodePreview';
+import { resolvePreviewDataSourceId } from '../../../utils/pipelineDataSourceUtils';
 
 const { Text } = Typography;
 
@@ -25,6 +27,7 @@ interface ColumnSelectConfigProps {
   node: GraphNode;
   upstreamNodes: GraphNode[];
   allNodes: GraphNode[];
+  pipelineDataSourceId?: number | null;
   onChange: () => void;
   readOnly?: boolean;
 }
@@ -32,6 +35,8 @@ interface ColumnSelectConfigProps {
 export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
   node,
   upstreamNodes,
+  allNodes,
+  pipelineDataSourceId,
   onChange,
   readOnly = false,
 }) => {
@@ -39,12 +44,83 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
   const config = (pipelineNode.config || {}) as Record<string, unknown>;
   const savedMappings = (config.selectedColumns as ColumnMapping[]) || [];
 
-  // Placeholder all columns (would come from upstream preview)
-  const allColumns: Array<{ name: string; type: string }> = [];
+  // 获取上游节点和数据源 ID
+  const upstreamNode = upstreamNodes[0];
+  const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
+  const upstreamDsId = upstreamPn
+    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
+    : undefined;
 
-  const [mappings, setMappings] = useState<ColumnMapping[]>(
-    savedMappings.length > 0 ? savedMappings : allColumns.map(c => ({ from: c.name, to: c.name, checked: true }))
+  const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview();
+
+  // 签名用于检测上游变化
+  const nodesSignature = useMemo(
+    () => JSON.stringify(allNodes.map(n => ({
+      id: n.id,
+      pn: (n.data.pipelineNode as PipelineNode),
+    }))),
+    [allNodes]
   );
+
+  // 加载上游预览（获取全列信息，用于列选择器）
+  const loadKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!upstreamNode || !upstreamDsId) {
+      return;
+    }
+    const key = `${upstreamNode.id}-${nodesSignature}-${upstreamDsId}`;
+    if (key === loadKeyRef.current) return;
+    loadKeyRef.current = key;
+    clearPreview();
+    loadPreview({
+      node: upstreamNode,
+      allNodes,
+      pipelineDataSourceId: upstreamDsId,
+      limit: 50,
+    }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upstreamNode?.id, nodesSignature, upstreamDsId, loadPreview, clearPreview]);
+
+  // 从预览数据获取所有列（用于选择器）
+  const allColumns = useMemo((): Array<{ name: string; type: string }> => {
+    // 优先使用 allColumns（全列），如果没有则使用 columns（投影后列）
+    const cols = previewData?.allColumns || previewData?.columns || [];
+    const types = previewData?.columnTypes || [];
+    return cols.map((col, idx) => ({
+      name: col,
+      type: types[idx] || 'string',
+    }));
+  }, [previewData]);
+
+  const [mappings, setMappings] = useState<ColumnMapping[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  // 初始化 mappings：当 allColumns 加载完成后
+  useEffect(() => {
+    if (allColumns.length === 0) return;
+    setInitialized(true);
+
+    if (savedMappings.length > 0) {
+      // 使用已保存的映射，但要与最新的 allColumns 合并（可能有新列或删除了旧列）
+      const savedFromSet = new Set(savedMappings.map(m => m.from));
+      const newCols = allColumns.filter(c => !savedFromSet.has(c.name));
+      setMappings([...savedMappings, ...newCols.map(c => ({
+        from: c.name,
+        to: c.name,
+        checked: false,
+        type: c.type,
+      }))]);
+    } else {
+      // 没有保存的映射，初始化为全选
+      setMappings(allColumns.map(c => ({
+        from: c.name,
+        to: c.name,
+        checked: true,
+        type: c.type,
+      })));
+    }
+  }, [allColumns, savedMappings]);
+
   const [showRename, setShowRename] = useState(false);
 
   const updateConfig = (newMappings: ColumnMapping[]) => {

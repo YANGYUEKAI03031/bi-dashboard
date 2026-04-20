@@ -23,6 +23,7 @@ import { OutputNodeConfig } from './visual-nodes/OutputNodeConfig';
 import { MergeNodeConfig } from './visual-nodes/MergeNodeConfig';
 import { ChartNodeConfig } from './visual-nodes/ChartNodeConfig';
 import { TransposeNodeConfig } from './visual-nodes/TransposeNodeConfig';
+import { DeduplicateNodeConfig } from './visual-nodes/DeduplicateNodeConfig';
 
 const { Text } = Typography;
 
@@ -274,6 +275,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 node={selectedNode}
                 upstreamNodes={upstreams}
                 allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
                 onChange={handleFormChange}
                 readOnly={readOnly}
               />
@@ -299,6 +301,16 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             )}
             {pipelineNode?.type === 'transpose' && (
               <TransposeNodeConfig
+                node={selectedNode}
+                upstreamNodes={upstreams}
+                allNodes={allNodes}
+                pipelineDataSourceId={pipelineDataSourceId}
+                onChange={handleFormChange}
+                readOnly={readOnly}
+              />
+            )}
+            {pipelineNode?.type === 'deduplicate' && (
+              <DeduplicateNodeConfig
                 node={selectedNode}
                 upstreamNodes={upstreams}
                 allNodes={allNodes}

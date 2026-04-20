@@ -253,11 +253,7 @@ class PipelineEngine:
                         if canonical_type != "output":
                             node_has_own_sql = bool(node_sql)
                             
-                            if canonical_type == "join":
-                                # JOIN 节点：跳过列投影，避免 outputColumnKeys 中保存的旧列名
-                                # 引发 1054 错误。因为 build_node_sql 已经展开 SELECT * 为显式列了。
-                                pass
-                            elif canonical_type == "aggregate":
+                            if canonical_type == "aggregate":
                                 # aggregate：build_node_sql 已处理 insertedColumns，跳过 insertedColumns 处理
                                 # 仅用 outputColumnKeys 过滤输出列（不传 insertedColumns）
                                 wrapped = PipelineEngine._apply_row_filter(
@@ -266,7 +262,7 @@ class PipelineEngine:
                                 proj_cfg = {k: v for k, v in node_config.items()} if isinstance(node_config, dict) else {}
                                 proj_cfg.pop("insertedColumns", None)
                                 actual_sql = PipelineEngine._apply_column_projection(
-                                    wrapped, proj_cfg, None
+                                    wrapped, proj_cfg, None, is_last_layer=True
                                 )
                             elif not node_has_own_sql and node_config.get("insertedColumns"):
                                 # 节点没有 SQL 但有 insertedColumns：build_node_sql 已生成完整 SQL，
@@ -278,7 +274,7 @@ class PipelineEngine:
                                     actual_sql, node_config
                                 )
                                 actual_sql = PipelineEngine._apply_column_projection(
-                                    actual_sql, node_config, None
+                                    actual_sql, node_config, None, is_last_layer=True
                                 )
 
                         # 验证 SQL 安全性
@@ -308,7 +304,7 @@ class PipelineEngine:
                                 raise ValueError(
                                     f"不支持的写入模式: {write_mode}（应为 replace | append | upsert）"
                                 )
-                            
+
                             # 收集所有上游客的 columnRenames，用于应用列重命名
                             merged_renames: Dict[str, str] = {}
                             for up_id in (upstream or []):
@@ -318,15 +314,60 @@ class PipelineEngine:
                             current_renames = node_config.get("columnRenames", {})
                             if current_renames:
                                 merged_renames.update(current_renames)
-                            
-                            # 详细日志
+
+                            # 收集上游客的 outputColumnKeys，用于导出时只导出预览列
+                            upstream_output_keys: List[str] = []
+                            for up_id in (upstream or []):
+                                up_node = nodes_dict.get(up_id) if 'nodes_dict' in dir() else None
+                                if up_node:
+                                    up_cfg = up_node.get("config") or {}
+                                    up_keys = up_cfg.get("outputColumnKeys", [])
+                                    if up_keys:
+                                        upstream_output_keys = list(up_keys)
+                                        break
+
+                            # 构建 select_sql，优先使用上游客的 outputColumnKeys
+                            select_sql = actual_sql.rstrip().rstrip(";")
+                            if upstream_output_keys:
+                                # 收集所有上游客的重命名映射（从 renameMap）
+                                all_renames: Dict[str, str] = {}
+                                for up_id in (upstream or []):
+                                    up_node_data = None
+                                    for n in nodes:
+                                        if n.get("id") == up_id:
+                                            up_node_data = n
+                                            break
+                                    if up_node_data:
+                                        up_cfg = up_node_data.get("config") or {}
+                                        up_rename_map = up_cfg.get("renameMap") or {}
+                                        all_renames.update(up_rename_map)
+                                all_renames.update(merged_renames)
+
+                                # 将 outputColumnKeys 转换为实际列名（考虑重命名）
+                                output_cols_for_select: List[str] = []
+                                for col in upstream_output_keys:
+                                    if col in all_renames:
+                                        output_cols_for_select.append(f"`{col.replace('`', '``')}` AS `{all_renames[col].replace('`', '``')}`")
+                                    else:
+                                        output_cols_for_select.append(f"`{col.replace('`', '``')}`")
+
+                                # 检查 select_sql 是否已经是 SELECT * 形态
+                                if re.match(r'^\s*SELECT\s+\*\s+FROM\s*\(', select_sql, re.IGNORECASE):
+                                    # 替换 SELECT * 为显式列列表
+                                    select_sql = re.sub(
+                                        r'^\s*SELECT\s+\*\s+FROM\s*\(',
+                                        f"SELECT {', '.join(output_cols_for_select)} FROM (",
+                                        select_sql,
+                                        count=1,
+                                        flags=re.IGNORECASE
+                                    )
+                                    logger.info(f"[OUTPUT] Using upstream outputColumnKeys: {upstream_output_keys}")
+
                             logger.info(f"[OUTPUT DEBUG] Node: {node_name} ({node_id})")
                             logger.info(f"[OUTPUT DEBUG] Upstream IDs: {upstream}")
                             logger.info(f"[OUTPUT DEBUG] Merged renames: {merged_renames}")
-                            
-                            # 应用列重命名到 SQL
-                            select_sql = actual_sql.rstrip().rstrip(";")
-                            
+                            logger.info(f"[OUTPUT DEBUG] Upstream output keys: {upstream_output_keys}")
+
                             if merged_renames:
                                 # 提取 SQL 中的列名
                                 cols = PipelineEngine._extract_columns_from_select(select_sql)
@@ -965,7 +1006,32 @@ class PipelineEngine:
         if left_cols and right_cols:
             parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
             for c in right_cols:
-                if c not in left_set and c not in on_right_set:
+                if c in on_right_set:
+                    continue  # ON 列不添加（左表对应列已在结果中）
+                if c in left_set:
+                    # 同名列：添加递增后缀（如 _b, _c, _d...）
+                    # 找出左表中已有该 base 的最大后缀
+                    base = c
+                    max_suffix = 0
+                    # 匹配模式：base、base_b、base_c 等
+                    suffix_pattern = re.compile(rf"^{re.escape(base)}(?:_([a-z]))?$")
+                    for lc in left_cols:
+                        m = suffix_pattern.match(lc)
+                        if m:
+                            suf = m.group(1)
+                            if suf is None:
+                                # 基础列本身（未加后缀），视为 suffix=0
+                                max_suffix = max(max_suffix, 0)
+                            else:
+                                # 转换 a=1, b=2, c=3, ...
+                                val = ord(suf) - ord('a') + 1
+                                max_suffix = max(max_suffix, val)
+                    # 下一个后缀
+                    next_suffix = chr(ord('a') + max_suffix)
+                    b_col = PipelineEngine._safe_identifier(c)
+                    b_alias = PipelineEngine._safe_identifier(f"{c}_{next_suffix}")
+                    parts.append(f"b.{b_col} AS {b_alias}")
+                else:
                     parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
             return ", ".join(parts)
         
@@ -1131,6 +1197,9 @@ class PipelineEngine:
         """
         jt = (join_type or "inner").lower()
         on_set = set(on_right_cols) if on_right_cols else set()
+        
+        # DEBUG: 打印输入参数
+        print(f"[JOIN ALLOWED COLS] jt={jt}, left_cols={left_cols}, right_cols={right_cols}, on_right_cols={list(on_set)}")
 
         if jt == "left_anti":
             return set(left_cols) if left_cols is not None else None
@@ -1164,11 +1233,24 @@ class PipelineEngine:
                 if c not in left_set:
                     # 右表独有的列，直接添加
                     names.append(c)
-                elif jt in ("left", "right"):
-                    # 左右表都有此列且为 left/right join，需要加 _b 后缀以区分
-                    names.append(f"{c}_b")
-                # inner join 时同名列不需要加 _b（会被覆盖）
-            return set(names)
+                else:
+                    # 同名列：计算递增后缀，与 _join_explicit_select_list 保持一致
+                    base = c
+                    max_suffix = 0
+                    suffix_pattern = re.compile(rf"^{re.escape(base)}(?:_([a-z]))?$")
+                    for lc in left_cols:
+                        m = suffix_pattern.match(lc)
+                        if m:
+                            suf = m.group(1)
+                            if suf is None:
+                                max_suffix = max(max_suffix, 0)
+                            else:
+                                val = ord(suf) - ord('a') + 1
+                                max_suffix = max(max_suffix, val)
+                    next_suffix = chr(ord('a') + max_suffix)
+                    names.append(f"{c}_{next_suffix}")
+            result = set(names)
+            return result
 
         if left_cols is not None and right_cols is None and jt in ("left", "right") and on_right_cols:
             # LEFT/RIGHT JOIN：左表全列 + 右表独有列（ON 列排除）
@@ -1254,6 +1336,22 @@ class PipelineEngine:
         # 没有 SQL 但有 insertedColumns - 使用 insertedColumns 生成 SQL
         if not sql and config.get("insertedColumns"):
             return self._build_sql_from_inserted_columns(upstream_refs, config, node_type="")
+        
+        # column_select 节点：即使没有 SQL，也要根据 selectedColumns 投影列
+        if not sql and canonical_type == "column_select":
+            selected = config.get("selectedColumns", []) or []
+            if selected:
+                cols = [
+                    (
+                        f"{PipelineEngine._safe_identifier(sc.get('from', ''))} AS {PipelineEngine._safe_identifier(sc.get('to', sc.get('from', '')))}"
+                        if sc.get("from") != sc.get("to")
+                        else PipelineEngine._safe_identifier(sc.get("from", ""))
+                    )
+                    for sc in selected
+                    if sc.get("from")
+                ]
+                if cols:
+                    return f"SELECT {', '.join(cols)} FROM {upstream_refs[0]}"
         
         # 没有 SQL 也没有 insertedColumns - 直接使用上游临时表（透传）
         if not sql:
@@ -2095,6 +2193,7 @@ class PipelineEngine:
         sql: str,
         config: Dict[str, Any],
         allowed_sql_columns: Optional[Set[str]] = None,
+        is_last_layer: bool = False,
     ) -> str:
         """
         若 config 中含 outputColumnKeys，外层投影这些列。
@@ -2130,11 +2229,17 @@ class PipelineEngine:
         safe_cols: List[str] = []
 
         def _is_column_in_output(col: str) -> Optional[str]:
-            """检查列是否应该出现在输出中。"""
+            """检查列是否应该出现在输出中。返回内层实际的列名（可能带后缀）"""
             original = str(rename_map.get(col, col)).strip()
-            if allowed_sql_columns is not None and original not in allowed_sql_columns:
-                if f"{original}_b" not in allowed_sql_columns:
-                    return None
+            if allowed_sql_columns is not None:
+                if original in allowed_sql_columns:
+                    return original
+                # 支持多级后缀：_b, _c, _d...（JOIN 右表同名列）
+                import re
+                pattern = rf"^{re.escape(original)}(?:_[a-z])+$"
+                for allowed in allowed_sql_columns:
+                    if re.match(pattern, allowed):
+                        return allowed
                 return None
             return original
 
@@ -2150,8 +2255,12 @@ class PipelineEngine:
                     original = str(rename_map.get(col, col)).strip()
                     if original in allowed_sql_columns:
                         return True
-                    if f"{original}_b" in allowed_sql_columns:
-                        return True
+                    # 支持多级后缀 _b, _c, _d 等
+                    import re
+                    pattern = rf"^{re.escape(original)}(?:_[a-z])*$"
+                    for allowed in allowed_sql_columns:
+                        if re.match(pattern, allowed):
+                            return True
                     return False
                 keys_use = [col for col in output_keys if _is_column_allowed(col)]
             for col in keys_use:
@@ -2380,11 +2489,15 @@ class PipelineEngine:
             return None
 
         if canonical == "aggregate":
+            # DEBUG: 打印输入
+            print(f"[AGG INFER] node_type={node_type}, upstream_cols={upstream_cols}, aggregations={config.get('aggregations')}, insertedColumns={config.get('insertedColumns')}")
+            
             # 优先从 node.sql 解析 AS 别名，这是实际执行的真实列名
             node_sql: str = config.get("sql", "") or ""
             if node_sql:
                 aliases_from_sql = PipelineEngine._extract_sql_aliases(node_sql)
                 if aliases_from_sql:
+                    print(f"[AGG INFER] 从 SQL 解析别名: {aliases_from_sql}")
                     return aliases_from_sql
 
             group_by: List[str] = config.get("groupBy", []) or []
@@ -2410,8 +2523,24 @@ class PipelineEngine:
                         if new_name:
                             parts.append(new_name)
             
+            print(f"[AGG INFER] parts={parts}, raw_aggs={raw_aggs}, inserted_columns={inserted_columns}")
+            
             # 如果有输出列，返回；否则透传上游列
             if parts:
+                # 重要：与 build_node_sql 保持一致
+                # - 有聚合配置时：只返回 groupBy + 聚合别名 + insertedColumns（不含上游原始列）
+                # - 无聚合但有 insertedColumns 时：返回上游列 + insertedColumns
+                if not raw_aggs and inserted_columns and upstream_cols and upstream_cols[0] is not None:
+                    # 无聚合但有 insertedColumns：输出列 = 上游列 + insertedColumns（与 SELECT *, {新列} 一致）
+                    result = list(upstream_cols[0])
+                    for col_config in inserted_columns:
+                        if isinstance(col_config, dict):
+                            new_name = str(col_config.get("name", "")).strip()
+                            if new_name:
+                                result.append(new_name)
+                    print(f"[AGG INFER] no agg but has inserted, returning {len(result)} columns: {result}")
+                    return result
+                print(f"[AGG INFER] returning parts: {parts}")
                 return parts
             if upstream_cols and upstream_cols[0] is not None:
                 return list(upstream_cols[0])
@@ -2447,6 +2576,17 @@ class PipelineEngine:
                     out.append(f"{agg}_{col_name}_{safe_pv}")
             return out if out else None
 
+        if canonical == "deduplicate":
+            dedup_columns: List[str] = config.get("dedupColumns", []) or []
+            print(f"[DEDUP INFER] dedupColumns={dedup_columns}, upstream_cols={upstream_cols}")
+            # 去重后输出列与上游相同
+            if upstream_cols and upstream_cols[0] is not None:
+                result = list(upstream_cols[0])
+                print(f"[DEDUP INFER] returning {len(result)} columns: {result}")
+                return result
+            print(f"[DEDUP INFER] upstream_cols is None, returning None")
+            return None
+
         if canonical == "join":
             # UNION：若有 unionColumnPlan 可推断输出列名
             if merge_type and merge_type.lower() in ("union", "union all"):
@@ -2479,9 +2619,8 @@ class PipelineEngine:
             if left_cols is None and right_cols is None:
                 return None
             if left_cols is not None and right_cols is not None:
-                # 两侧均可推断：
-                # - INNER JOIN：右表同名列被左表覆盖，结果只有左表列 + 右表独有列
-                # - LEFT/RIGHT JOIN：需要区分左右表的同名列，右表列加 _b 后缀
+                # 两侧均可推断：同名非 ON 列加递增后缀（_b, _c, _d...）
+                # 与 _join_preview_allowed_sql_columns 和 _join_explicit_select_list 保持一致
                 on_right_cols: List[str] = []
                 for k in config.get("joinKeys", []) or []:
                     if rc := str(k.get("rightCol", "") or "").strip():
@@ -2491,12 +2630,25 @@ class PipelineEngine:
                 out: List[str] = list(left_cols)
                 for c in right_cols:
                     if c in on_set:
-                        continue  # ON 列不添加
+                        continue  # ON 列不添加（左表对应列已在结果中）
                     if c not in left_set:
                         out.append(c)  # 右表独有的列
-                    elif join_type in ("left", "right"):
-                        out.append(f"{c}_b")  # 同名列加 _b 后缀
-                    # INNER JOIN 时同名列不添加（被左表覆盖）
+                    else:
+                        # 同名列：计算递增后缀
+                        base = c
+                        max_suffix = 0
+                        suffix_pattern = re.compile(rf"^{re.escape(base)}(?:_([a-z]))?$")
+                        for lc in left_cols:
+                            m = suffix_pattern.match(lc)
+                            if m:
+                                suf = m.group(1)
+                                if suf is None:
+                                    max_suffix = max(max_suffix, 0)
+                                else:
+                                    val = ord(suf) - ord('a') + 1
+                                    max_suffix = max(max_suffix, val)
+                        next_suffix = chr(ord('a') + max_suffix)
+                        out.append(f"{c}_{next_suffix}")
                 return out
             if left_cols is not None:
                 # 仅左已知：右表用 a.*，列名无法静态确定
@@ -3414,6 +3566,36 @@ class PipelineEngine:
                 select_sql = f"{index_sql}, {', '.join(case_parts)}"
                 return f"SELECT {select_sql} FROM ({ref}) AS t GROUP BY {index_sql}{_limit_clause}", []
 
+        if node_type == "deduplicate":
+            dedup_columns = config.get("dedupColumns", []) or []
+            keep_mode = config.get("keepMode", "first")
+            if upstream_refs:
+                ref, _ = upstream_refs[0]
+                if not dedup_columns:
+                    # 无指定列时返回 DISTINCT
+                    return f"SELECT DISTINCT * FROM ({ref}) AS t{_limit_clause}", []
+                # 使用 ROW_NUMBER 实现去重
+                part_cols = ", ".join(PipelineEngine._safe_identifier(c) for c in dedup_columns)
+                # MySQL 8.0+ 不支持 ORDER BY 位置指示(ORDER BY 1)，使用第一个去重列保持稳定排序
+                order_col = PipelineEngine._safe_identifier(dedup_columns[0])
+                if keep_mode == "last":
+                    # 留末条：逆序排序
+                    dedup_sql = (
+                        f"SELECT * FROM ("
+                        f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {part_cols} ORDER BY {order_col} DESC) AS _rn "
+                        f"FROM ({ref}) AS t"
+                        f") AS _dedup WHERE _rn = 1"
+                    )
+                else:
+                    # 留首条（默认）
+                    dedup_sql = (
+                        f"SELECT * FROM ("
+                        f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {part_cols} ORDER BY {order_col}) AS _rn "
+                        f"FROM ({ref}) AS t"
+                        f") AS _dedup WHERE _rn = 1"
+                    )
+                return f"{dedup_sql}{_limit_clause}", []
+
         if node_type == "output":
             # Output 节点预览上游数据
             if upstream_refs:
@@ -3517,7 +3699,8 @@ class PipelineEngine:
             upstream_cols: List[Optional[List[str]]] = [
                 node_columns.get(u) for u in valid_ups
             ]
-
+            logger.debug(f"[CHAINED] node={nid}, type={ntype}, upstream_cols={upstream_cols}")
+            
             # INNER JOIN：若仅左表可推断列、右表不可（上游顺序常为「聚合→源表」），
             # 交换两侧子查询，使「列未知」在 AS a，便于展开为 a.* + b 显式列并排除 ON 右列（与执行语义一致）。
             canonical_pre = PipelineEngine._canonical_pipeline_node_type(ntype)
@@ -3577,6 +3760,7 @@ class PipelineEngine:
                             on_right_cols.append(rc)
                     if not on_right_cols:
                         on_right_cols = PipelineEngine._extract_join_on_right_column_names_from_sql(core_sql)
+                    logger.debug(f"[JOIN EXPAND] join_type={join_type}, on_right_cols={on_right_cols}, upstream_cols[0]={upstream_cols[0]}, upstream_cols[1]={upstream_cols[1]}")
                     core_sql = PipelineEngine._expand_join_select_for_preview(
                         core_sql,
                         upstream_cols[0],
@@ -3622,41 +3806,57 @@ class PipelineEngine:
                 elif jt_allow == "right_anti" and rc1 is None:
                     skip_proj = True
 
+            # 输出节点：当没有 outputColumnKeys 时，应该使用上游节点的输出列来投影
+            # 避免 SELECT * 返回过多列，导致预览和预期不一致
+            output_keys: List[str] = nconfig.get("outputColumnKeys", []) or []
+            if canonical == "output" and not output_keys and upstream_cols and upstream_cols[0] is not None:
+                output_keys = list(upstream_cols[0])
+            
             # JOIN：跳过列投影，直接保留内层展开的所有列
             # 因为 _expand_join_select_for_preview 已经将 SELECT * 展开为显式列列表
-            # 如果再应用 outputColumnKeys 投影，可能会引用不存在的新列名（如 sum_星级_b）
             # aggregate 节点：build_node_sql 已经生成了完整 SQL（包含 insertedColumns），
             #   _apply_column_projection 不应再处理 insertedColumns（会重复）
-            #   但 outputColumnKeys 仍需处理（用于列筛选）
-            if not skip_proj:
-                if canonical == "join" and allowed_proj is not None:
-                    # JOIN 节点跳过列投影，保留展开后的完整列
-                    pass
-                elif canonical == "aggregate":
+            # 输出节点：需要应用列投影来限制输出列数
+            effective_output_keys = list(output_keys) if output_keys else []
+            if canonical == "output" and effective_output_keys:
+                # 导出节点使用上游列进行投影
+                output_proj_cfg = dict(nconfig) if isinstance(nconfig, dict) else {}
+                output_proj_cfg["outputColumnKeys"] = effective_output_keys
+                wrapped_sql = PipelineEngine._apply_column_projection(
+                    wrapped_sql, output_proj_cfg, allowed_proj, is_last_layer=True
+                )
+            elif not skip_proj:
+                if canonical == "aggregate":
                     # aggregate：build_node_sql 已处理 insertedColumns，跳过 insertedColumns 处理
                     # 仅用 outputColumnKeys 过滤输出列（不传 insertedColumns）
                     proj_cfg = {k: v for k, v in nconfig.items()} if isinstance(nconfig, dict) else {}
                     proj_cfg.pop("insertedColumns", None)
                     wrapped_sql = PipelineEngine._apply_column_projection(
-                        wrapped_sql, proj_cfg, allowed_proj
+                        wrapped_sql, proj_cfg, allowed_proj, is_last_layer=True
                     )
                 else:
                     wrapped_sql = PipelineEngine._apply_column_projection(
-                        wrapped_sql, nconfig, allowed_proj
+                        wrapped_sql, nconfig, allowed_proj, is_last_layer=True
                     )
 
             # 推断当前节点的输出列（用于下游 JOIN 展开）
-            output_keys: List[str] = nconfig.get("outputColumnKeys", []) or []
             rename_nm: Dict[str, str] = dict(nconfig.get("renameMap") or {})
+            print(f"[BUILD SQL] node={nid}, type={ntype}, joinType={nconfig.get('joinType')}, output_keys={output_keys}, upstream_cols={upstream_cols}, allowed_proj={allowed_proj}")
+            
+            # JOIN 节点：当无 outputColumnKeys 时，直接用 allowed_proj 作为输出列
+            # allowed_proj 已经包含了 _b 后缀的列（如 avg_星级_b），比静态推断更准确
             if output_keys:
                 if allowed_proj is not None:
-                    # 检查列名或其带 _b 后缀的版本是否在 allowed_proj 中
+                    # 检查列名或其带后缀版本(_b, _c...)是否在 allowed_proj 中
+                    import re
                     def _col_in_allowed(col: str) -> bool:
                         original = str(rename_nm.get(col, col)).strip()
                         if original in allowed_proj:
                             return True
-                        if f"{original}_b" in allowed_proj:
-                            return True
+                        pattern = rf"^{re.escape(original)}(?:_[a-z])?$"
+                        for allowed in allowed_proj:
+                            if re.match(pattern, allowed):
+                                return True
                         return False
                     
                     eff = [col for col in output_keys if _col_in_allowed(col)]
@@ -3669,9 +3869,16 @@ class PipelineEngine:
                 else:
                     node_columns[nid] = list(output_keys)
             else:
-                node_columns[nid] = PipelineEngine._preview_infer_output_columns(
-                    ntype, nconfig, upstream_cols, nmerge_type
-                )
+                # 无 outputColumnKeys 时：JOIN 节点用 allowed_proj（包含 _b 后缀），其他用静态推断
+                if canonical == "join" and allowed_proj is not None:
+                    # 将 allowed_proj 转为有序列表，保持一致性
+                    # allowed_proj 已经是完整的展开后列名集合（包含 _b 后缀）
+                    node_columns[nid] = sorted(allowed_proj, key=lambda x: x)
+                else:
+                    inferred = PipelineEngine._preview_infer_output_columns(
+                        ntype, nconfig, upstream_cols, nmerge_type
+                    )
+                    node_columns[nid] = inferred
 
             # 仅最外层（focus 节点）加 LIMIT
             if is_focus and wrapped_sql:
@@ -3765,7 +3972,9 @@ class PipelineEngine:
                 ):
                     foc_cfg = graph_nodes[focus_node_id].get("config") or {}
                     out_keys = foc_cfg.get("outputColumnKeys") or []
-                    if isinstance(out_keys, list) and len(out_keys) > 0:
+                    # 当 focus_node 配置了 outputColumnKeys 时，查询全列以便列选择器展示
+                    # 或者当 outputColumnKeys 为空（未限制列，全选模式）时，也需要查询全列
+                    if isinstance(out_keys, list):
                         g_clear = PipelineEngine._graph_focus_without_output_column_keys(
                             graph_nodes, focus_node_id
                         )
@@ -3776,6 +3985,7 @@ class PipelineEngine:
                             limit=1,
                         )
                         if sql_full and sql_full.strip():
+                            print(f"[ALL COLS SQL] sql_full: {sql_full[:500]}")
                             try:
                                 r_meta = await conn.execute(text(sql_full))
                                 all_columns = (
@@ -3783,6 +3993,7 @@ class PipelineEngine:
                                     if hasattr(r_meta, "keys") and r_meta.keys()
                                     else []
                                 )
+                                print(f"[ALL COLS] all_columns: {all_columns}")
                             except Exception as meta_err:
                                 logger.warning(
                                     "预览全列名查询失败（列选择 UI 将退化为当前投影列）: %s",

@@ -10,7 +10,7 @@ class PipelineNodeCreate(BaseModel):
     id: Optional[str] = None  # 节点ID，如 "step_1"
     name: str = Field(..., description="节点名称")
     type: str = Field(default="transform", description="节点类型: source | transform | output | merge")
-    sql: str = Field(..., description="SQL 语句")
+    sql: str = Field(default="", description="SQL 语句")
     order: int = Field(..., description="执行顺序")
     upstream: Optional[List[str]] = Field(default=None, description="上游节点 ID 列表")
     position: Optional[Dict[str, float]] = Field(default=None, description="画布坐标 {x, y}")
@@ -43,7 +43,7 @@ class PipelineNodeResponse(BaseModel):
     id: str
     name: str
     type: str
-    sql: str
+    sql: str = ""
     order: int
     upstream: Optional[List[str]] = None
     position: Optional[Dict[str, float]] = None

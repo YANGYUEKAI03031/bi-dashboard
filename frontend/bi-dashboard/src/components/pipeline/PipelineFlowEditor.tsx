@@ -341,6 +341,18 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     );
   }
 
+  if (node.type === 'deduplicate') {
+    const dedupCols = (config.dedupColumns as string[]) || [];
+    const keepMode = (config.keepMode as string) || 'first';
+    return (
+      <div className="pipeline-node-card-summary">
+        {renderChip('去重')}
+        {dedupCols.length > 0 && renderChip(dedupCols[0], dedupCols.length > 1 ? `+${dedupCols.length - 1}` : undefined, true)}
+        {renderChip(keepMode === 'first' ? '留首' : '留末', undefined, true)}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -415,6 +427,16 @@ function AddNodePalette({ onAdd }: { onAdd: (type: string) => void }) {
             </Space>
           ),
           onClick: () => onAdd('transpose'),
+        },
+        {
+          key: 'deduplicate',
+          label: (
+            <Space style={{ fontSize: 12 }}>
+              <DeleteOutlined style={{ color: NODE_TYPE_REGISTRY.deduplicate?.color ?? '#EF4444' }} />
+              去除重复
+            </Space>
+          ),
+          onClick: () => onAdd('deduplicate'),
         },
       ],
     },

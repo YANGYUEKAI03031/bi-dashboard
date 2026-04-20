@@ -14,6 +14,7 @@ import {
   ExportOutlined,
   HolderOutlined,
   PieChartOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 
 /** Data type colors for column chips */
@@ -70,6 +71,7 @@ export const EDITOR_NODE_TYPE_ORDER: string[] = [
   'aggregate',
   'join',
   'column_select',
+  'deduplicate',
   'transpose',
   'output',
   'chart',
@@ -156,6 +158,20 @@ export const NODE_TYPE_REGISTRY: Record<string, NodeTypeDefinition> = {
     description: '选择需要的列并可重命名',
     icon: <AppstoreOutlined />,
     allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select'],
+  },
+  deduplicate: {
+    type: 'deduplicate',
+    label: '去重',
+    labelShort: '去重',
+    color: '#EF4444',
+    bgColor: '#FEF2F2',
+    borderColor: '#EF4444',
+    tagBg: '#FECACA',
+    tagColor: '#DC2626',
+    hasPreview: true,
+    description: '基于指定列去除重复行（类似 pandas drop_duplicates）',
+    icon: <DeleteOutlined />,
+    allowedUpstreamTypes: ['source', 'filter', 'aggregate', 'join', 'column_select', 'merge'],
   },
   output: {
     type: 'output',
