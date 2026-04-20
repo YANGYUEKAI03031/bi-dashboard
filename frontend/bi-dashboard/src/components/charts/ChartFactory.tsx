@@ -549,45 +549,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const baseSidePadding = isVeryNarrowCanvas ? (compact ? 10 : 12) : (compact ? 14 : 18);
 
     /**
-     * 这里的关键点：
-     * - ECharts 的 grid.left / grid.right 是「整个坐标系」到容器边缘的距离，
-     *   Y 轴刻度文字大部分会落在 grid.left 这一块区域里。
-     * - 为了让 grid 区域（绘图区）在容器中居中，我们需要考虑 Y 轴标签的宽度。
-     * - 策略：让 grid 区域本身居中，Y 轴标签占用 grid.left 的空间。
-     *   这样 X 轴标签（nameLocation: 'middle'）就能和 grid 区域对齐。
+     * 统一网格策略：使用固定边距而非动态计算
+     * 确保所有图表的 X 轴绘图区宽度比例一致
      */
-    // 计算 Y 轴标签占用的实际宽度（包括一些边距）
-    // 注意：ECharts 的 Y 轴标签会占用 grid.left 区域内的空间
-    // 我们需要更准确地估算这个宽度，以确保 grid 区域居中
-    // 增加额外的安全边距，确保 Y 轴标签不会被裁剪
-    const yAxisLabelSpace = Math.max(
-      Math.round(yAxisLabelWidthEstimate * 1.2), // 增加 20% 的安全边距
-      isVeryNarrowCanvas ? 35 : 50 // 增加最小空间要求
-    );
-    
-    // 关键修复：将 containLabel 默认设置为 false
-    // 因为 containLabel: true 会让 ECharts 自动调整 grid.left，导致我们的居中设置失效
-    // 通过手动预留足够的空间（yAxisLabelSpace），我们可以更好地控制布局
-    const useContainLabel = config.grid?.containLabel !== undefined ? config.grid.containLabel : false;
-    
-    // 为了让整个图表（包括 Y 轴标签）在容器中视觉居中：
-    // - 左侧总宽度（包括 Y 轴标签）= baseSidePadding + yAxisLabelSpace
-    // - 右侧宽度 = gridRight
-    // - 要让整体视觉居中，需要：左侧总宽度 = 右侧宽度
-    // - 所以 gridRight = baseSidePadding + yAxisLabelSpace
-    // - 这样 grid 区域会稍微偏右，但加上左侧的 Y 轴标签后，整体视觉上居中
-    // 注意：grid 区域的中心 = (gridLeft + containerWidth - gridRight) / 2
-    // 如果 gridLeft = gridRight，那么 grid 区域中心 = containerWidth / 2（容器中心）
-    // 但视觉上，整个图表（包括 Y 轴标签）的中心会偏右，因为 Y 轴标签在左侧
-    // 所以我们需要让 grid 区域稍微偏左，这样加上 Y 轴标签后，整体视觉上居中
-    // 策略：让 gridRight 稍大一些，使 grid 区域稍微偏左
-    // 但考虑到 Y 轴标签的实际占用可能小于 yAxisLabelSpace（因为我们增加了 20% 的安全边距），
-    // 我们让 gridRight 稍微小一些，使 grid 区域稍微偏左，这样整体视觉上更居中
-    const gridLeft = baseSidePadding + yAxisLabelSpace;
-    // 为了让整体视觉居中，右侧应该等于左侧总宽度
-    // 但考虑到 Y 轴标签的实际占用可能小于 yAxisLabelSpace，我们稍微调整
-    // 尝试让 gridRight = baseSidePadding + yAxisLabelSpace，看看效果
-    const gridRight = baseSidePadding + yAxisLabelSpace; // 让左右对称，使整体视觉居中
+    // 统一使用固定的基础边距，避免因数据不同导致边距不同
+    const fixedYAxisPadding = isVeryNarrowCanvas ? 40 : 60;
+    const gridLeft = baseSidePadding + fixedYAxisPadding;
+    const gridRight = baseSidePadding + fixedYAxisPadding;
 
     // 估算标题和图例在顶部占用的空间，避免"标题/图例压进绘图区"
     // 增加预留空间，确保标题和图例有足够空间显示，不会与绘图区重叠
@@ -607,7 +575,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       // 为标题和顶部图例预留足够空间，避免文字进入绘图区
       top: gridTop,
       // 默认设置为 false，避免 ECharts 自动调整 grid 区域导致居中失效
-      containLabel: useContainLabel
+      containLabel: false
     };
     // 确保用户传入的 config.grid 不会覆盖我们的 left/right 设置（除非用户明确指定）
     const gridOption: any = {
@@ -777,6 +745,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     switch (config.type.toLowerCase()) {
       case 'bar': {
         const isMultiBarSeries = yFields.length > 1;
+        const dataPointCount = xAxisData.length;
+        const seriesCount = yFields.length;
+        const minBarWidth = 8;
+        const maxBarWidth = isMultiBarSeries ? 20 : 36;
+        const dynamicBarWidth = Math.min(
+          maxBarWidth,
+          Math.max(minBarWidth, Math.floor(containerWidth / dataPointCount / seriesCount * 0.7))
+        );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
@@ -794,16 +770,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           }),
           // 当有多个 Y 轴字段（多系列）时，不固定百分比宽度，只限制最大像素宽度并设置合理的间距，
           // 避免一组类目下柱子总宽度超过可用带宽而出现“折叠/重叠”。
-          ...(isMultiBarSeries
-            ? {
-                barMaxWidth: 24,
-                barGap: '30%',
-                barCategoryGap: '45%'
-              }
-            : {
-                barWidth: '60%',
-                barMaxWidth: 40
-              }),
+          barWidth: dynamicBarWidth,
+          barMaxWidth: maxBarWidth,
+          barGap: isMultiBarSeries ? '10%' : '20%',
+          barCategoryGap: '15%',
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: {
@@ -1091,15 +1061,22 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         
       case 'stacked_bar':
         // 堆积柱形图
+        const stackedDataPointCount = xAxisData.length;
+        const stackedSeriesCount = yFields.length;
+        const stackedMinBarWidth = 8;
+        const stackedMaxBarWidth = 36;
+        const stackedDynamicBarWidth = Math.min(
+          stackedMaxBarWidth,
+          Math.max(stackedMinBarWidth, Math.floor(containerWidth / stackedDataPointCount / stackedSeriesCount * 0.7))
+        );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
           stack: '总量',
           data: sortedData.map(item => item[field] || 0),
-          // For stacked bars, all series share the same category bar width.
-          // Avoid barGap/barCategoryGap here (they are for grouped bars) to prevent visual artifacts.
-          barWidth: '60%',
-          barMaxWidth: 40,
+          barWidth: stackedDynamicBarWidth,
+          barMaxWidth: stackedMaxBarWidth,
+          barCategoryGap: '15%',
           itemStyle: {
             opacity: 1,
             borderRadius: index === yFields.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0],
@@ -1151,6 +1128,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         const effectiveLineFields = lineCandidates.filter(f => !effectiveBarFields.includes(f));
 
         const isMultiBarSeries = effectiveBarFields.length > 1;
+        const barLineDataPointCount = xAxisData.length;
+        const barLineDynamicBarWidth = Math.min(
+          36,
+          Math.max(8, Math.floor(containerWidth / barLineDataPointCount * 0.7))
+        );
         baseOption.yAxis = [
           {
             type: 'value',
@@ -1193,9 +1175,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
               : opacity != null ? { value: val, itemStyle: { opacity } } : val;
           }),
-          ...(isMultiBarSeries
-            ? { barMaxWidth: 24, barGap: '30%', barCategoryGap: '45%' }
-            : { barWidth: '60%', barMaxWidth: 40 }),
+          barWidth: isMultiBarSeries ? 20 : barLineDynamicBarWidth,
+          barMaxWidth: isMultiBarSeries ? 20 : 36,
+          barGap: isMultiBarSeries ? '10%' : '20%',
+          barCategoryGap: '15%',
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: {
@@ -1235,6 +1218,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         
       case 'waterfall':
         // 瀑布图 - 需要计算累积值
+        const waterfallDataPointCount = xAxisData.length;
+        const waterfallDynamicBarWidth = Math.min(
+          36,
+          Math.max(8, Math.floor(containerWidth / waterfallDataPointCount * 0.7))
+        );
         let cumulative = 0;
         const waterfallData = sortedData.map((item, index) => {
           const value = item[yFields[0]] || 0;
@@ -1267,8 +1255,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               }
             }
           })),
-          barWidth: '60%',
-          barMaxWidth: 40,
+          barWidth: waterfallDynamicBarWidth,
+          barMaxWidth: 36,
           emphasis: {
             itemStyle: {
               shadowBlur: 10,
@@ -1438,20 +1426,22 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       default:
         // 默认使用柱状图
         const isMultiDefaultBarSeries = yFields.length > 1;
+        const defaultDataPointCount = xAxisData.length;
+        const defaultSeriesCount = yFields.length;
+        const defaultMinBarWidth = 8;
+        const defaultMaxBarWidth = isMultiDefaultBarSeries ? 20 : 36;
+        const defaultDynamicBarWidth = Math.min(
+          defaultMaxBarWidth,
+          Math.max(defaultMinBarWidth, Math.floor(containerWidth / defaultDataPointCount / defaultSeriesCount * 0.7))
+        );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
           data: sortedData.map(item => item[field] || 0),
-          ...(isMultiDefaultBarSeries
-            ? {
-                barMaxWidth: 24,
-                barGap: '30%',
-                barCategoryGap: '45%'
-              }
-            : {
-                barWidth: '60%',
-                barMaxWidth: 40
-              }),
+          barWidth: defaultDynamicBarWidth,
+          barMaxWidth: defaultMaxBarWidth,
+          barGap: isMultiDefaultBarSeries ? '10%' : '20%',
+          barCategoryGap: '15%',
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: {
