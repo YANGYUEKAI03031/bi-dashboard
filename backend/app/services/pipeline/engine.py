@@ -1375,7 +1375,38 @@ class PipelineEngine:
         
         # 没有 SQL 也没有 insertedColumns - 直接使用上游临时表（透传）
         if not sql:
-            # 直接返回上游引用，占位符已在 upstream_refs 中展开
+            # deduplicate 节点：即使没有 SQL，也要根据 dedupColumns 应用去重逻辑
+            if canonical_type == "deduplicate":
+                dedup_columns = config.get("dedupColumns", []) or []
+                keep_mode = config.get("keepMode", "first")
+                logger.info(f"[DEDUP STEP] deduplicate node, dedupColumns={dedup_columns}, keepMode={keep_mode}")
+                if dedup_columns:
+                    # 使用 ROW_NUMBER 实现去重
+                    part_cols = ", ".join(PipelineEngine._safe_identifier(c) for c in dedup_columns)
+                    order_col = PipelineEngine._safe_identifier(dedup_columns[0])
+                    if keep_mode == "last":
+                        dedup_sql = (
+                            f"SELECT * FROM ("
+                            f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {part_cols} ORDER BY {order_col} DESC) AS _rn "
+                            f"FROM {upstream_refs[0]}"
+                            f") AS _dedup WHERE _rn = 1"
+                        )
+                    else:
+                        dedup_sql = (
+                            f"SELECT * FROM ("
+                            f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {part_cols} ORDER BY {order_col}) AS _rn "
+                            f"FROM {upstream_refs[0]}"
+                            f") AS _dedup WHERE _rn = 1"
+                        )
+                    logger.info(f"[DEDUP STEP] Generated dedup SQL: {dedup_sql[:200]}...")
+                    return dedup_sql
+                else:
+                    # 无 dedupColumns 时返回 DISTINCT
+                    logger.info(f"[DEDUP STEP] No dedupColumns, using DISTINCT")
+                    result = f"SELECT DISTINCT * FROM {upstream_refs[0]}"
+                    return PipelineEngine._apply_column_formats(result, config)
+            
+            # 其他节点直接透传
             result = f"SELECT * FROM {upstream_refs[0]}"
             # 应用 previewColumnFormats 格式转换
             return PipelineEngine._apply_column_formats(result, config)
@@ -3589,6 +3620,7 @@ class PipelineEngine:
         if node_type == "deduplicate":
             dedup_columns = config.get("dedupColumns", []) or []
             keep_mode = config.get("keepMode", "first")
+            logger.info(f"[DEDUP] node_type=deduplicate, dedupColumns={dedup_columns}, keepMode={keep_mode}")
             if upstream_refs:
                 ref, _ = upstream_refs[0]
                 if not dedup_columns:
@@ -3598,6 +3630,7 @@ class PipelineEngine:
                 part_cols = ", ".join(PipelineEngine._safe_identifier(c) for c in dedup_columns)
                 # MySQL 8.0+ 不支持 ORDER BY 位置指示(ORDER BY 1)，使用第一个去重列保持稳定排序
                 order_col = PipelineEngine._safe_identifier(dedup_columns[0])
+                logger.info(f"[DEDUP] Using PARTITION BY {part_cols} ORDER BY {order_col}")
                 if keep_mode == "last":
                     # 留末条：逆序排序
                     dedup_sql = (
