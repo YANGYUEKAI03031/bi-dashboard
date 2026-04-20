@@ -592,14 +592,16 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       title: showTitle
         ? {
             text: titleText,
-            left: 'center', // 标题居中显示
-            top: compact ? 12 : 16, // 显式设置标题顶部位置
+            left: 'center',
+            top: compact ? 12 : 16,
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
               color: '#1a202c'
             },
-            padding: [10, 0]
+            padding: [10, 15],
+            textAlign: 'center',
+            itemGap: 0
           }
         : { show: false },
       tooltip: config.tooltip || {

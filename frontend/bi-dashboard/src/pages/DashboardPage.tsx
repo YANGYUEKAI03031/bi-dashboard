@@ -664,9 +664,9 @@ export const DashboardPage: React.FC = () => {
         <div className="drag-handle">
           <DragOutlined />
         </div>
-        <Card 
+        <Card
           title={
-            <div style={{ width: '100%', textAlign: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
               <div>{card.chart.name}</div>
               <div style={{ fontSize: '12px', color: '#888', marginTop: 4 }}>
                 {card.chart.chart_type}
