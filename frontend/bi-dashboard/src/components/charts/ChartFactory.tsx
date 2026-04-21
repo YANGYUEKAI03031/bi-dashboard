@@ -521,7 +521,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       show: defaultLegendShow,
       textStyle: {
         fontSize: compact ? 10 : 12,
-        color: '#4a5568'
+        color: '#c0c0c0'
       },
       itemGap: compact ? 12 : 18,
       itemWidth: 14,
@@ -596,7 +596,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
-              color: '#1a202c'
+              color: '#b0b0b0'
             },
             padding: [10, 15, 4, 15],
             textAlign: 'center',
@@ -637,21 +637,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         nameGap: config.xAxis?.nameGap ?? effectiveXAxisNameGap,
         nameTextStyle: {
           fontSize: 12,
-          color: '#4a5568',
+          color: '#c0c0c0',
           padding: [8, 0, 0, 0],
           align: 'center', // 确保文本居中对齐，而不是左对齐
           ...(config.xAxis?.nameTextStyle || {})
         },
         axisLine: {
           lineStyle: {
-            color: '#e2e8f0',
+            color: '#d0d0d0',
             width: 1
           }
         },
         axisTick: {
           show: true,
           lineStyle: {
-            color: '#e2e8f0'
+            color: '#d0d0d0'
           }
         },
         splitLine: {
@@ -675,7 +675,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             show: axisLabelFromConfig.show ?? !veryCompact,
             margin: effectiveAxisLabelMargin,
             fontSize: effectiveAxisLabelFontSize,
-            color: '#4a5568',
+            color: '#c0c0c0',
             // 富文本样式必须挂在 axisLabel.rich 上，否则会把 `{highlight|...}` 当普通文本显示出来
             rich: {
               highlight: {
@@ -708,33 +708,33 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         name: config.yAxis?.name || (compact ? '' : 'Y轴'),
         nameTextStyle: {
           fontSize: 12,
-          color: '#4a5568',
+          color: '#c0c0c0',
           padding: [0, 0, 8, 0]
         },
         axisLine: {
           show: true,
           lineStyle: {
-            color: '#e2e8f0',
+            color: '#d0d0d0',
             width: 1
           }
         },
         axisTick: {
           show: true,
           lineStyle: {
-            color: '#e2e8f0'
+            color: '#d0d0d0'
           }
         },
         splitLine: {
           show: true,
           lineStyle: {
-            color: '#f1f5f9',
+            color: '#d8d8d8',
             type: 'dashed',
             width: 1
           }
         },
         axisLabel: {
           fontSize: 11,
-          color: '#4a5568'
+          color: '#c0c0c0'
         }
       },
       animation: true,
@@ -899,12 +899,12 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               show: true,
               formatter: '{b}: {c} ({d}%)',
               fontSize: 11,
-              color: '#666'
+              color: '#a0a0a0'
             },
             labelLine: {
               show: true,
               lineStyle: {
-                color: '#999'
+                color: '#b0b0b0'
               }
             },
             emphasis: {
@@ -974,7 +974,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           splitNumber: 5,
           radius: '70%',
           axisName: {
-            color: '#666',
+            color: '#a0a0a0',
             fontSize: 12,
             fontWeight: 'normal'
           },
@@ -1139,21 +1139,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             type: 'value',
             name: config.yAxis?.name || (compact ? '' : 'Y轴(左)'),
             position: 'left',
-            nameTextStyle: { fontSize: 12, color: '#4a5568', padding: [0, 0, 8, 0] },
-            axisLine: { show: true, lineStyle: { color: '#e2e8f0', width: 1 } },
-            axisTick: { show: true, lineStyle: { color: '#e2e8f0' } },
-            splitLine: { show: true, lineStyle: { color: '#f1f5f9', type: 'dashed', width: 1 } },
-            axisLabel: { fontSize: 11, color: '#4a5568' }
+            nameTextStyle: { fontSize: 12, color: '#c0c0c0', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#d0d0d0', width: 1 } },
+            axisTick: { show: true, lineStyle: { color: '#d0d0d0' } },
+            splitLine: { show: true, lineStyle: { color: '#d8d8d8', type: 'dashed', width: 1 } },
+            axisLabel: { fontSize: 11, color: '#c0c0c0' }
           },
           {
             type: 'value',
             name: config.y_axis_right_title || (compact ? '' : 'Y轴(右)'),
             position: 'right',
-            nameTextStyle: { fontSize: 12, color: '#4a5568', padding: [0, 0, 8, 0] },
-            axisLine: { show: true, lineStyle: { color: '#e2e8f0', width: 1 } },
-            axisTick: { show: true, lineStyle: { color: '#e2e8f0' } },
+            nameTextStyle: { fontSize: 12, color: '#c0c0c0', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#d0d0d0', width: 1 } },
+            axisTick: { show: true, lineStyle: { color: '#d0d0d0' } },
             splitLine: { show: false },
-            axisLabel: { fontSize: 11, color: '#4a5568' }
+            axisLabel: { fontSize: 11, color: '#c0c0c0' }
           }
         ];
         baseOption.grid = {
@@ -1278,9 +1278,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           lineStyle: {
             type: 'dashed',
             width: 2,
-            color: '#999'
+            color: '#b0b0b0'
           },
-          itemStyle: { color: '#999' }
+          itemStyle: { color: '#b0b0b0' }
         });
         break;
         
@@ -1314,7 +1314,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             lineStyle: {
               width: 1,
               type: 'solid',
-              color: '#999'
+              color: '#b0b0b0'
             }
           },
           itemStyle: {
@@ -1371,7 +1371,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffcc', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
           },
           textStyle: {
-            color: '#666',
+            color: '#a0a0a0',
             fontSize: 11
           },
           itemWidth: 15,
@@ -1386,7 +1386,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           label: {
             show: true,
             fontSize: 10,
-            color: '#333'
+            color: '#b0b0b0'
           },
           itemStyle: {
             borderColor: '#fff',
@@ -1408,7 +1408,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           axisLabel: {
             fontSize: 11,
-            color: '#666'
+            color: '#a0a0a0'
           }
         };
         baseOption.yAxis = {
@@ -1419,7 +1419,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           axisLabel: {
             fontSize: 11,
-            color: '#666'
+            color: '#a0a0a0'
           }
         };
         break;
@@ -1796,9 +1796,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           style={{
             width: '100%',
             maxWidth: '100%',
-            border: '1px solid #e8e8e8',
+            border: '1px solid #252536',
             borderRadius: 8,
-            background: '#fff',
+            background: '#252536',
             padding: 'clamp(12px, 4%, 24px)',
             boxSizing: 'border-box',
           }}

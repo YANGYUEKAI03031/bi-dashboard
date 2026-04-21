@@ -77,9 +77,27 @@
 }
 
 .dashboard-editor-grid {
-  height: 100%;
+  flex: 1;
   overflow: auto;
   align-content: flex-start;
+  background-color: #e8e8e8;
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  padding: 16px;
+  min-height: 0;
+}
+
+/* 覆盖 Ant Design Card 的默认最大宽度限制 */
+.dashboard-editor-grid .ant-card {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.dashboard-editor-grid .react-grid-layout {
+  min-height: 0;
+  height: 100%;
 }
 
 .dashboard-editor-grid .react-grid-layout {

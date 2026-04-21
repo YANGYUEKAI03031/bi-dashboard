@@ -530,7 +530,7 @@ const DashboardView: React.FC<{
     <div className="reports-dashboard-view">
       {/* 筛选器渲染区域 */}
       {filters.length > 0 && (
-        <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 4 }}>
+        <div style={{ marginBottom: 16, padding: 12, background: '#252536', borderRadius: 4, border: '1px solid #3a3a50' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
             {filters.map(filter => {
               // 统一用 filter.id 作 key，与 DashboardEditorPage 一致
@@ -541,7 +541,7 @@ const DashboardView: React.FC<{
 
               return (
                 <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: '#666' }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: '#e0e0e0' }}>
                     {filter.field_label || filter.name}
                   </label>
                   {filter.filter_type === 'date_range' && (
@@ -648,14 +648,17 @@ const DashboardView: React.FC<{
                   size="small"
                   style={{
                     height: '100%',
-                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #e8e8e8`,
+                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #3a3a50`,
                     display: 'flex',
                     flexDirection: 'column',
+                    border: '1px solid #3a3a50',
+                    background: '#252536',
                   }}
-                  bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center' }}
+                  headStyle={{ background: '#252536', borderBottom: '1px solid #3a3a50' }}
+                  bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center', background: '#252536' }}
                 >
                   <div style={{ width: '100%', textAlign: w.align }}>
-                    <Title level={w.level || 1} style={{ margin: 0 }}>
+                    <Title level={w.level || 1} style={{ margin: 0, color: '#1677FF' }}>
                       {w.title}
                     </Title>
                     {w.subtitle && (
@@ -672,16 +675,18 @@ const DashboardView: React.FC<{
               <Card
                 size="small"
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', color: '#fff', fontWeight: 500 }}>
                     <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
                   </div>
                 }
-                style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                style={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #1677FF', background: '#252536' }}
+                headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
                 bodyStyle={{
                   flex: 1,
                   padding: 8,
                   display: 'flex',
                   alignItems: 'stretch',
+                  background: '#252536',
                 }}
               >
                 <ChartCardComponent 
@@ -1236,14 +1241,14 @@ export const ReportsPage: React.FC = () => {
   return (
     <div className="reports-page-wrapper">
       <div className="reports-page">
-        {/* 第一个白色卡片：页面头部 */}
+        {/* 第一个卡片：页面头部 */}
         <Card className="reports-header-card">
           <div className="reports-header-content">
             <div className="reports-header-left">
-              <Title level={2} style={{ margin: 0, fontWeight: 600 }}>
+              <Title level={2} style={{ margin: 0, fontWeight: 600, color: '#e0e0e0' }}>
                 {reportPage ? reportPage.name : '报表中心'}
               </Title>
-              <Paragraph style={{ margin: '8px 0 0 0', color: '#666', fontSize: '14px' }}>
+              <Paragraph style={{ margin: '8px 0 0 0', color: '#b0b0c0', fontSize: '14px' }}>
                 {reportPage ? reportPage.description || '查看报表页中的仪表盘' : '查看和管理您的仪表盘报表'}
               </Paragraph>
             </div>

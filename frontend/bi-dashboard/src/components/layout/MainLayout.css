@@ -502,9 +502,12 @@
 /* ── 内容包装器 ── */
 .content-wrapper {
   flex: 1;
-  padding: 24px;
-  overflow-y: auto;
+  padding: 0;
+  overflow: auto;
   background-color: var(--theme-background);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 /* ── 子导航样式 ── */
