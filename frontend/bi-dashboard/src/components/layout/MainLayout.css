@@ -123,6 +123,7 @@
 .sidebar.collapsed .nav-item {
   padding: 12px;
   margin: 4px 8px;
+  justify-content: center;
 }
 
 .nav-item:hover {
