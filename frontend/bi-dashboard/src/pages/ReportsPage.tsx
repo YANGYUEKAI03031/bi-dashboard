@@ -529,7 +529,16 @@ const DashboardView: React.FC<{
     <div className="reports-dashboard-view">
       {/* 筛选器渲染区域 */}
       {filters.length > 0 && (
-        <div style={{ marginBottom: 16, padding: 12, background: '#252536', borderRadius: 4, border: '1px solid #3a3a50' }}>
+        <div style={{ 
+          marginBottom: 16, 
+          padding: 12, 
+          background: '#252536', 
+          borderRadius: 4, 
+          border: '1px solid #3a3a50',
+          position: 'sticky',
+          top: 8,
+          zIndex: 100,
+        }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
             {filters.map(filter => {
               // 统一用 filter.id 作 key，与 DashboardEditorPage 一致
