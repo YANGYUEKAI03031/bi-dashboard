@@ -258,8 +258,6 @@ interface DashboardTitleWidget {
   subtitle?: string;
   align: TitleWidgetAlign;
   level: 1 | 2 | 3;
-  /** 底边样式：none=无, solid=实线, dashed=虚线 */
-  borderBottom?: 'none' | 'solid' | 'dashed';
   size_x: number;
   size_y: number;
   card_row: number;
@@ -347,9 +345,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
           y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
           w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
-          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 1),
+          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
           minW: 2,
-          minH: 0.5,
+          minH: 1,
         };
       }),
     ];
@@ -593,9 +591,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   subtitle: w.subtitle ? String(w.subtitle) : undefined,
                   align: (w.align === 'center' || w.align === 'right') ? w.align : 'left',
                   level: (w.level === 2 || w.level === 3) ? w.level : 1,
-                  borderBottom: w.borderBottom || 'solid',
                   size_x: Number.isFinite(w.size_x) ? w.size_x : 12,
-                  size_y: Number.isFinite(w.size_y) ? w.size_y : 1,
+                  size_y: Number.isFinite(w.size_y) ? w.size_y : 2,
                   card_row: Number.isFinite(w.card_row) ? w.card_row : 0,
                   card_col: Number.isFinite(w.card_col) ? w.card_col : 0,
                 }))
@@ -843,7 +840,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       subtitle: '',
       align: 'left',
       level: 1,
-      borderBottom: 'solid',
     });
     setWidgetModalOpen(true);
   };
@@ -855,7 +851,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       subtitle: w.subtitle || '',
       align: w.align,
       level: w.level,
-      borderBottom: w.borderBottom || 'solid',
     });
     setWidgetModalOpen(true);
   };
@@ -876,20 +871,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       const align: TitleWidgetAlign =
         values.align === 'center' || values.align === 'right' ? values.align : 'left';
       const level: 1 | 2 | 3 = values.level === 2 || values.level === 3 ? values.level : 1;
-      const borderBottom: 'none' | 'solid' | 'dashed' =
-        values.borderBottom === 'none' || values.borderBottom === 'dashed'
-          ? values.borderBottom
-          : 'solid';
-
-      // 根据是否有副标题决定高度
-      const sizeY = subtitle ? 1.2 : 0.8;
 
       setWidgetSaving(true);
       let nextWidgets: DashboardTitleWidget[];
       if (editingWidgetId) {
         nextWidgets = widgets.map(w =>
           w.id === editingWidgetId
-            ? { ...w, title, subtitle: subtitle || undefined, align, level, borderBottom, size_y: sizeY }
+            ? { ...w, title, subtitle: subtitle || undefined, align, level }
             : w
         );
       } else {
@@ -905,9 +893,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             subtitle: subtitle || undefined,
             align,
             level,
-            borderBottom,
             size_x: 12,
-            size_y: sizeY,
+            size_y: subtitle ? 3 : 2,
             card_row: maxRow,
             card_col: 0,
           },
@@ -1387,14 +1374,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   return (
-    <Layout style={{ height: '100%', background: '#1e1e2e' }}>
+    <Layout style={{ height: '100%', background: '#f5f7fa' }}>
       <Sider
         collapsed={collapsed}
         collapsedWidth={0}
         width={320}
         style={{
-          background: '#252536',
-          borderRight: '1px solid #3a3a50',
+          background: '#fff',
+          borderRight: '1px solid #f0f0f0',
           padding: collapsed ? 0 : '16px',
           overflowX: 'hidden',
           overflowY: 'auto',
@@ -1410,13 +1397,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           </Button>
 
           {!isEditMode && (
-            <Card
-              title={<span style={{ color: '#fff', fontWeight: 500 }}>基本信息</span>}
-              size="small"
-              style={{ border: '1px solid #1677FF', background: '#252536' }}
-              headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
-              bodyStyle={{ background: '#252536' }}
-            >
+            <Card title="基本信息" size="small">
             <Form
               layout="vertical"
               form={form}
@@ -1453,47 +1434,40 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           )}
 
           <Card
-            title={<span style={{ color: '#fff', fontWeight: 500 }}>添加组件</span>}
+            title="添加组件"
             size="small"
-            style={{ border: '1px solid #1677FF', background: '#252536' }}
-            headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
-            bodyStyle={{ background: '#252536' }}
             extra={
-              <Button type="link" size="small" icon={<FontSizeOutlined />} onClick={openAddTitleWidget} style={{ color: '#fff' }}>
+              <Button type="link" size="small" icon={<FontSizeOutlined />} onClick={openAddTitleWidget}>
                 标题
               </Button>
             }
           >
-            <div style={{ fontSize: 12, color: '#b0b0c0' }}>
+            <div style={{ fontSize: 12, color: '#999' }}>
               用于添加章节标题/说明文字（无需绑定图表）。
             </div>
           </Card>
 
           {dashboard && (
-          <Card
-            title={<span style={{ color: '#fff', fontWeight: 500 }}>添加筛选器</span>}
-            size="small"
-            style={{ border: '1px solid #1677FF', background: '#252536' }}
-            headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
-            bodyStyle={{ background: '#252536' }}
-            extra={
-              <Button
-                type="link"
-                size="small"
-                icon={<FilterOutlined />}
-                onClick={() => {
-                  setEditingFilterId(null);
-                  filterForm.resetFields();
-                  setFilterModalOpen(true);
-                }}
-                style={{ color: '#fff' }}
-              >
-                <PlusOutlined /> 新建
-              </Button>
-            }
-          >
+            <Card
+              title="添加筛选器"
+              size="small"
+              extra={
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FilterOutlined />}
+                  onClick={() => {
+                    setEditingFilterId(null);
+                    filterForm.resetFields();
+                    setFilterModalOpen(true);
+                  }}
+                >
+                  <PlusOutlined /> 新建
+                </Button>
+              }
+            >
               {filters.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#b0b0c0' }}>
+                <div style={{ fontSize: 12, color: '#999' }}>
                   暂无筛选器，点击"新建"添加筛选器。
                 </div>
               ) : (
@@ -1506,13 +1480,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '8px 12px',
-                        background: '#1e1e2e',
+                        background: '#f5f5f5',
                         borderRadius: 4,
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 500, color: '#e0e0e0' }}>{filter.name}</div>
-                        <div style={{ fontSize: 12, color: '#8888aa' }}>
+                        <div style={{ fontWeight: 500 }}>{filter.name}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>
                           {filter.filter_type} | 绑定 {filter.bindings?.length || 0} 个图表
                         </div>
                       </div>
@@ -1563,10 +1537,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           )}
 
           <Card
-            title={<span style={{ color: '#fff', fontWeight: 500 }}>添加图表</span>}
+            title="添加图表"
             size="small"
-            style={{ border: '1px solid #1677FF', background: '#252536' }}
-            headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
             extra={
               <Button
                 type="link"
@@ -1595,14 +1567,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     message.error(getErrorMessage(e, '刷新图表列表失败'));
                   }
                 }}
-                style={{ color: '#fff' }}
               >
                 刷新
               </Button>
             }
           >
             {charts.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#b0b0c0' }}>
+              <div style={{ fontSize: 12, color: '#999' }}>
                 暂无可用图表，请先在“图表管理”中创建图表。
               </div>
             ) : (
@@ -1633,13 +1604,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           </Card>
 
           {dashboard && (
-            <Card
-              title={<span style={{ color: '#fff', fontWeight: 500 }}>危险操作</span>}
-              size="small"
-              style={{ border: '1px solid #1677FF', background: '#252536' }}
-              headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
-              bodyStyle={{ background: '#252536' }}
-            >
+            <Card title="危险操作" size="small">
               <Popconfirm
                 title="确定删除这个仪表盘吗？"
                 okText="删除"
@@ -1656,31 +1621,21 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         </Space>
       </Sider>
 
-      <Content style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%', background: '#252536' }}>
-        {/* 标题栏 */}
-        <div style={{
-          background: '#1677FF',
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0
-        }}>
-          <span style={{ color: '#fff', fontWeight: 500 }}>
-            {dashboard ? dashboard.name : '仪表盘画布'}
-          </span>
-          <Button
-            type="text"
-            onClick={() => setCollapsed(v => !v)}
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            style={{ color: '#fff' }}
-          >
-            {collapsed ? '展开侧栏' : '收起侧栏'}
-          </Button>
-        </div>
-
-        {/* 画布区域 */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Content style={{ padding: '16px' }}>
+        <Card
+          title={dashboard ? dashboard.name : '仪表盘画布'}
+          extra={
+            <Button
+              type="text"
+              onClick={() => setCollapsed(v => !v)}
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            >
+              {collapsed ? '展开侧栏' : '收起侧栏'}
+            </Button>
+          }
+          style={{ height: '100%' }}
+          bodyStyle={{ height: 'calc(100% - 56px)' }}
+        >
           {loading ? (
             <div
               className="dashboard-editor-canvas-loading"
@@ -1695,7 +1650,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               }}
             >
               <Spin size="large" tip="加载仪表盘画布中..." />
-              <div style={{ fontSize: 13, color: '#b0b0c0' }}>
+              <div style={{ fontSize: 13, color: '#999' }}>
                 正在加载图表列表与仪表盘配置…
               </div>
             </div>
@@ -1707,7 +1662,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#b0b0c0',
+                color: '#999',
               }}
             >
               <div style={{ fontSize: 32, marginBottom: 12 }}>🖼️</div>
@@ -1723,13 +1678,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 <div style={{
                   marginBottom: 16,
                   padding: '16px 20px',
-                  background: '#252536',
+                  background: '#fff',
                   borderRadius: 8,
-                  border: '1px solid #3a3a50',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
+                  border: '1px solid #f0f0f0',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <FilterOutlined style={{ color: '#1677FF', fontSize: 16 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#e0e0e0' }}>筛选条件</span>
+                    <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>筛选条件</span>
                     {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
                       <a
                         href="#"
@@ -1780,17 +1736,17 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                             alignItems: 'center',
                             gap: 8,
                             padding: '6px 12px',
-                            background: hasValue ? '#1a3a1a' : '#1e1e2e',
+                            background: hasValue ? '#f6ffed' : '#fafafa',
                             borderRadius: 6,
-                            border: `1px solid ${hasValue ? '#1677FF' : '#3a3a50'}`,
+                            border: `1px solid ${hasValue ? '#b7eb8f' : '#e8e8e8'}`,
                             transition: 'all 0.2s ease',
                           }}
                         >
                           {getFilterIcon()}
-                          <span style={{ fontSize: 13, color: '#e0e0e0', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>
                             {filter.field_label || filter.name}
                           </span>
-                          <span style={{ color: '#888', fontSize: 12 }}>:</span>
+                          <span style={{ color: '#d9d9d9', fontSize: 12 }}>:</span>
                           {filter.filter_type === 'date_range' && (
                             <DatePicker.RangePicker
                               size="small"
@@ -1873,8 +1829,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
               <AutoWidthGridLayout
                 cols={12}
-                rowHeight={30}
-                margin={[12, 12]}
+                rowHeight={80}
+                margin={[16, 16]}
                 isDroppable
                 droppingItem={{ i: '__dropping-elem__', w: MIN_CARD_COLS, h: MIN_CARD_ROWS }}
                 isDraggable={true}
@@ -1935,18 +1891,32 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     <Card
                       size="small"
                       title={
-                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', color: '#fff', fontWeight: 500 }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
                           <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
                         </div>
                       }
-                      style={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #1677FF', background: '#ffffff' }}
-                      headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
+                      extra={
+                        <Popconfirm
+                          title="移除这个图表？"
+                          okText="移除"
+                          okButtonProps={{ danger: true }}
+                          cancelText="取消"
+                          onConfirm={() => handleRemoveCard(card.id)}
+                        >
+                          <Button
+                            type="text"
+                            icon={<DeleteOutlined />}
+                            size="small"
+                            danger
+                          />
+                        </Popconfirm>
+                      }
+                      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                       bodyStyle={{
                         flex: 1,
-                        padding: 8,
+                        padding: '12px',
                         display: 'flex',
                         alignItems: 'stretch',
-                        background: '#ffffff',
                       }}
                     >
                       <ChartCardComponent card={card} filterValues={filterValues} allFilters={filters} />
@@ -1957,19 +1927,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   <div key={w.id}>
                     <Card
                       size="small"
-                      style={{
-                        height: '100%',
-                        borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #1677FF`,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        border: '1px solid #1677FF',
-                        background: '#ffffff',
-                      }}
-                      headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
-                      bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center', background: '#ffffff' }}
+                      style={{ height: '100%' }}
+                      bodyStyle={{ height: '100%' }}
                       extra={
-                        <Space size={4}>
-                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditTitleWidget(w)} style={{ color: '#fff' }} />
+                        <Space>
+                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditTitleWidget(w)} />
                           <Popconfirm
                             title="移除这个标题组件？"
                             okText="移除"
@@ -1982,12 +1944,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         </Space>
                       }
                     >
-                      <div style={{ width: '100%', textAlign: w.align }}>
-                        <Typography.Title level={w.level} style={{ margin: 0, color: '#1677FF' }}>
+                      <div style={{ textAlign: w.align }}>
+                        <Typography.Title level={w.level} style={{ margin: 0 }}>
                           {w.title}
                         </Typography.Title>
                         {w.subtitle ? (
-                          <Typography.Paragraph style={{ margin: 0, color: '#666', fontSize: 11 }}>
+                          <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
                             {w.subtitle}
                           </Typography.Paragraph>
                         ) : null}
@@ -1998,13 +1960,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               </AutoWidthGridLayout>
 
               {!dashboard.cards?.length && !widgets.length && (
-                <div style={{ marginTop: 12, padding: 12, color: '#b0b0c0', fontSize: 12, textAlign: 'center' }}>
+                <div style={{ marginTop: 12, padding: 12, color: '#999', fontSize: 12, textAlign: 'center' }}>
                   当前仪表盘还没有任何组件：请从左侧拖拽图表或添加标题组件到画布区域。
                 </div>
               )}
             </div>
           )}
-        </div>
+        </Card>
       </Content>
 
       <Modal
@@ -2042,15 +2004,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 { label: '大（H1）', value: 1 },
                 { label: '中（H2）', value: 2 },
                 { label: '小（H3）', value: 3 },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label="底边样式" name="borderBottom" initialValue="solid">
-            <Select
-              options={[
-                { label: '无', value: 'none' },
-                { label: '实线', value: 'solid' },
-                { label: '虚线', value: 'dashed' },
               ]}
             />
           </Form.Item>
