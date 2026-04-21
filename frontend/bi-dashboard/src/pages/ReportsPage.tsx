@@ -370,8 +370,6 @@ const DashboardView: React.FC<{
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
   const filters = dashboard.filters || [];
-  
-  console.log('[DashboardView] rendered - dashboard id:', dashboard.id, 'name:', dashboard.name, 'cards count:', cards.length, 'widgets count:', widgets.length);
 
   const normalizeLinkValue = (v: any) => {
     if (v == null) return '';
@@ -506,13 +504,6 @@ const DashboardView: React.FC<{
     }
   };
 
-  // 调试用：打印 cards 信息
-  useEffect(() => {
-    console.log('[DashboardView] cards updated - count:', cards.length, 'positions:', cards.map(c => ({ id: c.id, chartId: c.chart?.id, hasChart: !!c.chart, row: c.card_row, col: c.card_col, w: c.size_x, h: c.size_y })));
-  }, [cards]);
-
-  // 构建 mergedLayout：widgets 的标题 + cards 的图表，使用 card 位置信息
-  // 按 y 排序让 react-grid-layout 正确 compact
   const sortedItems = [
     ...cards.map(card => ({
       i: card.id.toString(),
@@ -533,8 +524,6 @@ const DashboardView: React.FC<{
   ].sort((a, b) => a.y - b.y);
 
   const mergedLayout = sortedItems;
-
-  console.log('[DashboardView] mergedLayout - cards in layout:', mergedLayout.filter(l => !l.i.startsWith('title')).length, 'total items:', mergedLayout.length);
 
   return (
     <div className="reports-dashboard-view">
@@ -663,10 +652,11 @@ const DashboardView: React.FC<{
                     border: '1px solid #3a3a50',
                     background: '#252536',
                   }}
-                  headStyle={{ background: '#252536', borderBottom: '1px solid #3a3a50' }}
-                  bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center', background: '#252536' }}
+                  styles={{
+                    body: { height: '100%', padding: '2px 6px', background: '#252536' }
+                  }}
                 >
-                  <div style={{ width: '100%', textAlign: w.align }}>
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Title level={w.level || 1} style={{ margin: 0, color: '#1677FF' }}>
                       {w.title}
                     </Title>
