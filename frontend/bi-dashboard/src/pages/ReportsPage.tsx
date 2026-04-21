@@ -521,7 +521,7 @@ const DashboardView: React.FC<{
         x: Number.isFinite(w.card_col) ? (w.card_col as number) : 0,
         y: Number.isFinite(w.card_row) ? (w.card_row as number) : 0,
         w: Number.isFinite(w.size_x) ? w.size_x : 12,
-        h: Number.isFinite(w.size_y) ? w.size_y : 2,
+        h: Number.isFinite(w.size_y) ? w.size_y : 1,
         static: true,
       })),
   ];
@@ -632,8 +632,8 @@ const DashboardView: React.FC<{
       {widgets.length > 0 || cards.length > 0 ? (
         <AutoWidthGridLayout
           cols={12}
-          rowHeight={80}
-          margin={[16, 16]}
+          rowHeight={30}
+          margin={[12, 12]}
           isDraggable={false}
           isResizable={false}
           compactType={null}
@@ -646,15 +646,20 @@ const DashboardView: React.FC<{
               <div key={w.id}>
                 <Card
                   size="small"
-                  style={{ height: '100%' }}
-                  bodyStyle={{ height: '100%' }}
+                  style={{
+                    height: '100%',
+                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #e8e8e8`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                  bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center' }}
                 >
-                  <div style={{ textAlign: w.align }}>
+                  <div style={{ width: '100%', textAlign: w.align }}>
                     <Title level={w.level || 1} style={{ margin: 0 }}>
                       {w.title}
                     </Title>
                     {w.subtitle && (
-                      <Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                      <Paragraph style={{ margin: 0, color: '#666', fontSize: 11 }}>
                         {w.subtitle}
                       </Paragraph>
                     )}
@@ -674,7 +679,7 @@ const DashboardView: React.FC<{
                 style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                 bodyStyle={{
                   flex: 1,
-                  padding: '12px',
+                  padding: 8,
                   display: 'flex',
                   alignItems: 'stretch',
                 }}

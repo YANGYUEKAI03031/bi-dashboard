@@ -258,6 +258,8 @@ interface DashboardTitleWidget {
   subtitle?: string;
   align: TitleWidgetAlign;
   level: 1 | 2 | 3;
+  /** 底边样式：none=无, solid=实线, dashed=虚线 */
+  borderBottom?: 'none' | 'solid' | 'dashed';
   size_x: number;
   size_y: number;
   card_row: number;
@@ -345,9 +347,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
           y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
           w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
-          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
+          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 1),
           minW: 2,
-          minH: 1,
+          minH: 0.5,
         };
       }),
     ];
@@ -591,8 +593,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   subtitle: w.subtitle ? String(w.subtitle) : undefined,
                   align: (w.align === 'center' || w.align === 'right') ? w.align : 'left',
                   level: (w.level === 2 || w.level === 3) ? w.level : 1,
+                  borderBottom: w.borderBottom || 'solid',
                   size_x: Number.isFinite(w.size_x) ? w.size_x : 12,
-                  size_y: Number.isFinite(w.size_y) ? w.size_y : 2,
+                  size_y: Number.isFinite(w.size_y) ? w.size_y : 1,
                   card_row: Number.isFinite(w.card_row) ? w.card_row : 0,
                   card_col: Number.isFinite(w.card_col) ? w.card_col : 0,
                 }))
@@ -840,6 +843,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       subtitle: '',
       align: 'left',
       level: 1,
+      borderBottom: 'solid',
     });
     setWidgetModalOpen(true);
   };
@@ -851,6 +855,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       subtitle: w.subtitle || '',
       align: w.align,
       level: w.level,
+      borderBottom: w.borderBottom || 'solid',
     });
     setWidgetModalOpen(true);
   };
@@ -871,13 +876,20 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       const align: TitleWidgetAlign =
         values.align === 'center' || values.align === 'right' ? values.align : 'left';
       const level: 1 | 2 | 3 = values.level === 2 || values.level === 3 ? values.level : 1;
+      const borderBottom: 'none' | 'solid' | 'dashed' =
+        values.borderBottom === 'none' || values.borderBottom === 'dashed'
+          ? values.borderBottom
+          : 'solid';
+
+      // 根据是否有副标题决定高度
+      const sizeY = subtitle ? 1.2 : 0.8;
 
       setWidgetSaving(true);
       let nextWidgets: DashboardTitleWidget[];
       if (editingWidgetId) {
         nextWidgets = widgets.map(w =>
           w.id === editingWidgetId
-            ? { ...w, title, subtitle: subtitle || undefined, align, level }
+            ? { ...w, title, subtitle: subtitle || undefined, align, level, borderBottom, size_y: sizeY }
             : w
         );
       } else {
@@ -893,8 +905,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             subtitle: subtitle || undefined,
             align,
             level,
+            borderBottom,
             size_x: 12,
-            size_y: subtitle ? 3 : 2,
+            size_y: sizeY,
             card_row: maxRow,
             card_col: 0,
           },
@@ -1829,8 +1842,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
               <AutoWidthGridLayout
                 cols={12}
-                rowHeight={80}
-                margin={[16, 16]}
+                rowHeight={30}
+                margin={[12, 12]}
                 isDroppable
                 droppingItem={{ i: '__dropping-elem__', w: MIN_CARD_COLS, h: MIN_CARD_ROWS }}
                 isDraggable={true}
@@ -1914,7 +1927,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                       bodyStyle={{
                         flex: 1,
-                        padding: '12px',
+                        padding: 8,
                         display: 'flex',
                         alignItems: 'stretch',
                       }}
@@ -1927,10 +1940,15 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   <div key={w.id}>
                     <Card
                       size="small"
-                      style={{ height: '100%' }}
-                      bodyStyle={{ height: '100%' }}
+                      style={{
+                        height: '100%',
+                        borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #e8e8e8`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                      bodyStyle={{ flex: 1, padding: '2px 6px', display: 'flex', alignItems: 'center' }}
                       extra={
-                        <Space>
+                        <Space size={4}>
                           <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditTitleWidget(w)} />
                           <Popconfirm
                             title="移除这个标题组件？"
@@ -1944,12 +1962,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         </Space>
                       }
                     >
-                      <div style={{ textAlign: w.align }}>
+                      <div style={{ width: '100%', textAlign: w.align }}>
                         <Typography.Title level={w.level} style={{ margin: 0 }}>
                           {w.title}
                         </Typography.Title>
                         {w.subtitle ? (
-                          <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                          <Typography.Paragraph style={{ margin: 0, color: '#666', fontSize: 11 }}>
                             {w.subtitle}
                           </Typography.Paragraph>
                         ) : null}
@@ -2004,6 +2022,15 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 { label: '大（H1）', value: 1 },
                 { label: '中（H2）', value: 2 },
                 { label: '小（H3）', value: 3 },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="底边样式" name="borderBottom" initialValue="solid">
+            <Select
+              options={[
+                { label: '无', value: 'none' },
+                { label: '实线', value: 'solid' },
+                { label: '虚线', value: 'dashed' },
               ]}
             />
           </Form.Item>
