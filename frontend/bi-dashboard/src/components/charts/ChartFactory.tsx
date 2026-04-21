@@ -558,15 +558,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const gridRight = baseSidePadding + fixedYAxisPadding;
 
     // 估算标题和图例在顶部占用的空间，避免"标题/图例压进绘图区"
-    // 增加预留空间，确保标题和图例有足够空间显示，不会与绘图区重叠
-    const estimatedTitleHeight = showTitle ? (compact ? 32 : 40) : 0; // 增加标题高度估算（包含 padding）
+    const estimatedTitleHeight = showTitle ? (compact ? 28 : 32) : 0;
     const legendIsVisible = !!legendOption.show;
-    const estimatedLegendHeight = legendIsVisible ? (compact ? 28 : 32) : 0; // 增加图例高度估算
-    const baseTopPadding = compact ? 12 : 16; // 增加基础顶部间距
+    const estimatedLegendHeight = legendIsVisible ? (compact ? 28 : 32) : 0;
+    const baseTopPadding = compact ? 8 : 12;
     const gridTop =
       baseTopPadding +
       estimatedTitleHeight +
-      (estimatedLegendHeight > 0 ? estimatedLegendHeight + 8 : 0); // 增加图例与标题之间的间距
+      (estimatedLegendHeight > 0 ? estimatedLegendHeight + 6 : 0);
 
     const defaultGridOption: any = {
       left: gridLeft,
@@ -599,7 +598,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               fontWeight: 'bold',
               color: '#1a202c'
             },
-            padding: [10, 15],
+            padding: [10, 15, 4, 15],
             textAlign: 'center',
             itemGap: 0
           }

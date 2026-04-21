@@ -455,7 +455,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           {isAdmin && (
             <Link
               to="/pipeline-test"
-              className={`nav-item ${isActive('/pipeline-test') ? 'active' : ''}`}
+              className={`nav-item nav-item-bottom ${isActive('/pipeline-test') ? 'active' : ''}`}
+              style={{ marginBottom: 8 }}
             >
               <span className="icon">🔧</span>
               <span className="nav-text">管道测试</span>

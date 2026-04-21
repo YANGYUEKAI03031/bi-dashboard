@@ -96,6 +96,11 @@
   padding: 20px 0;
 }
 
+.sidebar.collapsed .nav-item-bottom {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
 /* ── 导航项 ── */
 .nav-item {
   display: flex;
@@ -118,7 +123,6 @@
 .sidebar.collapsed .nav-item {
   padding: 12px;
   margin: 4px 8px;
-  justify-content: center;
 }
 
 .nav-item:hover {
@@ -140,10 +144,15 @@
   margin-right: 12px;
   font-size: 18px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar.collapsed .nav-item .icon {
   margin-right: 0;
+  text-align: center;
+  width: 24px;
 }
 
 .nav-text {
