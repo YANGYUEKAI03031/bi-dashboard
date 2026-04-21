@@ -9,7 +9,7 @@ import { ChartFactory } from '../components/charts/ChartFactory';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
 import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
@@ -370,6 +370,8 @@ const DashboardView: React.FC<{
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
   const filters = dashboard.filters || [];
+  
+  console.log('[DashboardView] rendered - dashboard id:', dashboard.id, 'name:', dashboard.name, 'cards count:', cards.length, 'widgets count:', widgets.length);
 
   const normalizeLinkValue = (v: any) => {
     if (v == null) return '';
@@ -504,15 +506,20 @@ const DashboardView: React.FC<{
     }
   };
 
+  // 调试用：打印 cards 信息
+  useEffect(() => {
+    console.log('[DashboardView] cards updated - count:', cards.length, 'positions:', cards.map(c => ({ id: c.id, chartId: c.chart?.id, hasChart: !!c.chart, row: c.card_row, col: c.card_col, w: c.size_x, h: c.size_y })));
+  }, [cards]);
+
   // 构建 mergedLayout：widgets 的标题 + cards 的图表，使用 card 位置信息
-  const mergedLayout = [
+  // 按 y 排序让 react-grid-layout 正确 compact
+  const sortedItems = [
     ...cards.map(card => ({
       i: card.id.toString(),
       x: Number.isFinite(card.card_col) ? (card.card_col as number) : 0,
       y: Number.isFinite(card.card_row) ? (card.card_row as number) : 0,
       w: Number.isFinite(card.size_x) ? card.size_x : 6,
       h: Number.isFinite(card.size_y) ? card.size_y : 4,
-      static: true,
     })),
     ...widgets
       .filter((w: any) => w && w.type === 'title')
@@ -522,9 +529,12 @@ const DashboardView: React.FC<{
         y: Number.isFinite(w.card_row) ? (w.card_row as number) : 0,
         w: Number.isFinite(w.size_x) ? w.size_x : 12,
         h: Number.isFinite(w.size_y) ? w.size_y : 1,
-        static: true,
       })),
-  ];
+  ].sort((a, b) => a.y - b.y);
+
+  const mergedLayout = sortedItems;
+
+  console.log('[DashboardView] mergedLayout - cards in layout:', mergedLayout.filter(l => !l.i.startsWith('title')).length, 'total items:', mergedLayout.length);
 
   return (
     <div className="reports-dashboard-view">
@@ -636,7 +646,6 @@ const DashboardView: React.FC<{
           margin={[12, 12]}
           isDraggable={false}
           isResizable={false}
-          compactType={null}
           preventCollision={true}
           layout={mergedLayout}
         >
@@ -724,6 +733,7 @@ const DashboardView: React.FC<{
 export const ReportsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { pageId } = useParams<{ pageId?: string }>();
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -993,9 +1003,25 @@ export const ReportsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadBatchChartData 和 loadDashboardDetails 内部使用稳定的回调
   }, [user, pageId]);
 
+  // 监听路由变化，从编辑页返回时刷新当前仪表盘数据
+  useEffect(() => {
+    if (activeDashboardId) {
+      console.log('[ReportsPage] location changed, refreshing dashboard:', activeDashboardId);
+      // 清除缓存并重新加载
+      setDashboardDetails(prev => {
+        const next = new Map(prev);
+        next.delete(activeDashboardId);
+        return next;
+      });
+      loadDashboardDetails(activeDashboardId, charts, true);
+    }
+  }, [location.pathname]);
+
   const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[], forceRefreshCharts?: boolean) => {
     // 若已加载过且非强制刷新图表，直接返回（切换报表页时上层会先清空缓存再调用，此处 forceRefreshCharts 可不用传）
+    console.log('[ReportsPage] loadDashboardDetails called - id:', dashboardId, 'forceRefreshCharts:', forceRefreshCharts, 'has in cache:', dashboardDetails.has(dashboardId));
     if (dashboardDetails.has(dashboardId) && !forceRefreshCharts) {
+      console.log('[ReportsPage] loadDashboardDetails - returning early due to cache');
       return;
     }
 
@@ -1003,9 +1029,19 @@ export const ReportsPage: React.FC = () => {
 
     try {
       const dashboard = await DashboardService.getDashboard(dashboardId);
+      console.log('[ReportsPage] loadDashboardDetails - FULL dashboard data:', JSON.stringify({
+        id: dashboard.id,
+        cardsCount: dashboard.cards?.length,
+        cardsIds: dashboard.cards?.map(c => c.id),
+        settings: dashboard.settings,
+        widgetsCount: (dashboard.settings as any)?.widgets?.length,
+        widgets: (dashboard.settings as any)?.widgets
+      }));
+      console.log('[ReportsPage] loadDashboardDetails - fetched dashboard id:', dashboard.id, 'cards:', dashboard.cards?.length);
       const hydratedDashboard = hydrateDashboardCards(dashboard, availableCharts);
       const filters = await DashboardService.getDashboardFilters(dashboardId);
       hydratedDashboard.filters = filters;
+      console.log('[ReportsPage] loadDashboardDetails - setting cache, hydrated cards:', hydratedDashboard.cards?.length);
       setDashboardDetails(prev => new Map(prev).set(dashboardId, hydratedDashboard));
 
       if (hydratedDashboard.cards && hydratedDashboard.cards.length > 0) {
@@ -1027,22 +1063,22 @@ export const ReportsPage: React.FC = () => {
 
   const handleTabChange = async (dashboardId: string) => {
     const id = Number(dashboardId);
+    console.log('[ReportsPage] handleTabChange - dashboardId:', id, 'current activeDashboardId:', activeDashboardId);
     setActiveDashboardId(id);
     setFilterValues({}); // 切换仪表盘时重置筛选状态
     setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致"暂无数据"
 
     (loadBatchChartData as any).lastRequestKey = undefined;
-    const dash = dashboardDetails.get(id);
-    // 无论是否已加载，每次切换 tab 都重新拉图表数据（避免沿用旧数据）
-    if (dash?.cards?.length) {
-      const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
-        ? { field: chartLinkField, value: String(chartLinkValue) }
-        : null;
-      loadBatchChartData(dash.cards, dash.filters || [], {}, linkFilter, id);
-    } else {
-      // 该仪表盘详情尚未加载，先加载再拉图表数据
-      await loadDashboardDetails(id, charts);
-    }
+    
+    // 清除缓存，强制重新加载仪表盘详情（包含最新的 cards 列表）
+    setDashboardDetails(prev => {
+      console.log('[ReportsPage] handleTabChange - clearing cache for id:', id, 'prev size:', prev.size);
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    
+    await loadDashboardDetails(id, charts);
   };
 
   const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
