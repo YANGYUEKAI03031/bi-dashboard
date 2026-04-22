@@ -175,8 +175,7 @@ const ChartCardComponent: React.FC<{
         }
 
         if (data.length === 0) {
-          setError('没有查询到数据');
-          setChartData([]);
+          // 数据为空时保持图表原样，不显示错误
           return;
         }
 
@@ -189,7 +188,7 @@ const ChartCardComponent: React.FC<{
       } catch (err: any) {
         if (cancelled) return;
         console.error(`加载图表数据失败:`, err);
-        setError(err.message || '数据加载失败');
+        // 忽略错误，保持图表原样不变
       } finally {
         if (!cancelled) setDataLoading(false);
       }
@@ -703,10 +702,15 @@ const DashboardView: React.FC<{
                   allFilters={filters}
                   chartData={card.chart?.id ? (() => {
                     const rawData = batchChartData?.get(card.chart!.id)?.data || [];
-                    if (!chartLinkField || chartLinkValue == null || rawData.length === 0) return rawData;
-                    const first = rawData[0];
-                    if (!first || typeof first !== 'object' || !Object.prototype.hasOwnProperty.call(first, chartLinkField)) return rawData;
-                    return rawData.filter((row: any) => normalizeLinkValue(row[chartLinkField]) === chartLinkValue);
+                    // 如果图表联动筛选的字段在当前图表数据中不存在，则不做筛选，保持原数据
+                    if (chartLinkField && chartLinkValue != null && rawData.length > 0) {
+                      const first = rawData[0];
+                      if (!first || typeof first !== 'object' || !Object.prototype.hasOwnProperty.call(first, chartLinkField)) {
+                        return rawData;
+                      }
+                      return rawData.filter((row: any) => normalizeLinkValue(row[chartLinkField]) === chartLinkValue);
+                    }
+                    return rawData;
                   })() : undefined}
                   dataLoading={card.chart?.id ? batchChartData?.get(card.chart.id)?.loading : false}
                   error={card.chart?.id ? batchChartData?.get(card.chart.id)?.error : null}
@@ -871,35 +875,35 @@ export const ReportsPage: React.FC = () => {
     
     if (requests.length === 0) return;
     
-    // 设置所有图表为 loading 状态
+    // 设置所有图表为 loading 状态（保留原数据）
     const loadingMap = new Map(batchChartData);
     requests.forEach(req => {
-      loadingMap.set(req.chartId, { data: [], loading: true, error: null });
+      const existing = loadingMap.get(req.chartId);
+      loadingMap.set(req.chartId, { 
+        data: existing?.data || [], // 保留原有数据
+        loading: true, 
+        error: null 
+      });
     });
     setBatchChartData(loadingMap);
     
     try {
-      // 批量查询
+      // 批量查询（不修改数据，只更新loading状态）
       const results = await ChartService.executeBatchChartQuery(requests);
       
-      // 更新数据
+      // 更新数据（忽略各图表的错误信息，保持原样）
       const newDataMap = new Map(batchChartData);
       results.forEach(result => {
         newDataMap.set(result.chartId, {
           data: result.data || [],
           loading: false,
-          error: result.error || null,
+          error: null, // 忽略错误，保持图表原样
         });
       });
       setBatchChartData(newDataMap);
     } catch (err: any) {
       console.error('批量加载图表数据失败:', err);
-      // 设置错误状态
-      const errorMap = new Map(batchChartData);
-      requests.forEach(req => {
-        errorMap.set(req.chartId, { data: [], loading: false, error: err.message || '加载失败' });
-      });
-      setBatchChartData(errorMap);
+      // 忽略所有错误，保持图表原样不变
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 内部使用 ref 和稳定的回调
   }, []);

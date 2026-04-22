@@ -1109,6 +1109,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const loggedRef = useRef<string | null>(null);
+    // 跟踪是否已成功加载过数据
+    const hasLoadedDataRef = useRef(false);
 
     // 用 ref 追踪请求取消标记（不受 effect 重跑影响）
     const cancelledRef = useRef(false);
@@ -1160,17 +1162,17 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           }
 
           if (data.length === 0) {
-            setError('没有查询到数据，请检查SQL查询');
-            setChartData([]);
+            // 数据为空时保持图表原样，不显示错误
             return;
           }
 
+          hasLoadedDataRef.current = true;
           setChartData(data);
         } catch (err: any) {
           if (cancelledRef.current) return;
           if (activeChartIdRef.current !== chartId) return;
           console.error(`加载图表数据失败:`, err);
-          setError(err.message || '数据加载失败');
+          // 忽略错误，保持图表原样不变
         } finally {
           if (!cancelledRef.current && activeChartIdRef.current === chartId) {
             setDataLoading(false);
@@ -1288,7 +1290,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             <div style={{ marginBottom: 8 }}>⚠️</div>
             <div style={{ fontSize: 12, textAlign: 'center' }}>{error}</div>
           </div>
-        ) : chartData.length === 0 ? (
+        ) : chartData.length === 0 && !hasLoadedDataRef.current ? (
           <div
             style={{
               height: '100%',

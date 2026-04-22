@@ -613,10 +613,26 @@ export const DashboardPage: React.FC = () => {
           console.log(`卡片${card.id}数据加载完成，共${data.length}条记录`);
         } catch (error: any) {
           console.error(`加载卡片${card.id}数据失败:`, error);
-          setError(error.message || '数据加载失败');
-          message.error(`图表"${card.chart?.name || '未知'}"数据加载失败`);
-          // 加载失败时清除标记，允许重试
-          hasLoadedRef.current = null;
+          // 如果是字段不存在，忽略错误，保持图表原样
+          const errMsg = error?.message || '';
+          const isFieldMissing = errMsg.includes('列') || errMsg.includes('column') || errMsg.includes('Column') || errMsg.includes('不存在') || errMsg.includes('not exist');
+          if (isFieldMissing) {
+            console.warn(`图表字段配置变更中，暂不更新`);
+            hasLoadedRef.current = null;
+          } else {
+            // 友好错误提示
+            let friendlyError = '数据加载失败';
+            if (errMsg.includes('表') || errMsg.includes('table') || errMsg.includes('Table')) {
+              friendlyError = '数据表配置异常';
+            } else if (errMsg.includes('连接') || errMsg.includes('connection') || errMsg.includes('timeout')) {
+              friendlyError = '数据连接超时，请稍后重试';
+            } else if (errMsg.includes('权限') || errMsg.includes('permission') || errMsg.includes('denied')) {
+              friendlyError = '暂无数据访问权限';
+            }
+            setError(friendlyError);
+            message.error(`图表"${card.chart?.name || '未知'}"数据加载失败`);
+            hasLoadedRef.current = null;
+          }
         } finally {
           setDataLoading(false);
           isLoadingRef.current = false;
