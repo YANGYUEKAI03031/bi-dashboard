@@ -1376,7 +1376,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   return (
-    <Layout style={{ height: '100%', background: '#f5f7fa' }}>
+    <Layout style={{ height: '100%', minHeight: 0, background: '#f5f7fa', display: 'flex', flexDirection: 'row' }}>
       <Sider
         collapsed={collapsed}
         collapsedWidth={0}
@@ -1387,6 +1387,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           padding: collapsed ? 0 : '16px',
           overflowX: 'hidden',
           overflowY: 'auto',
+          flexShrink: 0,
+          height: '100%',
         }}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -1623,7 +1625,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         </Space>
       </Sider>
 
-      <Content style={{ padding: '16px' }}>
+      <Content style={{ padding: '16px', minHeight: 0, flex: 1, overflow: 'auto' }}>
         <Card
           title={dashboard ? dashboard.name : '仪表盘画布'}
           extra={
@@ -1635,8 +1637,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               {collapsed ? '展开侧栏' : '收起侧栏'}
             </Button>
           }
-          style={{ height: '100%' }}
-          bodyStyle={{ height: 'calc(100% - 56px)' }}
+          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } }}
         >
           {loading ? (
             <div

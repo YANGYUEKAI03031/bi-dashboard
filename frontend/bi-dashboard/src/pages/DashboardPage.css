@@ -5,9 +5,12 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .dashboard-page {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  width: 100%;
   background: var(--theme-background);
-  min-height: 100vh;
+  overflow: hidden;
 }
 
 /* ── 页面头部 ── */
@@ -26,8 +29,11 @@
 }
 
 .dashboard-content {
+  flex: 1;
   padding: var(--space-2xl);
-  height: calc(100% - 84px);
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 /* ── 图表列表面板（玻璃态） ── */
@@ -171,6 +177,7 @@
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius-lg);
   box-shadow: inset 0 0 20px rgba(38, 37, 30, 0.02);
+  overflow: visible;
 }
 
 /* ── 仪表盘卡片 ── */
@@ -244,6 +251,8 @@
 .chart-container {
   flex: 1;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ── 网格占位符 ── */

@@ -258,6 +258,12 @@ a {
   transition: color var(--transition-fast);
 }
 
+/* ── 全局布局溢出控制 ── */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 a:hover {
   color: var(--theme-primary-hover);
   text-decoration: underline;

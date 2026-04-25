@@ -63,10 +63,17 @@ const gridStyles = `
 
 .dashboard-grid .react-grid-layout {
   min-height: 600px;
+  height: auto !important;
 }
 
 .dashboard-grid .react-grid-item {
   transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.dashboard-grid .react-grid-item > * {
+  height: 100%;
+  overflow: hidden;
 }
 
 .dashboard-grid .react-grid-item.react-grid-placeholder {
