@@ -430,7 +430,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="nav-text">仪表盘</span>
           </Link>
           
-          {/* 添加图表管理导航项（位置提前） */}
+          {/* 添加图表管理导航项 */}
           <Link 
             to="/charts-management" 
             className={`nav-item ${isActive('/charts-management') ? 'active' : ''}`}
@@ -439,24 +439,11 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <span className="nav-text">图表管理</span>
           </Link>
           
-
-          {/* 数据源管理 - 仅管理员可见 */}
-          {isAdmin && (
-            <Link
-              to="/datasources"
-              className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
-            >
-              <span className="icon">🗄</span>
-              <span className="nav-text">数据源管理</span>
-            </Link>
-          )}
-
-          {/* 管道测试 - 仅管理员可见 */}
+          {/* 管道测试 - 仅管理员可见，放在图表管理下面 */}
           {isAdmin && (
             <Link
               to="/pipeline-test"
-              className={`nav-item nav-item-bottom ${isActive('/pipeline-test') ? 'active' : ''}`}
-              style={{ marginBottom: 8 }}
+              className={`nav-item ${isActive('/pipeline-test') ? 'active' : ''}`}
             >
               <span className="icon">🔧</span>
               <span className="nav-text">管道测试</span>
@@ -483,16 +470,26 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             </div>
           </div>
 
-          {/* 管理员显示用户管理入口 */}
+          {/* 管理员显示用户管理和数据源管理入口 */}
           {isAdmin && (
-            <Link
-              to="/user-management"
-              className={`nav-item nav-item-bottom ${isActive('/user-management') ? 'active' : ''}`}
-              style={{ marginBottom: 8 }}
-            >
-              <span className="icon">👥</span>
-              <span className="nav-text">用户管理</span>
-            </Link>
+            <>
+              <Link
+                to="/user-management"
+                className={`nav-item nav-item-bottom ${isActive('/user-management') ? 'active' : ''}`}
+                style={{ marginBottom: 8 }}
+              >
+                <span className="icon">👥</span>
+                <span className="nav-text">用户管理</span>
+              </Link>
+              
+              <Link
+                to="/datasources"
+                className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
+              >
+                <span className="icon">🗄</span>
+                <span className="nav-text">数据源管理</span>
+              </Link>
+            </>
           )}
 
           <button onClick={handleLogout} className="logout-btn">
