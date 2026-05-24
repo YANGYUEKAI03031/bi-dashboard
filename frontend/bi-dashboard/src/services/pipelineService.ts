@@ -1,6 +1,5 @@
 // frontend/bi-dashboard/src/services/pipelineService.ts
-import { AuthService } from './authService';
-import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 /**
  * 解析 FastAPI 错误响应：
@@ -8,22 +7,11 @@ import { API_BASE_URL } from '../config/apiBaseUrl';
  * - 普通错误：{ detail: "消息文字" } → 原样返回
  * - 其他：返回 fallback
  */
-async function parseApiError(response: Response, fallback: string): Promise<string> {
-  try {
-    const data = await response.json();
-    if (data && Array.isArray(data.detail)) {
-      // FastAPI 422 验证错误列表
-      return data.detail
-        .map((err: { loc?: string[]; msg?: string }) => {
-          const loc = (err.loc ?? []).slice(1).join('.'); // 去掉 "body" 前缀
-          return loc ? `${loc}: ${err.msg ?? '格式错误'}` : (err.msg ?? '格式错误');
-        })
-        .join('；');
-    }
-    return (data?.detail as string) || fallback;
-  } catch {
-    return fallback;
+function parseApiErrorMessage(error: ApiError, fallback: string): string {
+  if (error.message && error.message !== '') {
+    return error.message;
   }
+  return fallback;
 }
 
 export interface PipelineNode {
@@ -183,239 +171,138 @@ export interface PipelineTrigger {
 
 export class PipelineService {
   static async createPipeline(pipelineData: PipelineCreateRequest): Promise<PipelineResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(pipelineData),
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '创建管道失败'));
+    try {
+      return await ApiClient.post<PipelineResponse>('/pipeline/', pipelineData);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '创建管道失败'));
     }
-    return response.json();
   }
 
   static async getPipelines(skip = 0, limit = 20): Promise<PipelineListResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/?skip=${skip}&limit=${limit}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取管道列表失败'));
+    try {
+      return await ApiClient.get<PipelineListResponse>(`/pipeline/?skip=${skip}&limit=${limit}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取管道列表失败'));
     }
-    return response.json();
   }
 
   static async getPipeline(pipelineId: number): Promise<PipelineResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取管道详情失败'));
+    try {
+      return await ApiClient.get<PipelineResponse>(`/pipeline/${pipelineId}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取管道详情失败'));
     }
-    return response.json();
   }
 
   static async updatePipeline(pipelineId: number, updateData: PipelineUpdateRequest): Promise<PipelineResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '更新管道失败'));
+    try {
+      return await ApiClient.put<PipelineResponse>(`/pipeline/${pipelineId}`, updateData);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '更新管道失败'));
     }
-    return response.json();
   }
 
   static async deletePipeline(pipelineId: number): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '删除管道失败'));
+    try {
+      await ApiClient.delete(`/pipeline/${pipelineId}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '删除管道失败'));
     }
   }
 
   static async runPipeline(pipelineId: number): Promise<{ execution_id: number; pipeline_id: number; status: string; message: string }> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/run`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '触发管道运行失败'));
+    try {
+      return await ApiClient.post<{ execution_id: number; pipeline_id: number; status: string; message: string }>(`/pipeline/${pipelineId}/run`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '触发管道运行失败'));
     }
-    return response.json();
   }
 
   static async getPipelineExecutions(pipelineId: number, skip = 0, limit = 20): Promise<{ items: ExecutionResponse[]; total: number }> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/executions?skip=${skip}&limit=${limit}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取执行历史失败'));
+    try {
+      return await ApiClient.get<{ items: ExecutionResponse[]; total: number }>(`/pipeline/${pipelineId}/executions?skip=${skip}&limit=${limit}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取执行历史失败'));
     }
-    return response.json();
   }
 
   static async getExecution(executionId: number): Promise<ExecutionResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/executions/${executionId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取执行记录失败'));
+    try {
+      return await ApiClient.get<ExecutionResponse>(`/pipeline/executions/${executionId}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取执行记录失败'));
     }
-    return response.json();
   }
 
   static async getLatestExecution(pipelineId: number): Promise<ExecutionResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/executions/latest`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取最新执行记录失败'));
+    try {
+      return await ApiClient.get<ExecutionResponse>(`/pipeline/${pipelineId}/executions/latest`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取最新执行记录失败'));
     }
-    return response.json();
   }
 
   static async getPipelineStats(pipelineId: number): Promise<PipelineStats> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/stats`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取管道统计失败'));
+    try {
+      return await ApiClient.get<PipelineStats>(`/pipeline/${pipelineId}/stats`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取管道统计失败'));
     }
-    return response.json();
   }
 
   static async previewStep(pipelineId: number, stepId: string, limit = 100, offset = 0): Promise<StepPreviewResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/preview/${stepId}?limit=${limit}&offset=${offset}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '预览步骤数据失败'));
+    try {
+      return await ApiClient.get<StepPreviewResponse>(`/pipeline/${pipelineId}/preview/${stepId}?limit=${limit}&offset=${offset}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '预览步骤数据失败'));
     }
-    return response.json();
   }
 
   static async getStepSchema(pipelineId: number, stepId: string): Promise<StepSchemaResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/schema/${stepId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取步骤模式失败'));
+    try {
+      return await ApiClient.get<StepSchemaResponse>(`/pipeline/${pipelineId}/schema/${stepId}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取步骤模式失败'));
     }
-    return response.json();
   }
 
   static async getAllSteps(pipelineId: number): Promise<{ steps: { step_id: string; rows: number; created_at: string }[] }> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/steps`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取所有步骤失败'));
+    try {
+      return await ApiClient.get<{ steps: { step_id: string; rows: number; created_at: string }[] }>(`/pipeline/${pipelineId}/steps`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取所有步骤失败'));
     }
-    return response.json();
   }
 
   static async cancelExecution(executionId: number): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/executions/${executionId}/cancel`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '取消执行失败'));
+    try {
+      await ApiClient.post(`/pipeline/executions/${executionId}/cancel`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '取消执行失败'));
     }
   }
 
   static async getExecutionProgress(executionId: number): Promise<ExecutionProgress> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/executions/${executionId}/progress`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取执行进度失败'));
+    try {
+      return await ApiClient.get<ExecutionProgress>(`/pipeline/executions/${executionId}/progress`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取执行进度失败'));
     }
-    return response.json();
   }
 
   static async getPipelineWatermarks(pipelineId: number): Promise<PipelineWatermarks> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/watermarks`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '获取水位线失败'));
+    try {
+      return await ApiClient.get<PipelineWatermarks>(`/pipeline/${pipelineId}/watermarks`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取水位线失败'));
     }
-    return response.json();
   }
 
   static async deleteWatermark(pipelineId: number, nodeId: string): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/watermarks/${encodeURIComponent(nodeId)}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '删除水位线失败'));
+    try {
+      await ApiClient.delete(`/pipeline/${pipelineId}/watermarks/${encodeURIComponent(nodeId)}`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '删除水位线失败'));
     }
   }
 
@@ -430,45 +317,29 @@ export class PipelineService {
       enabled: boolean;
     }
   ): Promise<PipelineTrigger> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(triggerData),
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '保存触发器失败'));
+    try {
+      return await ApiClient.post<PipelineTrigger>(`/pipeline/${pipelineId}/trigger`, triggerData);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '保存触发器失败'));
     }
-    return response.json();
   }
 
   static async getPipelineTrigger(pipelineId: number): Promise<PipelineTrigger | null> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error(await parseApiError(response, '获取触发器失败'));
+    try {
+      return await ApiClient.get<PipelineTrigger>(`/pipeline/${pipelineId}/trigger`);
+    } catch (error) {
+      if (error instanceof ApiError && error.isNotFound) {
+        return null;
+      }
+      throw new Error(parseApiErrorMessage(error as ApiError, '获取触发器失败'));
     }
-    return response.json();
   }
 
   static async deletePipelineTrigger(pipelineId: number): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '删除触发器失败'));
+    try {
+      await ApiClient.delete(`/pipeline/${pipelineId}/trigger`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '删除触发器失败'));
     }
   }
 
@@ -479,16 +350,16 @@ export class PipelineService {
     last_watermark_value: string | null;
     has_new_data: boolean;
   }> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}/trigger/test`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(await parseApiError(response, '测试触发器失败'));
+    try {
+      return await ApiClient.post<{
+        source_table: string;
+        watermark_field: string;
+        current_max_value: string | null;
+        last_watermark_value: string | null;
+        has_new_data: boolean;
+      }>(`/pipeline/${pipelineId}/trigger/test`);
+    } catch (error) {
+      throw new Error(parseApiErrorMessage(error as ApiError, '测试触发器失败'));
     }
-    return response.json();
   }
 }

@@ -190,3 +190,23 @@ ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
 - [x] 后端启动正常
 
 ---
+
+## 阶段 4.4 前端 axios 统一客户端（2026-05-24 已完成）
+
+- [x] 创建 `src/services/apiClient.ts`：
+  - 统一 token 管理（自动从 localStorage 读取/存储）
+  - 统一错误处理（网络错误、超时、HTTP 错误）
+  - 统一超时控制（默认 30 秒）
+  - 统一请求头配置
+  - `ApiError` 类提供便捷的状态码判断
+- [x] 更新 service 文件使用统一客户端：
+  - `authService.ts`
+  - `permissionService.ts`
+  - `chartService.ts`
+  - `dashboardService.ts`
+  - `reportPageService.ts`
+  - `pipelineService.ts`
+  - `dataSourceService.ts`
+- [x] 前端 `npm run build` 通过
+
+---

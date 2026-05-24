@@ -1,6 +1,6 @@
 // src/services/dashboardService.ts
 
-import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 interface DashboardCreateRequest {
   name: string;
@@ -40,266 +40,89 @@ interface DashboardCardUpdateRequest {
 export class DashboardService {
   static async getUserDashboards(): Promise<any[]> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.get<any[]>('/dashboards/');
     } catch (error) {
-      console.error('获取仪表盘列表失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取仪表盘列表失败');
+      }
+      throw new Error('获取仪表盘列表失败');
     }
   }
 
   static async createDashboard(dashboardData: DashboardCreateRequest): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dashboardData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.post<any>('/dashboards/', dashboardData);
     } catch (error) {
-      console.error('创建仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '创建仪表盘失败');
+      }
+      throw new Error('创建仪表盘失败');
     }
   }
 
   static async getDashboard(dashboardId: number): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.get<any>(`/dashboards/${dashboardId}`);
     } catch (error) {
-      console.error('获取仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取仪表盘失败');
+      }
+      throw new Error('获取仪表盘失败');
     }
   }
 
   static async updateDashboard(dashboardId: number, dashboardData: DashboardUpdateRequest): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dashboardData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.put<any>(`/dashboards/${dashboardId}`, dashboardData);
     } catch (error) {
-      console.error('更新仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新仪表盘失败');
+      }
+      throw new Error('更新仪表盘失败');
     }
   }
 
   static async addChartToDashboard(dashboardId: number, cardData: DashboardCardCreateRequest): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/cards`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(cardData),
-      });
-
-      if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        try {
-          // 克隆响应以便可以多次读取
-          const clonedResponse = response.clone();
-          const errorData = await clonedResponse.json();
-          
-          // 调试：记录原始错误数据
-          console.error('[DashboardService] 错误响应数据:', errorData);
-          console.error('[DashboardService] 错误数据类型:', typeof errorData);
-          console.error('[DashboardService] 错误数据键:', errorData && typeof errorData === 'object' ? Object.keys(errorData) : 'N/A');
-          
-          // 确保 errorMessage 始终是字符串
-          if (errorData && typeof errorData === 'object') {
-            // 优先使用 detail，然后是 message，最后尝试其他常见字段
-            const extractedMsg = errorData.detail || 
-                                errorData.message || 
-                                errorData.error || 
-                                errorData.msg;
-            
-            console.error('[DashboardService] 提取的消息:', extractedMsg);
-            console.error('[DashboardService] 提取的消息类型:', typeof extractedMsg);
-            
-            if (extractedMsg && typeof extractedMsg === 'string') {
-              errorMessage = extractedMsg;
-            } else if (extractedMsg && typeof extractedMsg === 'object') {
-              // 如果提取的消息本身是对象，尝试序列化
-              try {
-                errorMessage = JSON.stringify(extractedMsg);
-                console.error('[DashboardService] 序列化后的消息:', errorMessage);
-              } catch (e) {
-                console.error('[DashboardService] 序列化失败:', e);
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-              }
-            } else {
-              // 如果没有任何常见字段，尝试序列化整个对象
-              try {
-                const jsonStr = JSON.stringify(errorData);
-                console.error('[DashboardService] 完整对象序列化:', jsonStr);
-                if (jsonStr && jsonStr !== '{}' && jsonStr !== 'null') {
-                  errorMessage = jsonStr.length > 200 ? jsonStr.substring(0, 200) + '...' : jsonStr;
-                }
-              } catch (e) {
-                // JSON 序列化失败，使用默认消息
-                console.error('[DashboardService] 无法序列化错误数据:', e);
-              }
-            }
-          } else if (typeof errorData === 'string') {
-            errorMessage = errorData;
-          } else if (errorData !== null && errorData !== undefined) {
-            // 其他类型，转换为字符串
-            errorMessage = String(errorData);
-          }
-        } catch (e) {
-          // 如果响应不是 JSON，尝试读取文本
-          console.error('[DashboardService] JSON 解析失败，尝试读取文本:', e);
-          try {
-            const clonedResponse = response.clone();
-            const text = await clonedResponse.text();
-            console.error('[DashboardService] 响应文本:', text);
-            if (text && text.trim()) {
-              errorMessage = text;
-            }
-          } catch (textError) {
-            // 如果读取文本也失败，使用默认错误消息
-            console.error('[DashboardService] 无法读取错误响应:', textError);
-          }
-        }
-        
-        // 确保 errorMessage 是字符串类型
-        const finalErrorMessage = typeof errorMessage === 'string' ? errorMessage : String(errorMessage);
-        console.error('[DashboardService] 最终错误消息:', finalErrorMessage);
-        throw new Error(finalErrorMessage);
+      return await ApiClient.post<any>(`/dashboards/${dashboardId}/cards`, cardData);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '添加图表到仪表盘失败');
       }
-
-      const data = await response.json();
-      return data;
-    } catch (error: any) {
-      console.error('添加图表到仪表盘失败:', error);
-      // 确保抛出的是 Error 对象，并且有 message 属性
-      if (error instanceof Error) {
-        throw error;
-      } else if (error && typeof error === 'object' && error.message) {
-        throw new Error(String(error.message));
-      } else {
-        throw new Error(String(error) || '添加图表到仪表盘失败');
-      }
+      throw new Error('添加图表到仪表盘失败');
     }
   }
 
   static async updateDashboardCard(cardId: number, updateData: DashboardCardUpdateRequest): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.put<any>(`/dashboards/cards/${cardId}`, updateData);
     } catch (error) {
-      console.error('更新仪表盘卡片失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新仪表盘卡片失败');
+      }
+      throw new Error('更新仪表盘卡片失败');
     }
   }
 
   static async removeChartFromDashboard(cardId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/cards/${cardId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/dashboards/cards/${cardId}`);
     } catch (error) {
-      console.error('从仪表盘移除图表失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '从仪表盘移除图表失败');
+      }
+      throw new Error('从仪表盘移除图表失败');
     }
   }
 
   static async deleteDashboard(dashboardId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/dashboards/${dashboardId}`);
     } catch (error) {
-      console.error('删除仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '删除仪表盘失败');
+      }
+      throw new Error('删除仪表盘失败');
     }
   }
 
@@ -307,137 +130,67 @@ export class DashboardService {
 
   static async getDashboardFilters(dashboardId: number): Promise<any[]> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/filters`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.get<any[]>(`/dashboards/${dashboardId}/filters`);
     } catch (error) {
-      console.error('获取筛选器列表失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取筛选器列表失败');
+      }
+      throw new Error('获取筛选器列表失败');
     }
   }
 
   static async createFilter(dashboardId: number, filterData: any): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/filters`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(filterData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.post<any>(`/dashboards/${dashboardId}/filters`, filterData);
     } catch (error) {
-      console.error('创建筛选器失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '创建筛选器失败');
+      }
+      throw new Error('创建筛选器失败');
     }
   }
 
   static async updateFilter(filterId: number, filterData: any): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(filterData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.put<any>(`/dashboards/filters/${filterId}`, filterData);
     } catch (error) {
-      console.error('更新筛选器失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新筛选器失败');
+      }
+      throw new Error('更新筛选器失败');
     }
   }
 
   static async deleteFilter(filterId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/dashboards/filters/${filterId}`);
     } catch (error) {
-      console.error('删除筛选器失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '删除筛选器失败');
+      }
+      throw new Error('删除筛选器失败');
     }
   }
 
   static async bindFilterToCard(filterId: number, bindingData: any): Promise<any> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}/bindings`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(bindingData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.post<any>(`/dashboards/filters/${filterId}/bindings`, bindingData);
     } catch (error) {
-      console.error('绑定筛选器失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '绑定筛选器失败');
+      }
+      throw new Error('绑定筛选器失败');
     }
   }
 
   static async unbindFilterFromCard(filterId: number, cardId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/dashboards/filters/${filterId}/bindings/${cardId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/dashboards/filters/${filterId}/bindings/${cardId}`);
     } catch (error) {
-      console.error('解除筛选器绑定失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '解除筛选器绑定失败');
+      }
+      throw new Error('解除筛选器绑定失败');
     }
   }
 }

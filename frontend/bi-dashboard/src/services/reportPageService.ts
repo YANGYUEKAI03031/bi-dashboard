@@ -1,6 +1,6 @@
 // src/services/reportPageService.ts
 
-import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 interface ReportPageCreateRequest {
   name: string;
@@ -51,97 +51,45 @@ export interface ReportPageDashboard {
 export class ReportPageService {
   static async getUserReportPages(): Promise<ReportPage[]> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.get<ReportPage[]>('/report-pages/');
     } catch (error) {
-      console.error('获取报表页列表失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取报表页列表失败');
+      }
+      throw new Error('获取报表页列表失败');
     }
   }
 
   static async createReportPage(pageData: ReportPageCreateRequest): Promise<ReportPage> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(pageData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.post<ReportPage>('/report-pages/', pageData);
     } catch (error) {
-      console.error('创建报表页失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '创建报表页失败');
+      }
+      throw new Error('创建报表页失败');
     }
   }
 
   static async getReportPage(pageId: number): Promise<ReportPage> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/${pageId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.get<ReportPage>(`/report-pages/${pageId}`);
     } catch (error) {
-      console.error('获取报表页失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取报表页失败');
+      }
+      throw new Error('获取报表页失败');
     }
   }
 
   static async updateReportPage(pageId: number, pageData: ReportPageUpdateRequest): Promise<ReportPage> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/${pageId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(pageData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return await ApiClient.put<ReportPage>(`/report-pages/${pageId}`, pageData);
     } catch (error) {
-      console.error('更新报表页失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新报表页失败');
+      }
+      throw new Error('更新报表页失败');
     }
   }
 
@@ -150,26 +98,12 @@ export class ReportPageService {
     dashboardData: ReportPageDashboardCreateRequest
   ): Promise<ReportPageDashboard> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/${pageId}/dashboards`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dashboardData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.post<ReportPageDashboard>(`/report-pages/${pageId}/dashboards`, dashboardData);
     } catch (error) {
-      console.error('添加仪表盘到报表页失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '添加仪表盘到报表页失败');
+      }
+      throw new Error('添加仪表盘到报表页失败');
     }
   }
 
@@ -178,68 +112,34 @@ export class ReportPageService {
     updateData: ReportPageDashboardUpdateRequest
   ): Promise<ReportPageDashboard> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/dashboards/${rpdId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
+      return await ApiClient.put<ReportPageDashboard>(`/report-pages/dashboards/${rpdId}`, updateData);
     } catch (error) {
-      console.error('更新报表页仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新报表页仪表盘失败');
+      }
+      throw new Error('更新报表页仪表盘失败');
     }
   }
 
   static async removeDashboardFromReportPage(rpdId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/dashboards/${rpdId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/report-pages/dashboards/${rpdId}`);
     } catch (error) {
-      console.error('从报表页移除仪表盘失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '从报表页移除仪表盘失败');
+      }
+      throw new Error('从报表页移除仪表盘失败');
     }
   }
 
   static async deleteReportPage(pageId: number): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_BASE_URL}/report-pages/${pageId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      await ApiClient.delete(`/report-pages/${pageId}`);
     } catch (error) {
-      console.error('删除报表页失败:', error);
-      throw error;
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '删除报表页失败');
+      }
+      throw new Error('删除报表页失败');
     }
   }
 }

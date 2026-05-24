@@ -1,5 +1,6 @@
 // src/services/authService.ts
 import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 export interface AuthResponse {
   success: boolean;
@@ -23,48 +24,21 @@ export interface LoginCredentials {
 export class AuthService {
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          username: credentials.username,
-          password: credentials.password,
-        }),
+      const data = await ApiClient.post<AuthResponse>('/auth/login', {
+        username: credentials.username,
+        password: credentials.password,
       });
-
-      if (!response.ok) {
-        let errorMessage = '登录失败';
-        try {
-          const errorData = await response.json();
-          errorMessage =
-            errorData.detail ||
-            errorData.message ||
-            `HTTP ${response.status}: ${response.statusText}`;
-        } catch {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-        }
-
-        return {
-          success: false,
-          message: errorMessage,
-        };
-      }
-
-      const data = await response.json();
 
       if (data.success && data.token) {
         this.setAuthToken(data.token);
       }
 
-      return data as AuthResponse;
-    } catch (error: unknown) {
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) {
         return {
           success: false,
-          message: '无法连接到服务器，请检查网络连接或确认后端服务是否运行',
+          message: error.message,
         };
       }
 
@@ -76,45 +50,33 @@ export class AuthService {
   }
 
   static setAuthToken(token: string): void {
-    localStorage.setItem('authToken', token);
+    ApiClient.setToken(token);
   }
 
   static getAuthToken(): string | null {
-    return localStorage.getItem('authToken');
+    return ApiClient.getToken();
   }
 
   static clearAuth(): void {
-    localStorage.removeItem('authToken');
+    ApiClient.clearToken();
   }
 
   static isAuthenticated(): boolean {
-    return !!this.getAuthToken();
+    return ApiClient.isAuthenticated();
   }
 
   static async getCurrentUser(): Promise<any> {
-    const token = this.getAuthToken();
-    if (!token) {
+    if (!ApiClient.isAuthenticated()) {
       return null;
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          this.clearAuth();
-        }
-        return null;
+      const data = await ApiClient.get('/auth/me');
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError && error.isUnauthorized) {
+        this.clearAuth();
       }
-
-      return await response.json();
-    } catch {
       return null;
     }
   }
@@ -123,33 +85,27 @@ export class AuthService {
     oldPassword: string,
     newPassword: string
   ): Promise<{ success: boolean; message?: string }> {
-    const token = this.getAuthToken();
-    if (!token) return { success: false, message: '请先登录' };
+    if (!ApiClient.isAuthenticated()) {
+      return { success: false, message: '请先登录' };
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me/password`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          old_password: oldPassword,
-          new_password: newPassword,
-        }),
+      await ApiClient.put('/auth/me/password', {
+        old_password: oldPassword,
+        new_password: newPassword,
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        return { success: false, message: (data as any).detail || '修改失败' };
-      }
       return { success: true };
-    } catch (e: any) {
-      return { success: false, message: e?.message || '网络错误' };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return { success: false, message: error.message };
+      }
+      return { success: false, message: '网络错误' };
     }
   }
 
   static async logout(): Promise<void> {
-    const token = this.getAuthToken();
     // 先清除本地 token，避免后端不可达时无法退出
+    const token = ApiClient.getToken();
     this.clearAuth();
 
     if (!token) {
@@ -157,8 +113,10 @@ export class AuthService {
     }
 
     try {
+      // 使用较短超时，避免阻塞退出
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
+
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: {
@@ -167,6 +125,7 @@ export class AuthService {
         },
         signal: controller.signal,
       });
+
       clearTimeout(timeoutId);
     } catch {
       // 服务端登出失败不影响本地已退出

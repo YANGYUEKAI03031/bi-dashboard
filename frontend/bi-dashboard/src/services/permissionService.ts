@@ -1,6 +1,6 @@
 // src/services/permissionService.ts
 
-import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 // 用户角色类型
 export type UserRole = 'admin' | 'user';
@@ -31,91 +31,78 @@ export interface UserPermissions {
 
 // 用户角色服务
 export class PermissionService {
-  private static getToken(): string | null {
-    return localStorage.getItem('authToken');
-  }
-
-  private static async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-    const token = this.getToken();
-    if (!token) {
-      throw new Error('未登录或token已过期');
-    }
-
-    return fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-  }
-
   // 获取当前用户角色
   static async getMyRole(): Promise<UserPermissions> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/my-role`);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '获取角色失败');
+    try {
+      return await ApiClient.get<UserPermissions>('/permissions/my-role');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取角色失败');
+      }
+      throw new Error('获取角色失败');
     }
-    return response.json();
   }
 
   // 获取当前用户完整权限信息
   static async getMyPermissions(): Promise<UserPermissions> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/my-permissions`);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '获取权限失败');
+    try {
+      return await ApiClient.get<UserPermissions>('/permissions/my-permissions');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取权限失败');
+      }
+      throw new Error('获取权限失败');
     }
-    return response.json();
   }
 
   // 获取所有用户及其角色（仅管理员可访问）
   static async getAllUsersWithRoles(): Promise<UserInfo[]> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/users`);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '获取用户列表失败');
+    try {
+      return await ApiClient.get<UserInfo[]>('/permissions/users');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取用户列表失败');
+      }
+      throw new Error('获取用户列表失败');
     }
-    return response.json();
   }
 
   // 设置用户角色（仅管理员可访问）
   static async setUserRole(userId: number, role: UserRole): Promise<void> {
-    const response = await this.fetchWithAuth(
-      `${API_BASE_URL}/permissions/users/${userId}/role?role=${role}`,
-      { method: 'PUT' }
-    );
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '设置角色失败');
+    try {
+      await ApiClient.put(`/permissions/users/${userId}/role?role=${role}`);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '设置角色失败');
+      }
+      throw new Error('设置角色失败');
     }
   }
 
   // 创建新用户（仅管理员可访问）
   static async createUser(payload: CreateUserPayload): Promise<UserInfo> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/users`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '创建用户失败');
+    try {
+      return await ApiClient.post<UserInfo>('/permissions/users', payload);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '创建用户失败');
+      }
+      throw new Error('创建用户失败');
     }
-    return response.json();
   }
 
   // ============ 报表权限管理 ============
 
   // 获取所有报表列表（仅管理员可访问）
   static async getAllReportPages(): Promise<any[]> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/report-pages`);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '获取报表列表失败');
+    try {
+      return await ApiClient.get<any[]>('/report-pages');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取报表列表失败');
+      }
+      throw new Error('获取报表列表失败');
     }
-    return response.json();
   }
 
   // 授权用户查看/编辑报表（仅管理员或报表创建者可访问）
@@ -124,36 +111,39 @@ export class PermissionService {
     targetUserId: number,
     canEdit: boolean = false
   ): Promise<{ message: string; can_edit: boolean }> {
-    const response = await this.fetchWithAuth(
-      `${API_BASE_URL}/permissions/report-pages/${reportPageId}/grant?target_user_id=${targetUserId}&can_edit=${canEdit}`,
-      { method: 'POST' }
-    );
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '授权失败');
+    try {
+      return await ApiClient.post<{ message: string; can_edit: boolean }>(
+        `/permissions/report-pages/${reportPageId}/grant?target_user_id=${targetUserId}&can_edit=${canEdit}`
+      );
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '授权失败');
+      }
+      throw new Error('授权失败');
     }
-    return response.json();
   }
 
   // 撤销用户报表权限
   static async revokeReportPagePermission(reportPageId: number, targetUserId: number): Promise<void> {
-    const response = await this.fetchWithAuth(
-      `${API_BASE_URL}/permissions/report-pages/${reportPageId}/revoke/${targetUserId}`,
-      { method: 'DELETE' }
-    );
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '撤销权限失败');
+    try {
+      await ApiClient.delete(`/permissions/report-pages/${reportPageId}/revoke/${targetUserId}`);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '撤销权限失败');
+      }
+      throw new Error('撤销权限失败');
     }
   }
 
   // 获取指定报表的权限列表（谁有权限看/编辑）
   static async getReportPagePermissions(reportPageId: number): Promise<any[]> {
-    const response = await this.fetchWithAuth(`${API_BASE_URL}/permissions/report-pages/${reportPageId}/permissions`);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || '获取权限列表失败');
+    try {
+      return await ApiClient.get<any[]>(`/permissions/report-pages/${reportPageId}/permissions`);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取权限列表失败');
+      }
+      throw new Error('获取权限列表失败');
     }
-    return response.json();
   }
 }

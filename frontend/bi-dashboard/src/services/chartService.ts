@@ -1,6 +1,5 @@
 // frontend/bi-dashboard/src/services/chartService.ts
-import { AuthService } from './authService';
-import { API_BASE_URL } from '../config/apiBaseUrl';
+import { ApiClient, ApiError } from './apiClient';
 
 interface ChartCreateRequest {
   name: string;
@@ -42,81 +41,60 @@ interface FilterOptionsFromChartResult {
 
 export class ChartService {
   static async createChart(chartData: ChartCreateRequest): Promise<ChartResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(chartData),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '创建图表失败');
+    try {
+      return await ApiClient.post<ChartResponse>('/visualization/charts/', chartData);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '创建图表失败');
+      }
+      throw new Error('创建图表失败');
     }
-    return response.json();
   }
 
   static async getChart(chartId: number): Promise<ChartResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取图表失败');
+    try {
+      return await ApiClient.get<ChartResponse>(`/visualization/charts/${chartId}`);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取图表失败');
+      }
+      throw new Error('获取图表失败');
     }
-    return response.json();
   }
 
   static async getUserCharts(): Promise<ChartResponse[]> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '获取图表列表失败');
+    try {
+      return await ApiClient.get<ChartResponse[]>('/visualization/charts/');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '获取图表列表失败');
+      }
+      throw new Error('获取图表列表失败');
     }
-    return response.json();
   }
 
   static async updateChart(
     chartId: number,
     updateData: Partial<ChartCreateRequest>,
   ): Promise<ChartResponse> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '更新图表失败');
+    try {
+      return await ApiClient.put<ChartResponse>(`/visualization/charts/${chartId}`, updateData);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '更新图表失败');
+      }
+      throw new Error('更新图表失败');
     }
-    return response.json();
   }
 
   static async deleteChart(chartId: number): Promise<void> {
-    const token = AuthService.getAuthToken();
-    if (!token) throw new Error('用户未认证');
-
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || '删除图表失败');
+    try {
+      await ApiClient.delete(`/visualization/charts/${chartId}`);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message || '删除图表失败');
+      }
+      throw new Error('删除图表失败');
     }
   }
 
@@ -124,45 +102,45 @@ export class ChartService {
     chartId: number,
     filterParams?: Record<string, any>,
   ): Promise<any[]> {
-    const token = localStorage.getItem('authToken');
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/${chartId}/query`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(filterParams || {}),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    try {
+      const data = await ApiClient.post<{ data: any[] }>(
+        `/visualization/charts/${chartId}/query`,
+        filterParams || {}
+      );
+      return data.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw new Error('查询图表失败');
     }
-    const data = await response.json();
-    return data.data;
   }
 
   /** 批量查询多个图表数据（一次请求获取所有图表） */
   static async executeBatchChartQuery(
     requests: { chartId: number; filterParams?: Record<string, any> }[]
   ): Promise<{ chartId: number; data: any[]; error?: string }[]> {
-    const token = localStorage.getItem('authToken');
-    const payload = requests.map(r => ({
-      chart_id: r.chartId,
-      filter_params: r.filterParams || {},
-    }));
-    const response = await fetch(`${API_BASE_URL}/visualization/charts/batch-query`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    try {
+      const payload = requests.map(r => ({
+        chart_id: r.chartId,
+        filter_params: r.filterParams || {},
+      }));
+      const result = await ApiClient.post<{ results: any[] }>(
+        '/visualization/charts/batch-query',
+        payload
+      );
+      // 转换为 {chartId, data, error} 格式
+      return (result.results || []).map((r: any) => ({
+        chartId: r.chart_id,
+        data: r.data || [],
+        error: r.error,
+      }));
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw new Error('批量查询失败');
     }
-    const result = await response.json();
-    // 转换为 {chartId, data, error} 格式
-    return (result.results || []).map((r: any) => ({
-      chartId: r.chart_id,
-      data: r.data || [],
-      error: r.error,
-    }));
   }
 
   /**
@@ -176,30 +154,27 @@ export class ChartService {
     limit?: number,
     filterConditions?: Record<string, any>,
   ): Promise<string[]> {
-    const token = localStorage.getItem('authToken');
-    const params = new URLSearchParams({
-      data_source_id: dataSourceId.toString(),
-      table_name: tableName,
-      field_name: fieldName,
-    });
-    if (limit) params.append('limit', limit.toString());
-    if (filterConditions && Object.keys(filterConditions).length > 0) {
-      params.append('filter_conditions', JSON.stringify(filterConditions));
-    }
+    try {
+      const params = new URLSearchParams({
+        data_source_id: dataSourceId.toString(),
+        table_name: tableName,
+        field_name: fieldName,
+      });
+      if (limit) params.append('limit', limit.toString());
+      if (filterConditions && Object.keys(filterConditions).length > 0) {
+        params.append('filter_conditions', JSON.stringify(filterConditions));
+      }
 
-    const response = await fetch(
-      `${API_BASE_URL}/visualization/charts/filter-options?${params}`,
-      {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      },
-    );
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const data = await ApiClient.get<{ options: string[] }>(
+        `/visualization/charts/filter-options?${params}`
+      );
+      return data.options || [];
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw new Error('获取筛选选项失败');
     }
-    const data = await response.json();
-    return data.options || [];
   }
 
   /**
@@ -212,24 +187,21 @@ export class ChartService {
     limit?: number,
     filterConditions?: Record<string, any>,
   ): Promise<FilterOptionsFromChartResult> {
-    const token = localStorage.getItem('authToken');
-    const params = new URLSearchParams({ field_name: fieldName });
-    if (limit) params.append('limit', limit.toString());
-    if (filterConditions && Object.keys(filterConditions).length > 0) {
-      params.append('filter_conditions', JSON.stringify(filterConditions));
-    }
+    try {
+      const params = new URLSearchParams({ field_name: fieldName });
+      if (limit) params.append('limit', limit.toString());
+      if (filterConditions && Object.keys(filterConditions).length > 0) {
+        params.append('filter_conditions', JSON.stringify(filterConditions));
+      }
 
-    const response = await fetch(
-      `${API_BASE_URL}/visualization/charts/filter-options-from-chart/${chartId}?${params}`,
-      {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      },
-    );
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      return await ApiClient.get<FilterOptionsFromChartResult>(
+        `/visualization/charts/filter-options-from-chart/${chartId}?${params}`
+      );
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw new Error('获取筛选选项失败');
     }
-    return response.json();
   }
 }
