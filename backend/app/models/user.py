@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 class User(Base):
     __tablename__ = "useraccount"
 
-    userID = Column(Integer, primary_key=True, index=True)
+    userID = Column(Integer, primary_key=True, autoincrement=True)
     accountname = Column(String, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)  # bcrypt 哈希
     state = Column(Integer)

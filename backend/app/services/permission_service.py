@@ -90,17 +90,9 @@ class PermissionService:
         if existing:
             raise ValueError("用户名已存在")
 
-        # 手动生成下一个 userID（因为当前表未设置 AUTO_INCREMENT）
-        stmt = select(User.userID).order_by(User.userID.desc()).limit(1)
-        result = await self.db.execute(stmt)
-        last_id = result.scalar_one_or_none() or 0
-        new_id = last_id + 1
-
-        # 创建用户（password_hash 为主，password 双写过渡期兼容）
+        # 创建用户（userID 由数据库 AUTO_INCREMENT 自动生成）
         user = User(
-            userID=new_id,
             accountname=accountname,
-            password=password,
             password_hash=get_password_hash(password),
             state=1 if int(state) == 1 else 0,
         )

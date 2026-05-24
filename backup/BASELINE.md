@@ -73,3 +73,14 @@
    ```bash
    python encrypt_existing_passwords.py
    ```
+
+## 阶段 2.2 userID AUTO_INCREMENT（2026-05-24 已完成）
+
+- [x] `models/user.py` - `userID` 列添加 `autoincrement=True`
+- [x] `permission_service.py` - 移除手动 `MAX(userID)+1` 计算
+- [x] `migrations/migrate_userid_autoincrement.sql` - 迁移 SQL
+
+**数据库迁移**（需要手动执行一次）：
+```sql
+ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
+```
