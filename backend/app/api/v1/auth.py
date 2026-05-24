@@ -5,8 +5,9 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, ChangePasswordRequest
+from app.services.permission_service import PermissionService
 import logging
-from app.core.security import create_access_token, get_current_user_id
+from app.core.security import create_access_token, get_current_user_id, check_password, assign_password
 
 router = APIRouter()
 
@@ -30,30 +31,35 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     username = request.username
     password = request.password
 
-    logger.info(f"Received login request: username={username}, password={password}")
+    logger.info("Received login request for username=%s", username)
 
     # 查询用户
     result = await db.execute(select(User).where(User.accountname == username))
     user = result.scalar_one_or_none()
 
     if not user:
-        logger.warning("User not found")
+        logger.warning("Login failed: user not found (username=%s)", username)
         raise HTTPException(status_code=400, detail="用户名或密码错误")
 
-    logger.info(f"Found user: {user.accountname}, stored password: {user.password}")
+    logger.info("User found for login: username=%s, user_id=%s", user.accountname, user.userID)
 
     # state：1=启用，其他=禁用（兼容字符串/整数）
     if not _is_user_enabled(user.state):
         logger.warning("User account is disabled")
         raise HTTPException(status_code=403, detail="账户已被禁用，无法登录")
 
-    if user.password != password:
-        logger.warning("Password mismatch")
+    if not check_password(password, user):
+        logger.warning("Login failed: password mismatch (username=%s)", username)
         raise HTTPException(status_code=400, detail="用户名或密码错误")
     
     # 修正：使用用户ID而不是用户名创建token
     access_token = create_access_token(data={"sub": str(user.userID)})
-    
+
+    # 获取用户角色
+    permission_service = PermissionService(db)
+    user_role = await permission_service.get_user_role(user.userID)
+    is_admin = await permission_service.is_admin(user.userID)
+
     return {
         "success": True,
         "token": access_token,
@@ -61,7 +67,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         "user": {
             "id": user.userID,
             "username": user.accountname,
-            "full_name": user.accountname
+            "full_name": user.accountname,
+            "role": user_role,
+            "is_admin": is_admin
         }
     }
 
@@ -110,8 +118,15 @@ async def change_password(
         raise HTTPException(status_code=404, detail="用户不存在")
     if not _is_user_enabled(user.state):
         raise HTTPException(status_code=403, detail="账户已被禁用")
-    if user.password != body.old_password:
+    if not check_password(body.old_password, user):
         raise HTTPException(status_code=400, detail="原密码错误")
-    user.password = body.new_password
+    assign_password(user, body.new_password)
     await db.commit()
     return {"message": "密码已修改"}
+
+
+@router.post("/logout")
+async def logout(current_user_id: int = Depends(get_current_user_id)):
+    """登出（JWT 无状态，客户端清除 token 即可）"""
+    logger.info("User logged out: user_id=%s", current_user_id)
+    return {"success": True, "message": "已登出"}

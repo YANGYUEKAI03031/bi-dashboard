@@ -1,0 +1,30 @@
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/bi-dashboard/build/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs & local backup (keep structure, ignore dumps)
+backup/*.sql
+
+# Redis runtime
+backend/redis/*.rdb

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthService, LoginCredentials } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import './LoginPage.css';
 
 export const LoginPage: React.FC = () => {
@@ -9,6 +9,7 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { login: authLogin } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,14 +17,12 @@ export const LoginPage: React.FC = () => {
     setError(null);
     
     try {
-      const credentials: LoginCredentials = { username, password };
-      const response = await AuthService.login(credentials);
+      const result = await authLogin(username, password);
       
-      if (response.success) {
-        // 登录成功，跳转到仪表盘
+      if (result.success) {
         navigate('/dashboard');
       } else {
-        setError(response.message || '登录失败');
+        setError(result.message || '登录失败');
       }
     } catch (err) {
       setError('登录过程中发生错误');

@@ -19,7 +19,6 @@
     "chart.js": "^4.5.1",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
-    "mysql2": "^3.16.3",
     "react": "^19.2.4",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.4",

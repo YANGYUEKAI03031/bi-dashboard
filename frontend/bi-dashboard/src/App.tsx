@@ -1,6 +1,6 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\App.tsx */
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { MainLayout } from './components/layout/MainLayout';
 import { DashboardListPage } from './pages/DashboardListPage';
@@ -27,21 +27,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 // 未认证用户重定向组件
 const RedirectIfAuthenticated: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      // 等待 authContext 初始化
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const token = AuthService.getAuthToken();
-      setIsAuthenticated(!!token);
-      setIsChecking(false);
-    };
-
-    checkAuth();
-  }, []);
+    setIsChecking(true);
+    const token = AuthService.getAuthToken();
+    setIsAuthenticated(!!token);
+    setIsChecking(false);
+  }, [location.pathname]);
 
   if (isChecking) {
     return <div style={{ textAlign: 'center', padding: '20px' }}>正在验证身份...</div>;

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BI-Dashboard 代码审核报告</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --red: #f87171; --orange: #fb923c; --yellow: #fbbf24; --green: #4ade80;
+    --blue: #60a5fa; --purple: #a78bfa;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; line-height:1.7; }
+  .container { max-width:1400px; margin:0 auto; padding:20px; }
+  h1 { font-size:2rem; margin-bottom:8px; }
+  h2 { font-size:1.4rem; margin:32px 0 16px; padding-bottom:8px; border-bottom:2px solid var(--accent); color:var(--accent); }
+  h3 { font-size:1.1rem; margin:20px 0 10px; color:var(--purple); }
+  .subtitle { color:var(--muted); margin-bottom:24px; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:14px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; }
+  .stat { text-align:center; padding:20px; }
+  .stat .num { font-size:2.2rem; font-weight:700; }
+  .stat .label { color:var(--muted); font-size:0.85rem; margin-top:4px; }
+  .chart-box { height:360px; }
+  .chart-box-sm { height:280px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:0.75rem; font-weight:600; }
+  .badge-red { background:#7f1d1d; color:var(--red); }
+  .badge-orange { background:#7c2d12; color:var(--orange); }
+  .badge-yellow { background:#713f12; color:var(--yellow); }
+  .badge-green { background:#14532d; color:var(--green); }
+  .badge-blue { background:#1e3a5f; color:var(--blue); }
+  .issue-row { display:flex; align-items:flex-start; gap:12px; padding:14px; margin:8px 0; border-radius:8px; background:rgba(255,255,255,0.03); border-left:4px solid; }
+  .issue-critical { border-color:var(--red); }
+  .issue-high { border-color:var(--orange); }
+  .issue-medium { border-color:var(--yellow); }
+  .issue-title { font-weight:600; margin-bottom:4px; }
+  .issue-desc { color:var(--muted); font-size:0.9rem; }
+  .issue-file { font-family:monospace; font-size:0.8rem; color:var(--accent); }
+  .score-ring { width:140px; height:140px; margin:0 auto 12px; position:relative; }
+  .score-ring canvas { width:100%; height:100%; }
+  .score-val { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:2rem; font-weight:700; }
+  table { width:100%; border-collapse:collapse; margin:12px 0; }
+  th { background:#1e293b; color:var(--accent); padding:10px 14px; text-align:left; font-size:0.85rem; }
+  td { padding:8px 14px; border-bottom:1px solid var(--border); font-size:0.88rem; }
+  tr:hover td { background:rgba(255,255,255,0.03); }
+  .tag { display:inline-block; padding:1px 8px; border-radius:6px; font-size:0.75rem; margin:2px; }
+  .tag-stack { background:#1e3a5f; color:var(--blue); }
+  .tag-pattern { background:#312e81; color:var(--purple); }
+  .progress-bar { background:#334155; border-radius:8px; height:10px; margin:6px 0; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:8px; }
+  .toc { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:24px; }
+  .toc a { color:var(--accent); text-decoration:none; display:block; padding:4px 0; }
+  .toc a:hover { text-decoration:underline; }
+  @media(max-width:768px) { .grid-2,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div style="text-align:center; padding:40px 0 20px;">
+  <h1>📊 BI-Dashboard 代码审核报告</h1>
+  <p class="subtitle">生成时间：2026-05-12 17:55 | 项目路径：/mnt/e/bi-dashboard</p>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <strong>目录</strong>
+  <a href="#sec1">1. 项目概览</a>
+  <a href="#sec2">2. 代码规模统计</a>
+  <a href="#sec3">3. 综合评分</a>
+  <a href="#sec4">4. 架构分析</a>
+  <a href="#sec5">5. 代码质量问题</a>
+  <a href="#sec6">6. 代码流程优缺点</a>
+  <a href="#sec7">7. 优化建议</a>
+  <a href="#sec8">8. 文件复杂度排行</a>
+</div>
+
+<!-- ============ SECTION 1: 项目概览 ============ -->
+<h2 id="sec1">1. 项目概览</h2>
+<div class="grid-3">
+  <div class="card stat">
+    <div class="num" style="color:var(--blue)">FastAPI</div>
+    <div class="label">后端框架</div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--accent)">React 19 + TS</div>
+    <div class="label">前端框架</div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--green)">MySQL + Redis</div>
+    <div class="label">数据存储</div>
+  </div>
+</div>
+<p style="margin:16px 0; color:var(--muted);">
+  BI-Dashboard 是一个商业智能可视化平台，包含数据源管理、图表可视化、仪表盘、报表页面、ETL 数据管道等核心功能。
+  后端采用 FastAPI + SQLAlchemy(async) + MySQL，前端采用 React 19 + Ant Design 6 + ECharts + ReactFlow。
+</p>
+
+<!-- ============ SECTION 2: 代码规模 ============ -->
+<h2 id="sec2">2. 代码规模统计</h2>
+<div class="grid-4">
+  <div class="card stat">
+    <div class="num" style="color:var(--accent)">15,213</div>
+    <div class="label">后端代码行数 (Python)</div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--purple)">29,548</div>
+    <div class="label">前端代码行数 (TS/TSX)</div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--blue)">47</div>
+    <div class="label">后端文件数</div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--green)">62</div>
+    <div class="label">前端文件数</div>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-top:16px;">
+  <div class="card">
+    <h3>后端模块代码量分布</h3>
+    <div id="chart-backend-dist" class="chart-box"></div>
+  </div>
+  <div class="card">
+    <h3>前端模块代码量分布</h3>
+    <div id="chart-frontend-dist" class="chart-box"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3>技术栈一览</h3>
+  <table>
+    <tr><th>层</th><th>技术</th><th>标签</th></tr>
+    <tr><td>后端框架</td><td>FastAPI + Uvicorn</td><td><span class="tag tag-stack">Python</span></td></tr>
+    <tr><td>ORM</td><td>SQLAlchemy 2.0 (async + aiomysql)</td><td><span class="tag tag-stack">Async</span></td></tr>
+    <tr><td>缓存</td><td>Redis + 内存回退</td><td><span class="tag tag-stack">Cache</span></td></tr>
+    <tr><td>认证</td><td>JWT (python-jose)</td><td><span class="tag tag-stack">Auth</span></td></tr>
+    <tr><td>调度</td><td>APScheduler</td><td><span class="tag tag-stack">Scheduler</span></td></tr>
+    <tr><td>实时</td><td>WebSocket</td><td><span class="tag tag-stack">WS</span></td></tr>
+    <tr><td>前端框架</td><td>React 19 + TypeScript</td><td><span class="tag tag-stack">SPA</span></td></tr>
+    <tr><td>UI组件</td><td>Ant Design 6</td><td><span class="tag tag-stack">UI</span></td></tr>
+    <tr><td>图表</td><td>ECharts 6 + Chart.js</td><td><span class="tag tag-stack">Viz</span></td></tr>
+    <tr><td>流程图</td><td>@xyflow/react (ReactFlow)</td><td><span class="tag tag-stack">Flow</span></td></tr>
+    <tr><td>布局</td><td>react-grid-layout</td><td><span class="tag tag-stack">Layout</span></td></tr>
+    <tr><td>HTTP</td><td>Axios</td><td><span class="tag tag-stack">HTTP</span></td></tr>
+  </table>
+</div>
+
+<!-- ============ SECTION 3: 综合评分 ============ -->
+<h2 id="sec3">3. 综合评分</h2>
+<div class="grid-4">
+  <div class="card stat">
+    <div class="num" style="color:var(--orange)">42</div>
+    <div class="label">安全性</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:42%;background:var(--orange)"></div></div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--yellow)">55</div>
+    <div class="label">可维护性</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:55%;background:var(--yellow)"></div></div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--blue)">68</div>
+    <div class="label">架构设计</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:68%;background:var(--blue)"></div></div>
+  </div>
+  <div class="card stat">
+    <div class="num" style="color:var(--green)">72</div>
+    <div class="label">功能完整度</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:72%;background:var(--green)"></div></div>
+  </div>
+</div>
+<div class="card" style="margin-top:16px;">
+  <h3>评分雷达图</h3>
+  <div id="chart-radar" class="chart-box"></div>
+</div>
+
+<!-- ============ SECTION 4: 架构分析 ============ -->
+<h2 id="sec4">4. 架构分析</h2>
+<div class="grid-2">
+  <div class="card">
+    <h3>✅ 架构优点</h3>
+    <div style="padding:8px 0;">
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>Service Layer 分层</strong>：API 层薄，业务逻辑下沉到 Service，职责清晰</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>全异步栈</strong>：AsyncSession + aiomysql，高并发友好</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>权限体系完整</strong>：三级权限 (owner > admin > report-page-granted)，有修改日志</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>缓存双备份</strong>：Redis 优先 + 内存回退，增强可用性</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>Pipeline 双模式存储</strong>：JSON 表(兼容预览) + 列式表(INSERT...SELECT 性能)</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>软删除策略</strong>：统一 archived/is_active 字段，数据可恢复</p>
+      <p style="margin:8px 0"><span class="badge badge-green">良好</span> <strong>引擎缓存</strong>：chart_service 缓存 SQLAlchemy 引擎，减少连接创建开销</p>
+    </div>
+  </div>
+  <div class="card">
+    <h3>❌ 架构缺点</h3>
+    <div style="padding:8px 0;">
+      <p style="margin:8px 0"><span class="badge badge-red">严重</span> <strong>God Class</strong>：engine.py 4069行/190KB，SQL生成/验证/推理全塞一个类</p>
+      <p style="margin:8px 0"><span class="badge badge-red">严重</span> <strong>循环依赖</strong>：Services 互相 inline import 规避循环，依赖关系混乱</p>
+      <p style="margin:8px 0"><span class="badge badge-orange">高</span> <strong>无数据库迁移工具</strong>：用 ad-hoc Python 脚本替代 Alembic</p>
+      <p style="margin:8px 0"><span class="badge badge-orange">高</span> <strong>实时同步未完成</strong>：RealTimeSyncService 是空壳骨架</p>
+      <p style="margin:8px 0"><span class="badge badge-orange">高</span> <strong>临时表泄漏风险</strong>：tmp_pipeline_* 为持久表，清理失败则累积</p>
+      <p style="margin:8px 0"><span class="badge badge-yellow">中</span> <strong>分页不统一</strong>：部分接口 skip/limit，部分无分页</p>
+      <p style="margin:8px 0"><span class="badge badge-yellow">中</span> <strong>空文件残留</strong>：endpoints/user.py, models/__init__.py 等空文件</p>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3>后端架构流程图</h3>
+  <div id="chart-arch-sankey" class="chart-box"></div>
+</div>
+
+<!-- ============ SECTION 5: 代码质量问题 ============ -->
+<h2 id="sec5">5. 代码质量问题</h2>
+<h3>🔴 严重问题 (Critical)</h3>
+
+<div class="issue-row issue-critical">
+  <div style="flex:1">
+    <div class="issue-title">明文密码存储与验证</div>
+    <div class="issue-desc">User.password 存储明文，auth.py 登录直接 <code>user.password == form.password</code> 对比。security.py 中的 bcrypt 哈希函数 <code>verify_password()</code>/<code>get_password_hash()</code> 从未被调用。</div>
+    <div class="issue-file">backend/app/api/v1/auth.py | backend/app/models/user.py | backend/app/core/security.py</div>
+  </div>
+  <span class="badge badge-red">CRITICAL</span>
+</div>
+
+<div class="issue-row issue-critical">
+  <div style="flex:1">
+    <div class="issue-title">SQL 注入风险</div>
+    <div class="issue-desc">chart_service.py 过滤参数值直接拼接到 SQL 字符串，仅做单引号转义。trigger_scheduler.py / temp_table_manager.py 构造 SQL 使用字符串插值。</div>
+    <div class="issue-file">backend/app/services/chart_service.py | backend/app/services/pipeline/trigger_scheduler.py | backend/app/services/pipeline/temp_table_manager.py</div>
+  </div>
+  <span class="badge badge-red">CRITICAL</span>
+</div>
+
+<div class="issue-row issue-critical">
+  <div style="flex:1">
+    <div class="issue-title">JWT Secret 硬编码入库</div>
+    <div class="issue-desc">.env 文件包含 SECRET_KEY 并提交到仓库。若仓库公开，任何人可伪造 JWT Token。</div>
+    <div class="issue-file">backend/.env</div>
+  </div>
+  <span class="badge badge-red">CRITICAL</span>
+</div>
+
+<h3>🟠 高优先级问题 (High)</h3>
+
+<div class="issue-row issue-high">
+  <div style="flex:1">
+    <div class="issue-title">God Class — PipelineEngine</div>
+    <div class="issue-desc">engine.py 4069行/190KB，包含 SQL 生成、验证、类型推断、批处理、增量更新、列投影、拓扑排序等所有逻辑。极难维护和测试。</div>
+    <div class="issue-file">backend/app/services/pipeline/engine.py</div>
+  </div>
+  <span class="badge badge-orange">HIGH</span>
+</div>
+
+<div class="issue-row issue-high">
+  <div style="flex:1">
+    <div class="issue-title">User.userID 无自增 — 竞争条件</div>
+    <div class="issue-desc">User.userID 缺少 autoincrement=True，使用 SELECT MAX(userID)+1 手动生成，并发创建用户时存在竞态条件。</div>
+    <div class="issue-file">backend/app/models/user.py</div>
+  </div>
+  <span class="badge badge-orange">HIGH</span>
+</div>
+
+<div class="issue-row issue-high">
+  <div style="flex:1">
+    <div class="issue-title">异常处理不一致</div>
+    <div class="issue-desc">Services 统一 raise Exception(str(e))，丢失原始异常类型。PermissionError 使用 Python 内置类型而非自定义异常。</div>
+    <div class="issue-file">backend/app/services/*.py</div>
+  </div>
+  <span class="badge badge-orange">HIGH</span>
+</div>
+
+<div class="issue-row issue-high">
+  <div style="flex:1">
+    <div class="issue-title">前端 console.log 泄露</div>
+    <div class="issue-desc">authService.ts 大量 console.log 输出登录凭据、Token 等敏感信息。生产环境应移除。</div>
+    <div class="issue-file">frontend/src/services/authService.ts</div>
+  </div>
+  <span class="badge badge-orange">HIGH</span>
+</div>
+
+<div class="issue-row issue-high">
+  <div style="flex:1">
+    <div class="issue-title">前端 mysql2 依赖暴露</div>
+    <div class="issue-desc">package.json 包含 mysql2 依赖，前端不应直接连接数据库，存在安全隐患。</div>
+    <div class="issue-file">frontend/bi-dashboard/package.json</div>
+  </div>
+  <span class="badge badge-orange">HIGH</span>
+</div>
+
+<h3>🟡 中等问题 (Medium)</h3>
+
+<div class="issue-row issue-medium">
+  <div style="flex:1">
+    <div class="issue-title">datetime.utcnow() 已弃用</div>
+    <div class="issue-desc">多个文件使用 datetime.utcnow()，Python 3.12+ 已弃用，应改用 datetime.now(timezone.utc)。</div>
+    <div class="issue-file">backend/app/services/*.py</div>
+  </div>
+  <span class="badge badge-yellow">MEDIUM</span>
+</div>
+
+<div class="issue-row issue-medium">
+  <div style="flex:1">
+    <div class="issue-title">硬编码默认值</div>
+    <div class="issue-desc">图表查询 LIMIT 10000、缓存 TTL 3600s、批处理 5000 条等全部硬编码，无法通过配置调整。</div>
+    <div class="issue-file">backend/app/services/chart_service.py | pipeline/engine.py</div>
+  </div>
+  <span class="badge badge-yellow">MEDIUM</span>
+</div>
+
+<div class="issue-row issue-medium">
+  <div style="flex:1">
+    <div class="issue-title">引擎释放不一致</div>
+    <div class="issue-desc">trigger_scheduler.py 每次 poll 后 dispose() 引擎，与 chart_service 的缓存策略矛盾，丧失缓存优势。</div>
+    <div class="issue-file">backend/app/services/pipeline/trigger_scheduler.py</div>
+  </div>
+  <span class="badge badge-yellow">MEDIUM</span>
+</div>
+
+<!-- ============ SECTION 6: 代码流程优缺点 ============ -->
+<h2 id="sec6">6. 代码流程优缺点</h2>
+<div class="grid-2">
+  <div class="card">
+    <h3>🔄 数据管道流程 (Pipeline)</h3>
+    <div style="padding:8px 0; font-size:0.92rem;">
+      <p><strong>流程：</strong>Source → Transform → Filter → Aggregate → Join → Merge → Output/Chart</p>
+      <p style="margin:10px 0;color:var(--green)">✅ 拓扑排序保证执行顺序</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 每步输出写入临时表，支持断点预览</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 增量更新通过 Watermark 机制实现</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 前端 SQL 与后端占位符一致（pipelineJoinSql.ts）</p>
+      <p style="margin:10px 0;color:var(--red)">❌ 单文件 4069 行，任何修改都有高回归风险</p>
+      <p style="margin:4px 0;color:var(--red)">❌ 临时表泄漏风险（非 TEMPORARY TABLE）</p>
+      <p style="margin:4px 0;color:var(--red)">❌ _build_mysql_url() 密码掩码问题</p>
+    </div>
+  </div>
+  <div class="card">
+    <h3>🔐 认证流程 (Auth)</h3>
+    <div style="padding:8px 0; font-size:0.92rem;">
+      <p><strong>流程：</strong>Login → JWT Token / Session Cookie → Protected Route</p>
+      <p style="margin:10px 0;color:var(--green)">✅ 双模式认证（JWT + Session）</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 前端 ProtectedRoute 守卫</p>
+      <p style="margin:10px 0;color:var(--red)">❌ 密码明文存储，bcrypt 函数从未调用</p>
+      <p style="margin:4px 0;color:var(--red)">❌ 前端 Console 输出敏感凭据</p>
+      <p style="margin:4px 0;color:var(--red)">❌ .env 中 SECRET_KEY 提交入库</p>
+    </div>
+  </div>
+</div>
+<div class="grid-2" style="margin-top:16px;">
+  <div class="card">
+    <h3>📊 图表查询流程</h3>
+    <div style="padding:8px 0; font-size:0.92rem;">
+      <p><strong>流程：</strong>ChartConfig → SQL Build → Execute → Filter Bind → Render</p>
+      <p style="margin:10px 0;color:var(--green)">✅ 引擎缓存减少连接创建</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 自动过滤器绑定（正则匹配SQL字段）</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 相对日期解析</p>
+      <p style="margin:10px 0;color:var(--red)">❌ 过滤参数值拼接导致 SQL 注入风险</p>
+      <p style="margin:4px 0;color:var(--red)">❌ 硬编码 LIMIT 10000</p>
+    </div>
+  </div>
+  <div class="card">
+    <h3>📱 前端数据流</h3>
+    <div style="padding:8px 0; font-size:0.92rem;">
+      <p><strong>流程：</strong>AuthService → Context → Service → Page → Components</p>
+      <p style="margin:10px 0;color:var(--green)">✅ Context API 统一认证状态</p>
+      <p style="margin:4px 0;color:var(--green)">✅ 模块化 Service 层</p>
+      <p style="margin:10px 0;color:var(--red)">❌ DashboardEditorPage 2246行，组件过大</p>
+      <p style="margin:4px 0;color:var(--red)">❌ ChartFactory 1873行，图表逻辑集中</p>
+      <p style="margin:4px 0;color:var(--red)">❌ mysql2 不应出现在前端依赖</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SECTION 7: 优化建议 ============ -->
+<h2 id="sec7">7. 优化建议</h2>
+<div class="grid-2">
+  <div class="card">
+    <h3>🚨 P0 — 必须立即修复</h3>
+    <table>
+      <tr><th>#</th><th>建议</th><th>影响</th></tr>
+      <tr><td>1</td><td>密码加密：启用 security.py 中的 bcrypt，登录改用 verify_password()</td><td><span class="badge badge-red">安全</span></td></tr>
+      <tr><td>2</td><td>参数化查询：所有 SQL 使用参数绑定，禁止字符串拼接</td><td><span class="badge badge-red">安全</span></td></tr>
+      <tr><td>3</td><td>SECRET_KEY 外移：从 .env 删除，使用环境变量注入</td><td><span class="badge badge-red">安全</span></td></tr>
+      <tr><td>4</td><td>移除前端 mysql2 依赖</td><td><span class="badge badge-red">安全</span></td></tr>
+      <tr><td>5</td><td>清除前端 console.log 敏感信息输出</td><td><span class="badge badge-red">安全</span></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3>📋 P1 — 近期优化</h3>
+    <table>
+      <tr><th>#</th><th>建议</th><th>影响</th></tr>
+      <tr><td>1</td><td>拆分 engine.py：按职责分为 SQLBuilder、StepExecutor、TypeInferrer 等类</td><td><span class="badge badge-orange">可维护性</span></td></tr>
+      <tr><td>2</td><td>引入 Alembic 数据库迁移</td><td><span class="badge badge-orange">运维</span></td></tr>
+      <tr><td>3</td><td>User.userID 改为 autoincrement</td><td><span class="badge badge-orange">数据一致性</span></td></tr>
+      <tr><td>4</td><td>自定义异常类替代通用 Exception</td><td><span class="badge badge-orange">可维护性</span></td></tr>
+      <tr><td>5</td><td>Pipeline 临时表改为 TEMPORARY TABLE 或增强清理</td><td><span class="badge badge-orange">稳定性</span></td></tr>
+    </table>
+  </div>
+</div>
+<div class="grid-2" style="margin-top:16px;">
+  <div class="card">
+    <h3>💡 P2 — 中期改进</h3>
+    <table>
+      <tr><th>#</th><th>建议</th><th>影响</th></tr>
+      <tr><td>1</td><td>拆分前端大组件（DashboardEditorPage、ChartFactory）</td><td><span class="badge badge-yellow">可维护性</span></td></tr>
+      <tr><td>2</td><td>统一分页响应格式</td><td><span class="badge badge-yellow">API一致性</span></td></tr>
+      <tr><td>3</td><td>硬编码值提取到 settings/config</td><td><span class="badge badge-yellow">可配置性</span></td></tr>
+      <tr><td>4</td><td>完成 RealTimeSyncService 实现</td><td><span class="badge badge-yellow">功能完整</span></td></tr>
+      <tr><td>5</td><td>datetime.utcnow() → datetime.now(timezone.utc)</td><td><span class="badge badge-yellow">兼容性</span></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3>🎯 P3 — 长期演进</h3>
+    <table>
+      <tr><th>#</th><th>建议</th><th>影响</span></td></tr>
+      <tr><td>1</td><td>引入单元测试 + 集成测试（当前无测试覆盖）</td><td><span class="badge badge-blue">质量</span></td></tr>
+      <tr><td>2</td><td>添加 API 限流（Rate Limiting）</td><td><span class="badge badge-blue">安全</span></td></tr>
+      <tr><td>3</td><td>解耦循环依赖，引入事件总线或依赖注入</td><td><span class="badge badge-blue">架构</span></td></tr>
+      <tr><td>4</td><td>添加 CI/CD 流水线和代码质量门禁</td><td><span class="badge badge-blue">工程化</span></td></tr>
+      <tr><td>5</td><td>增加 OpenAPI 文档完善度和示例</td><td><span class="badge badge-blue">开发者体验</span></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ SECTION 8: 文件复杂度排行 ============ -->
+<h2 id="sec8">8. 文件复杂度排行（Top 15）</h2>
+<div class="card">
+  <div id="chart-complexity" class="chart-box"></div>
+</div>
+
+<!-- Footer -->
+<div style="text-align:center; padding:32px 0; color:var(--muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:40px;">
+  BI-Dashboard 代码审核报告 | 由 Hermes Agent 自动生成 | 2026-05-12
+</div>
+
+</div>
+
+<script>
+// === Chart 1: Backend module distribution ===
+var c1 = echarts.init(document.getElementById('chart-backend-dist'), 'dark');
+c1.setOption({
+  backgroundColor:'transparent',
+  tooltip:{trigger:'item'},
+  series:[{
+    type:'pie', radius:['40%','70%'],
+    label:{color:'#e2e8f0',fontSize:11},
+    data:[
+      {value:4069, name:'services/pipeline/engine.py', itemStyle:{color:'#f87171'}},
+      {value:1232, name:'services/chart_service.py', itemStyle:{color:'#fb923c'}},
+      {value:811, name:'services/dashboard_service.py', itemStyle:{color:'#fbbf24'}},
+      {value:678, name:'services/pipeline_service.py', itemStyle:{color:'#4ade80'}},
+      {value:668, name:'services/pipeline/temp_table_manager.py', itemStyle:{color:'#60a5fa'}},
+      {value:541, name:'services/pipeline/trigger_scheduler.py', itemStyle:{color:'#a78bfa'}},
+      {value:531, name:'services/permission_service.py', itemStyle:{color:'#f472b6'}},
+      {value:528, name:'services/pipeline_chart_sync_service.py', itemStyle:{color:'#2dd4bf'}},
+      {value:352, name:'services/report_page_service.py', itemStyle:{color:'#818cf8'}},
+      {value:330, name:'services/pipeline/watermark_manager.py', itemStyle:{color:'#e879f9'}},
+      {value:5200, name:'其他 (api/core/db/models/schemas)', itemStyle:{color:'#475569'}}
+    ]
+  }]
+});
+
+// === Chart 2: Frontend module distribution ===
+var c2 = echarts.init(document.getElementById('chart-frontend-dist'), 'dark');
+c2.setOption({
+  backgroundColor:'transparent',
+  tooltip:{trigger:'item'},
+  series:[{
+    type:'pie', radius:['40%','70%'],
+    label:{color:'#e2e8f0',fontSize:11},
+    data:[
+      {value:2246, name:'DashboardEditorPage.tsx', itemStyle:{color:'#f87171'}},
+      {value:1873, name:'ChartFactory.tsx', itemStyle:{color:'#fb923c'}},
+      {value:1560, name:'PipelineFlowEditor.tsx', itemStyle:{color:'#fbbf24'}},
+      {value:1542, name:'VisualizationBuilder.tsx', itemStyle:{color:'#4ade80'}},
+      {value:1526, name:'ReportsPage.tsx', itemStyle:{color:'#60a5fa'}},
+      {value:1388, name:'InsertColumnModal.tsx', itemStyle:{color:'#a78bfa'}},
+      {value:1186, name:'DashboardPage.tsx', itemStyle:{color:'#f472b6'}},
+      {value:1088, name:'ChartsManagementPage.tsx', itemStyle:{color:'#2dd4bf'}},
+      {value:1081, name:'PipelineCanvasPreviewPanel.tsx', itemStyle:{color:'#818cf8'}},
+      {value:16000, name:'其他组件/服务/工具', itemStyle:{color:'#475569'}}
+    ]
+  }]
+});
+
+// === Chart 3: Radar ===
+var c3 = echarts.init(document.getElementById('chart-radar'), 'dark');
+c3.setOption({
+  backgroundColor:'transparent',
+  radar:{
+    indicator:[
+      {name:'安全性',max:100},{name:'可维护性',max:100},{name:'架构设计',max:100},
+      {name:'功能完整度',max:100},{name:'代码规范',max:100},{name:'测试覆盖',max:100},
+      {name:'文档完善度',max:100},{name:'性能优化',max:100}
+    ],
+    axisName:{color:'#e2e8f0'},
+    splitArea:{areaStyle:{color:['rgba(56,189,248,0.05)','rgba(56,189,248,0.1)']}}
+  },
+  series:[{
+    type:'radar',
+    data:[{
+      value:[42,55,68,72,50,10,35,60],
+      name:'评分',
+      areaStyle:{color:'rgba(56,189,248,0.2)'},
+      lineStyle:{color:'#38bdf8'},
+      itemStyle:{color:'#38bdf8'}
+    }]
+  }]
+});
+
+// === Chart 4: Architecture Sankey (simplified as tree) ===
+var c4 = echarts.init(document.getElementById('chart-arch-sankey'), 'dark');
+c4.setOption({
+  backgroundColor:'transparent',
+  tooltip:{trigger:'item'},
+  series:[{
+    type:'sankey',
+    layoutIterations:0,
+    nodeAlign:'left',
+    label:{color:'#e2e8f0',fontSize:11},
+    lineStyle:{color:'gradient',opacity:0.3},
+    data:[
+      {name:'Client'},{name:'FastAPI Router'},{name:'Auth Middleware'},
+      {name:'Charts API'},{name:'Dashboards API'},{name:'Pipeline API'},
+      {name:'Reports API'},{name:'Datasources API'},{name:'Permissions API'},
+      {name:'ChartService'},{name:'DashboardService'},{name:'PipelineEngine'},
+      {name:'PermissionService'},{name:'TempTableManager'},{name:'WatermarkManager'},
+      {name:'TriggerScheduler'},{name:'MySQL'},{name:'Redis Cache'},{name:'WebSocket'}
+    ],
+    links:[
+      {source:'Client',target:'FastAPI Router',value:100},
+      {source:'FastAPI Router',target:'Auth Middleware',value:100},
+      {source:'Auth Middleware',target:'Charts API',value:20},
+      {source:'Auth Middleware',target:'Dashboards API',value:20},
+      {source:'Auth Middleware',target:'Pipeline API',value:25},
+      {source:'Auth Middleware',target:'Reports API',value:10},
+      {source:'Auth Middleware',target:'Datasources API',value:15},
+      {source:'Auth Middleware',target:'Permissions API',value:10},
+      {source:'Charts API',target:'ChartService',value:20},
+      {source:'Dashboards API',target:'DashboardService',value:20},
+      {source:'Pipeline API',target:'PipelineEngine',value:15},
+      {source:'Pipeline API',target:'TempTableManager',value:10},
+      {source:'Reports API',target:'DashboardService',value:5},
+      {source:'ChartService',target:'MySQL',value:20},
+      {source:'DashboardService',target:'MySQL',value:25},
+      {source:'PipelineEngine',target:'MySQL',value:25},
+      {source:'PipelineEngine',target:'WatermarkManager',value:5},
+      {source:'TempTableManager',target:'MySQL',value:10},
+      {source:'Permissions API',target:'PermissionService',value:10},
+      {source:'PermissionService',target:'MySQL',value:10},
+      {source:'ChartService',target:'Redis Cache',value:8},
+      {source:'Client',target:'WebSocket',value:5},
+      {source:'TriggerScheduler',target:'PipelineEngine',value:8},
+      {source:'PipelineEngine',target:'TriggerScheduler',value:3}
+    ]
+  }]
+});
+
+// === Chart 5: File complexity bar ===
+var c5 = echarts.init(document.getElementById('chart-complexity'), 'dark');
+c5.setOption({
+  backgroundColor:'transparent',
+  tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+  grid:{left:220,right:40,top:10,bottom:30},
+  xAxis:{type:'value',axisLabel:{color:'#94a3b8'},splitLine:{lineStyle:{color:'#334155'}}},
+  yAxis:{type:'category',axisLabel:{color:'#e2e8f0',fontSize:11},
+    data:[
+      'watermark_manager.py','report_page_service.py','pipeline_chart_sync.py',
+      'permission_service.py','trigger_scheduler.py','temp_table_manager.py',
+      'pipeline_service.py','dashboard_service.py','chart_service.py',
+      'InsertColumnModal.tsx','ChartsManagementPage.tsx','DashboardPage.tsx',
+      'PipelineFlowEditor.tsx','VisualizationBuilder.tsx','ChartFactory.tsx',
+      'DashboardEditorPage.tsx','engine.py'
+    ].reverse()
+  },
+  series:[{
+    type:'bar',
+    data:[330,352,528,531,541,668,678,811,1232,1388,1088,1186,1560,1542,1873,2246,4069].reverse().map(function(v,i){
+      var color = v > 2000 ? '#f87171' : v > 1000 ? '#fb923c' : v > 500 ? '#fbbf24' : '#4ade80';
+      return {value:v, itemStyle:{color:color}};
+    }),
+    label:{show:true,position:'right',color:'#e2e8f0',fontSize:11}
+  }]
+});
+
+// Resize
+window.addEventListener('resize', function(){
+  c1.resize(); c2.resize(); c3.resize(); c4.resize(); c5.resize();
+});
+</script>
+</body>
+</html>

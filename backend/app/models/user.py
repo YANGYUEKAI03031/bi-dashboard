@@ -4,12 +4,12 @@ from app.db.base import Base
 from sqlalchemy.orm import relationship
 
 class User(Base):
-    __tablename__ = "useraccount"  # 注意：表名应为 useraccount
+    __tablename__ = "useraccount"
 
     userID = Column(Integer, primary_key=True, index=True)
-    accountname = Column(String, unique=True, index=True)  # 对应 username
-    password = Column(String)  # 对应 password
-    state = Column(Integer)  # 对应 is_active 或 status
+    accountname = Column(String, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)  # bcrypt 哈希
+    state = Column(Integer)
     
     # 关系定义
     created_visualizations = relationship("VisualizationCard", back_populates="creator")

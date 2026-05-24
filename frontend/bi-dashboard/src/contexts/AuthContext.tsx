@@ -30,87 +30,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 检查认证状态的核心函数
+  const applyRole = useCallback(async (retries = 2) => {
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const permissions = await PermissionService.getMyRole();
+        if (permissions && permissions.role) {
+          setRole(permissions.role);
+          setIsAdmin(Boolean(permissions.is_admin));
+          return;
+        }
+      } catch {
+        if (i < retries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+  }, []);
+
   const checkAuthStatus = useCallback(async (): Promise<boolean> => {
-    console.log('=== 检查认证状态 ===');
     try {
       const token = AuthService.getAuthToken();
-      console.log('Token存在:', !!token);
 
-      if (token) {
-        const currentUser = await AuthService.getCurrentUser();
-        console.log('获取到的用户信息:', currentUser);
-
-        if (currentUser) {
-          setUser({
-            id: currentUser.id,
-            username: currentUser.username,
-            email: currentUser.email,
-            full_name: currentUser.full_name
-          });
-
-          // 获取用户角色
-          try {
-            const permissions = await PermissionService.getMyRole();
-            setRole(permissions.role);
-            setIsAdmin(permissions.is_admin);
-            console.log('用户角色:', permissions.role, '是否管理员:', permissions.is_admin);
-          } catch (roleError) {
-            console.warn('获取角色失败，使用默认角色:', roleError);
-            setRole('user');
-            setIsAdmin(false);
-          }
-
-          console.log('认证状态: 已认证');
-          return true;
-        } else {
-          console.log('用户信息获取失败，清除认证状态');
-          AuthService.clearAuth();
-          setUser(null);
-          setRole('user');
-          setIsAdmin(false);
-          return false;
-        }
-      } else {
-        console.log('无有效token');
+      if (!token) {
         setUser(null);
         setRole('user');
         setIsAdmin(false);
         return false;
       }
-    } catch (error) {
-      console.error('检查认证状态失败:', error);
+
+      const currentUser = await AuthService.getCurrentUser();
+
+      if (!currentUser) {
+        AuthService.clearAuth();
+        setUser(null);
+        setRole('user');
+        setIsAdmin(false);
+        return false;
+      }
+
+      setUser({
+        id: currentUser.id,
+        username: currentUser.username,
+        email: currentUser.email,
+        full_name: currentUser.full_name,
+      });
+      await applyRole();
+      return true;
+    } catch {
       AuthService.clearAuth();
       setUser(null);
       setRole('user');
       setIsAdmin(false);
       return false;
     }
-  }, []);
+  }, [applyRole]);
 
-  // 刷新认证状态
   const refreshAuth = useCallback(async () => {
     setLoading(true);
     await checkAuthStatus();
     setLoading(false);
   }, [checkAuthStatus]);
 
-  // 初始化时检查认证状态
   useEffect(() => {
     const initializeAuth = async () => {
-      console.log('=== 初始化认证状态 ===');
       await checkAuthStatus();
       setLoading(false);
     };
-    
+
     initializeAuth();
   }, [checkAuthStatus]);
 
-  // 监听storage事件，处理多标签页认证同步
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'authToken') {
-        console.log('检测到认证token变化，重新检查认证状态');
         refreshAuth();
       }
     };
@@ -121,47 +113,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (username: string, password: string) => {
     try {
-      console.log('=== 执行登录 ===');
       const response = await AuthService.login({ username, password });
 
       if (response.success && response.user) {
+        const { role, is_admin } = response.user;
         setUser({
           id: response.user.id,
           username: response.user.username,
           email: response.user.email,
-          full_name: response.user.full_name
+          full_name: response.user.full_name,
         });
-
-        // 获取用户角色
-        try {
-          const permissions = await PermissionService.getMyRole();
-          setRole(permissions.role);
-          setIsAdmin(permissions.is_admin);
-        } catch (roleError) {
-          console.warn('获取角色失败:', roleError);
-          setRole('user');
-          setIsAdmin(false);
+        // 优先使用登录响应中的角色信息
+        if (role) {
+          setRole(role);
         }
-
-        console.log('登录成功，用户状态已更新');
+        if (typeof is_admin === 'boolean') {
+          setIsAdmin(is_admin);
+        } else {
+          // 如果登录响应没有角色信息，调用 API 获取
+          await applyRole();
+        }
       }
 
       return { success: response.success, message: response.message };
-    } catch (error) {
-      console.error('登录失败:', error);
+    } catch {
       return { success: false, message: '登录过程中发生错误' };
     }
-  }, []);
+  }, [applyRole]);
 
   const logout = useCallback(async () => {
     try {
-      console.log('=== 执行登出 ===');
       await AuthService.logout();
     } finally {
       setUser(null);
       setRole('user');
       setIsAdmin(false);
-      console.log('登出完成，用户状态已清除');
     }
   }, []);
 
@@ -174,14 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     loading,
     refreshAuth,
-    checkAuthStatus
+    checkAuthStatus,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

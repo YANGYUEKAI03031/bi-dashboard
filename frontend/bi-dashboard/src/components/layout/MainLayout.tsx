@@ -1,7 +1,7 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined, LogoutOutlined } from '@ant-design/icons';
 import { Modal, Form, Input, message, Popconfirm, Popover, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
@@ -112,9 +112,17 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
 
   const handleLogout = async () => {
     await logout();
-    // 手动导航到登录页面
     navigate('/login', { replace: true });
   };
+
+  const userMenuItems: MenuProps['items'] = user
+    ? [
+        { key: 'avatar', icon: <UserOutlined />, label: '换头像', onClick: () => setAvatarModalVisible(true) },
+        { key: 'password', icon: <LockOutlined />, label: '改密码', onClick: () => setPasswordModalVisible(true) },
+        { type: 'divider' },
+        { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { void handleLogout(); } },
+      ]
+    : [];
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -197,13 +205,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       message.error('保存失败');
     }
   };
-
-  const userMenuItems: MenuProps['items'] = user
-    ? [
-        { key: 'avatar', icon: <UserOutlined />, label: '换头像', onClick: () => setAvatarModalVisible(true) },
-        { key: 'password', icon: <LockOutlined />, label: '改密码', onClick: () => setPasswordModalVisible(true) },
-      ]
-    : [];
 
   const handleDeleteReportPage = async (pageId: number, pageName: string) => {
     try {

@@ -9,6 +9,7 @@ import logging
 
 from app.models.permission import UserRole, ReportPagePermission, ModificationLog, RoleEnum, ResourceTypeEnum
 from app.models.user import User
+from app.core.security import get_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +96,12 @@ class PermissionService:
         last_id = result.scalar_one_or_none() or 0
         new_id = last_id + 1
 
-        # 创建用户（当前项目登录逻辑是明文比对，这里保持一致）
+        # 创建用户（password_hash 为主，password 双写过渡期兼容）
         user = User(
             userID=new_id,
             accountname=accountname,
             password=password,
+            password_hash=get_password_hash(password),
             state=1 if int(state) == 1 else 0,
         )
         self.db.add(user)

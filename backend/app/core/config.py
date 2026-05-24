@@ -1,59 +1,63 @@
-# app/core/config.py - 增强版本
+# app/core/config.py
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+
 class Settings(BaseSettings):
-    # MySQL数据库设置
+    # MySQL 数据库（敏感项请通过 .env 配置，勿在代码中写默认值）
     MYSQL_HOST: str = "localhost"
     MYSQL_PORT: int = 3306
     MYSQL_USER: str = "root"
-    MYSQL_PASSWORD: str = "603031"
+    MYSQL_PASSWORD: str = ""
     MYSQL_DATABASE: str = "users"
-    
+
     # 数据库连接池配置
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 30
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
-    DB_ECHO: bool = False  # 生产环境设为False
-    
-    # Redis缓存配置
+    DB_ECHO: bool = False
+
+    # Redis 缓存配置
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
-    
-    # 构建数据库URL
+
     @property
     def DATABASE_URL(self) -> str:
-        return f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
-    
-    # Redis连接URL
+        return (
+            f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
+            f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
+        )
+
     @property
     def REDIS_URL(self) -> str:
         if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        return f"redis://@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-    
+            return (
+                f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:"
+                f"{self.REDIS_PORT}/{self.REDIS_DB}"
+            )
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
     # Security settings
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # CORS settings - 生产环境建议限制来源
+
+    # CORS settings
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://192.168.*.*:3000",  # 局域网
-        "http://*",  # 允许所有来源（开发环境）
     ]
-    
+
     # Application settings
     PROJECT_NAME: str = "BI Dashboard API"
     PROJECT_VERSION: str = "1.0.0"
     DEBUG: bool = True
-    
+
     class Config:
         env_file = ".env"
+
 
 settings = Settings()

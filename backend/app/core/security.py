@@ -1,39 +1,49 @@
 # backend/app/core/security.py
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 
-# 创建密码上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+logger = logging.getLogger(__name__)
+
+
 def get_password_hash(password: str) -> str:
-    """
-    对密码进行哈希处理
-    
-    Args:
-        password: 原始密码
-        
-    Returns:
-        哈希后的密码
-    """
-    return pwd_context.hash(password)
+    """对密码进行 bcrypt 哈希"""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    验证密码是否正确
-    
-    Args:
-        plain_password: 原始密码
-        hashed_password: 哈希后的密码
-        
-    Returns:
-        密码是否匹配
-    """
-    return pwd_context.verify(plain_password, hashed_password)
+    """验证 bcrypt 哈希密码"""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
+        return False
+
+
+def check_password(plain_password: str, user) -> bool:
+    """验证用户密码（bcrypt）"""
+    password_hash = getattr(user, "password_hash", None)
+    if password_hash:
+        try:
+            return verify_password(plain_password, password_hash)
+        except Exception:
+            user_id = getattr(user, "userID", "?")
+            logger.warning("password_hash verify failed for user_id=%s", user_id)
+    return False
+
+
+def assign_password(user, plain_password: str) -> None:
+    """设置用户密码（bcrypt 哈希）"""
+    user.password_hash = get_password_hash(plain_password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
