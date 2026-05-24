@@ -29,50 +29,19 @@ from sqlalchemy import text, update
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.services.pipeline.temp_table_manager import TempTableManager
 from app.services.pipeline.watermark_manager import WatermarkManager
+from app.services.pipeline.validator import (
+    topological_sort,
+    validate_sql,
+    validate_pipeline_config,
+    validate_and_quote_table_name,
+)
+from app.services.pipeline.type_inferrer import (
+    preview_value_to_column_type,
+    infer_preview_column_types,
+)
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _preview_value_to_column_type(v: Any) -> str:
-    """根据驱动返回的 Python 值推断列类型，与前端 getDataTypeInfo 使用的名称对齐。"""
-    if v is None:
-        return "string"
-    if isinstance(v, bool):
-        return "boolean"
-    if isinstance(v, int) and not isinstance(v, bool):
-        return "int"
-    if isinstance(v, float):
-        return "decimal"
-    if isinstance(v, Decimal):
-        return "decimal"
-    if isinstance(v, datetime):
-        return "datetime"
-    if isinstance(v, date):
-        return "date"
-    if isinstance(v, (bytes, bytearray)):
-        return "string"
-    return "string"
-
-
-def _infer_preview_column_types(rows_raw: List[Any], num_cols: int) -> List[str]:
-    """用前若干行非空单元格推断每列类型；无行或全空时退化为 string。"""
-    if num_cols <= 0:
-        return []
-    if not rows_raw:
-        return ["string"] * num_cols
-    col_types: List[str] = []
-    for i in range(num_cols):
-        picked: Any = None
-        for row in rows_raw[:50]:
-            if len(row) <= i:
-                continue
-            cell = row[i]
-            if cell is not None:
-                picked = cell
-                break
-        col_types.append(_preview_value_to_column_type(picked))
-    return col_types
 
 
 # 与前端 nodeTypeRegistry LEGACY_TYPE_MAP 一致：预览 SQL 生成用规范类型
@@ -168,7 +137,7 @@ class PipelineEngine:
                 logs.append({"time": datetime.utcnow().isoformat(), "message": "开始执行管道"})
 
                 # 按拓扑序执行节点
-                sorted_nodes = self._topological_sort(nodes)
+                sorted_nodes = topological_sort(nodes)
                 if sorted_nodes is None:
                     return False, "管道配置存在循环依赖", result_summary
 
@@ -279,7 +248,7 @@ class PipelineEngine:
                                 )
 
                         # 验证 SQL 安全性
-                        if not self._validate_sql(actual_sql):
+                        if not validate_sql(actual_sql):
                             raise ValueError("SQL 语句包含不允许的操作")
 
                         # 处理增量更新（仅对 source 节点生效）
@@ -295,7 +264,7 @@ class PipelineEngine:
                         if canonical_type == "output":
                             # 输出节点：写入用户配置的目标表，不再写入引擎列式临时表
                             target_plain = (node_config.get("targetTable") or "").strip()
-                            quoted_tbl = PipelineEngine._validate_and_quote_table_name(target_plain)
+                            quoted_tbl = validate_and_quote_table_name(target_plain)
                             if not quoted_tbl:
                                 raise ValueError(
                                     "输出节点目标表名无效（仅允许字母、数字、下划线，长度 1-64）"
@@ -867,56 +836,6 @@ class PipelineEngine:
         except Exception as e:
             logger.error(f"检查取消状态失败: {e}")
             return False
-
-    def _topological_sort(self, nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
-        """
-        Kahn 算法拓扑排序
-
-        Args:
-            nodes: 节点配置列表
-
-        Returns:
-            排序后的节点列表，如果存在环返回 None
-        """
-        if not nodes:
-            return []
-
-        # 构建 node_id -> node 映射
-        node_map: Dict[str, Dict[str, Any]] = {}
-        for i, node in enumerate(nodes):
-            node_id = node.get("id") or f"node_{i}"
-            node_map[node_id] = node
-
-        # 构建入度表和邻接表
-        all_ids = set(node_map.keys())
-        in_degree: Dict[str, int] = {nid: 0 for nid in all_ids}
-        adjacency: Dict[str, List[str]] = {nid: [] for nid in all_ids}
-
-        for node_id, node in node_map.items():
-            upstream = node.get("upstream") or []
-            for up_id in upstream:
-                if up_id in all_ids:
-                    in_degree[node_id] += 1
-                    adjacency[up_id].append(node_id)
-
-        # Kahn 算法
-        queue = [nid for nid in all_ids if in_degree[nid] == 0]
-        sorted_ids: List[str] = []
-
-        while queue:
-            current = queue.pop(0)
-            sorted_ids.append(current)
-            for neighbor in adjacency[current]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        if len(sorted_ids) != len(all_ids):
-            # 存在环
-            logger.error("管道配置存在循环依赖")
-            return None
-
-        return [node_map[nid] for nid in sorted_ids]
 
     def _parse_nodes(self, nodes_config: Any) -> List[Dict[str, Any]]:
         """
@@ -1512,48 +1431,6 @@ class PipelineEngine:
 
         return sql
 
-    def _validate_sql(self, sql: str) -> bool:
-        """
-        验证 SQL 安全性
-
-        只允许 SELECT 语句
-
-        Args:
-            sql: SQL 语句
-
-        Returns:
-            是否安全
-        """
-        if not sql:
-            return False
-
-        sql_upper = sql.upper().strip()
-        
-        # 预处理：移除外层括号和空白，便于验证包含子查询的 SQL
-        # 例如 "(SELECT ... FROM ... WHERE step_id = 'xxx') AS _up0" 
-        # 预处理后变为 "SELECT ... FROM ..."
-        while sql_upper.startswith("(") and sql_upper.endswith(")"):
-            sql_upper = sql_upper[1:-1].strip()
-
-        # 只允许 SELECT
-        if not sql_upper.startswith("SELECT"):
-            return False
-
-        # 禁止的危险关键字
-        dangerous_keywords = [
-            "INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE",
-            "ALTER", "CREATE", "GRANT", "REVOKE"
-        ]
-
-        for keyword in dangerous_keywords:
-            # 确保是独立单词
-            pattern = rf"\b{keyword}\b"
-            if re.search(pattern, sql_upper):
-                logger.warning(f"SQL 包含危险关键字: {keyword}")
-                return False
-
-        return True
-
     async def _update_execution_status(
         self,
         execution_id: int,
@@ -1614,110 +1491,6 @@ class PipelineEngine:
             await self.session.commit()
         except Exception as e:
             logger.warning(f"清理旧执行记录失败: {e}")
-
-    @staticmethod
-    def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
-        """
-        验证管道配置
-
-        Args:
-            nodes: 节点配置列表
-
-        Returns:
-            (is_valid, error_message)
-        """
-        if not nodes:
-            return False, "管道没有配置节点"
-
-        if not isinstance(nodes, list):
-            return False, "节点配置必须是数组格式"
-
-        # 构建 node_id 集合并检查 upstream 引用
-        all_ids = set()
-        for i, node in enumerate(nodes):
-            if not isinstance(node, dict):
-                return False, f"节点 {i} 配置格式错误"
-            if node.get("id"):
-                all_ids.add(node["id"])
-
-        for i, node in enumerate(nodes):
-            if not node.get("name"):
-                return False, f"节点 {i} 缺少名称"
-
-            # 节点可以没有任何特殊配置（没有 SQL，没有 insertedColumns）
-            # 这种情况下节点会直接透传上游数据，不报错
-            # has_sql = bool(node.get("sql"))
-            # has_inserted = bool(node.get("config", {}).get("insertedColumns"))
-            # if not has_sql and not has_inserted:
-            #     return False, f"节点 {node.get('name', i)} 缺少 SQL 语句"
-
-            # 检查 SQL 安全性（只有节点有 SQL 时才检查）
-            sql = node.get("sql", "") or ""
-            if sql:
-                sql_upper = sql.upper()
-                dangerous = ["INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE"]
-                for kw in dangerous:
-                    if kw in sql_upper:
-                        return False, f"节点 {node.get('name', i)} 的 SQL 包含不允许的操作: {kw}"
-
-            # 检查 upstream 引用的节点是否存在
-            upstream = node.get("upstream") or []
-            for up_id in upstream:
-                if up_id not in all_ids:
-                    return False, f"节点 '{node.get('name', i)}' 的上游节点 '{up_id}' 不存在"
-
-            # 检查 merge_type（只允许 union / union all，关联用 join 节点）
-            merge_type = node.get("merge_type")
-            if merge_type and merge_type not in ('union', 'union all'):
-                return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | union all"
-
-            # 输出节点：目标表与写入模式
-            ntype = PipelineEngine._canonical_pipeline_node_type(str(node.get("type") or ""))
-            if ntype == "output":
-                cfg = node.get("config") or {}
-                tt = str(cfg.get("targetTable") or "").strip()
-                if not tt:
-                    return False, f"节点 '{node.get('name', i)}' 为输出节点，请填写目标表名"
-                if not re.match(r"^[a-zA-Z0-9_]{1,64}$", tt):
-                    return False, f"节点 '{node.get('name', i)}' 的目标表名不合法"
-                wm = str(cfg.get("writeMode") or "upsert").lower()
-                if wm not in ("replace", "append", "upsert"):
-                    return False, f"节点 '{node.get('name', i)}' 的 writeMode 必须是 replace | append | upsert"
-                if wm == "upsert":
-                    uk = str(cfg.get("uniqueKey") or "").strip()
-                    if not uk:
-                        return False, f"节点 '{node.get('name', i)}' 为 Upsert 模式，请填写唯一键列（uniqueKey）"
-                    if not re.match(r"^[a-zA-Z0-9_]{1,64}$", uk):
-                        return False, f"节点 '{node.get('name', i)}' 的唯一键列名不合法"
-
-        # 拓扑排序检测环
-        node_map = {node.get("id") or f"node_{i}": node for i, node in enumerate(nodes)}
-        all_node_ids = set(node_map.keys())
-
-        in_degree: Dict[str, int] = {nid: 0 for nid in all_node_ids}
-        adjacency: Dict[str, List[str]] = {nid: [] for nid in all_node_ids}
-
-        for node_id, node in node_map.items():
-            for up_id in (node.get("upstream") or []):
-                if up_id in all_node_ids:
-                    in_degree[node_id] += 1
-                    adjacency[up_id].append(node_id)
-
-        queue = [nid for nid in all_node_ids if in_degree[nid] == 0]
-        visited = 0
-
-        while queue:
-            current = queue.pop(0)
-            visited += 1
-            for neighbor in adjacency[current]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        if visited != len(all_node_ids):
-            return False, "管道配置存在循环依赖"
-
-        return True, ""
 
     # ================================================================
     # 节点预览（用于无代码编辑器实时预览）
@@ -1869,16 +1642,6 @@ class PipelineEngine:
             f"UNION ALL "
             f"SELECT {sel_r} FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
         )
-
-    @staticmethod
-    def _validate_and_quote_table_name(name: str) -> Optional[str]:
-        """校验 DDL 目标表名并返回反引号包裹标识符；不合法则返回 None。"""
-        if not name or not isinstance(name, str):
-            return None
-        n = name.strip()
-        if not re.match(r"^[a-zA-Z0-9_]{1,64}$", n):
-            return None
-        return PipelineEngine._safe_identifier(n)
 
     async def _fetch_mysql_table_columns(self, conn, table_name_plain: str) -> List[str]:
         """从 information_schema 读取当前库下表的列名顺序。"""
@@ -4008,7 +3771,7 @@ class PipelineEngine:
                 result = await conn.execute(text(sql))
                 rows_raw = result.fetchall()
                 columns = list(result.keys()) if hasattr(result, "keys") and result.keys() else []
-                col_types = _infer_preview_column_types(rows_raw, len(columns))
+                col_types = infer_preview_column_types(rows_raw, len(columns))
 
                 data = []
                 for row in rows_raw:

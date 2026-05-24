@@ -144,3 +144,28 @@ ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
 ---
 
 ## P1 基础工程全部完成
+
+## 阶段 3.1a engine.py 拆分 - validator.py（2026-05-24 已完成）
+
+- [x] 创建 `app/services/pipeline/validator.py`：
+  - `topological_sort()` - 拓扑排序
+  - `validate_sql()` - SQL 安全性验证
+  - `validate_pipeline_config()` - 管道配置验证
+  - `validate_and_quote_table_name()` - 表名验证
+- [x] engine.py 导入并使用 validator 模块
+- [x] 删除 engine.py 中的旧验证函数
+- [x] 后端启动正常
+
+---
+
+## 阶段 3.1b engine.py 拆分 - type_inferrer.py（2026-05-24 已完成）
+
+- [x] 创建 `app/services/pipeline/type_inferrer.py`：
+  - `preview_value_to_column_type()` - Python 值到列类型推断
+  - `infer_preview_column_types()` - 预览数据列类型推断
+  - `PIPELINE_NODE_TYPE_CANON` - 节点类型规范映射
+- [x] engine.py 导入并使用 type_inferrer 模块
+- [x] 删除 engine.py 中的旧类型推断函数
+- [x] 后端启动正常
+
+---
