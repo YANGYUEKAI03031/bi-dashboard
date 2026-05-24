@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Encryption key for sensitive data (Fernet AES-128-CBC)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    ENCRYPTION_KEY: str = ""
+
     # CORS settings
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",

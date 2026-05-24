@@ -52,3 +52,24 @@
 - [x] `temp_table_manager.py` - `insert_step_data` 参数化查询
 - [x] `temp_table_manager.py` - 列名白名单校验
 - [x] `trigger_scheduler.py` - 表名/字段名白名单校验
+
+## 阶段 2.1 数据源密码加密（2026-05-24 已完成）
+
+- [x] 新增 `app/core/crypto.py` - Fernet 加解密模块
+- [x] `config.py` 新增 `ENCRYPTION_KEY` 配置项
+- [x] `datasources.py` - 创建数据源时加密密码存储
+- [x] `datasources.py` - 获取连接时解密密码
+- [x] `chart_service.py` - 图表查询时解密密码（2 处）
+- [x] 新增 `encrypt_existing_passwords.py` - 迁移脚本
+- [x] 新增 `tests/test_crypto.py` - 加密模块测试（7 个用例）
+- [x] 所有 56 个单元测试通过
+
+**使用前准备**：
+1. 在 `backend/.env` 中添加 `ENCRYPTION_KEY`：
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+2. 运行迁移脚本加密已有数据源密码：
+   ```bash
+   python encrypt_existing_passwords.py
+   ```

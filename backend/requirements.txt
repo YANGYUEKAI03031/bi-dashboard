@@ -12,6 +12,7 @@ redis>=4.5.0
 
 # Authentication and Security
 python-jose[cryptography]>=3.3.0  # JWT handling
+cryptography>=41.0.0             # Fernet encryption for sensitive data
 bcrypt>=4.0.0                    # Password hashing
 pydantic>=2.0.0                  # Data validation
 pydantic-settings>=2.0.0         # Configuration management

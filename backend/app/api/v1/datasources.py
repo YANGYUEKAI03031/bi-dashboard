@@ -9,6 +9,7 @@ import re
 
 from app.models.visualization import Database
 from app.core.security import get_current_user_id
+from app.core.crypto import encrypt_password, decrypt_password
 
 router = APIRouter(tags=["visualization-datasources"])
 
@@ -42,8 +43,10 @@ class QueryRequest(BaseModel):
 
 def _build_mysql_url(db_model: Database) -> str:
     """根据Database记录构建异步MySQL连接URL"""
+    # 解密密码（支持双轨：加密和明文）
+    password = decrypt_password(db_model.password)
     return (
-        f"mysql+aiomysql://{db_model.username}:{db_model.password}"
+        f"mysql+aiomysql://{db_model.username}:{password}"
         f"@{db_model.host}:{db_model.port}/{db_model.database_name}"
     )
 
@@ -333,7 +336,7 @@ async def test_connection(payload: ConnectionTestRequest, db: AsyncSession = Dep
                 host = payload.host
                 port = payload.port
                 username = payload.username
-                password = payload.password
+                password = decrypt_password(payload.password)  # 解密后测试
                 database_name = payload.database_name
 
             db_model = _TmpDB()  # type: ignore
@@ -384,7 +387,7 @@ async def create_datasource(
             host=payload.host,
             port=payload.port,
             username=payload.username,
-            password=payload.password,
+            password=encrypt_password(payload.password),  # 加密存储
             database_name=payload.database_name,
             description=payload.description,
             is_active=True,

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import re
 from contextlib import asynccontextmanager
 
+from app.core.crypto import decrypt_password
+
 
 # 缓存数据源引擎，避免每次查询都创建新引擎
 _data_source_engines: Dict[str, Any] = {}
@@ -72,7 +74,9 @@ logger = logging.getLogger(__name__)
 async def _get_db_engine(db_model) -> Any:
     """获取或创建缓存的数据源引擎（复用连接池，避免频繁建连）"""
     global _data_source_engines
-    db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+    # 解密密码（支持双轨：加密和明文）
+    decrypted_password = decrypt_password(db_model.password)
+    db_url = f"mysql+aiomysql://{db_model.username}:{decrypted_password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
 
     # 检查缓存是否存在且未过期
     if db_url in _data_source_engines:
@@ -1155,7 +1159,9 @@ class ChartService:
             if not db_model:
                 raise Exception("数据源不存在")
 
-            db_url = f"mysql+aiomysql://{db_model.username}:{db_model.password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
+            # 解密密码（支持双轨：加密和明文）
+            decrypted_password = decrypt_password(db_model.password)
+            db_url = f"mysql+aiomysql://{db_model.username}:{decrypted_password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
 
             # 注意：这里是单表取唯一值；如果 field_name 带别名/前缀（如 t.col），只取最后一段 col
             base_field_name = (field_name or "").strip()
