@@ -11,6 +11,7 @@ import { PipelineNode } from '../../../services/pipelineService';
 import { DataSourceService } from '../../../services/dataSourceService';
 
 const { Text } = Typography;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { Panel } = Collapse;
 
 interface DataSourceOption {

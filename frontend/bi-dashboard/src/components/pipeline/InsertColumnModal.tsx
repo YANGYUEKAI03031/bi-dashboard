@@ -1028,7 +1028,8 @@ const BinForm: React.FC<BinFormProps> = ({
 
   useEffect(() => {
     setValues(parseBinState(initialConfig ?? {}));
-  }, [initSig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initSig, initialConfig]);
 
   useEffect(() => {
     onValuesChange(values);

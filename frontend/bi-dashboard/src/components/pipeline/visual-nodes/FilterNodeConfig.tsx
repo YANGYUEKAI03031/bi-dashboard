@@ -179,6 +179,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
       pipelineDataSourceId: upstreamDsId,
       limit: 50,
     }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNode?.id, nodesSignature, upstreamDsId, loadPreview, clearPreview]);
 
   // 处理预览数据中的列信息

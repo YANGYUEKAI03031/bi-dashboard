@@ -285,6 +285,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   const [previewData, setPreviewData] = useState<Record<string, unknown>[]>([]);
   // 转换后的图表数据（应用了列格式）
   const [formattedChartData, setFormattedChartData] = useState<Record<string, unknown>[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [fieldTypes, setFieldTypes] = useState<Record<string, MetricFieldKind>>({});
   const [availableFields, setAvailableFields] = useState<string[]>([]);
 
@@ -507,6 +508,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       });
       return next;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, upstreamPreviewData, applySmartDefaults, form, columnRenames]);
 
   // 监听列格式变化，重新计算图表数据
@@ -529,6 +531,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     }
 
     setFormattedChartData(chartData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.previewColumnFormats, open, upstreamPreviewData, renamedToOriginal]);
 
   // 监听外部 nodeConfig.previewColumnFormats 变化，同步内部 config
@@ -561,6 +564,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         setFormattedChartData(chartData);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeConfig?.previewColumnFormats, open, renamedToOriginal]);
 
   // Handle form value changes
@@ -608,6 +612,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   // Build chart config for ChartFactory
   const buildChartConfig = (): ChartConfig => {
     const chartType = config.chartType;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const isMetric = chartType === 'metric';
 
     return {

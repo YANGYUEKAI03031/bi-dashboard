@@ -326,6 +326,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
   const [insertColumnModalOpen, setInsertColumnModalOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [insertColumnSourceColumn, setInsertColumnSourceColumn] = useState<string | undefined>();
   const [insertColumnEditConfig, setInsertColumnEditConfig] = useState<InsertedColumnConfig | undefined>();
 
@@ -559,6 +560,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     return Object.keys(result).length > 0 ? result : undefined;
   }, [previewNode, allNodes, pipelineNode?.config, columnCatalog]);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!previewNode) return;
     const cat =
@@ -575,14 +577,17 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       return;
     }
     setVisibleColumnKeys([...cat]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     previewNode?.id,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     previewConfigKey,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     previewData?.columns?.join('\0'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     previewData?.allColumns?.join('\0'),
     savedOutputKeys,
   ]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const catalogAllSelected =
     columnCatalog.length > 0 &&

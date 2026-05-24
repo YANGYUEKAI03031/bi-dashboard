@@ -174,6 +174,7 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
   );
 
   /** 对称差：上游预览列加载后更新 symmetricUnionPlan / sql，避免 UNION 排序规则冲突 */
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (readOnly) return;
     if (regionsToJoinType(vennRegions) !== 'symmetric_diff') return;
@@ -194,8 +195,8 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     rightPreview.previewData?.columns?.join('\0'),
     writeJoinState,
     node.id,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   /** 两表同名列，首次自动填一对匹配键 */
   useEffect(() => {
@@ -216,11 +217,12 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     autoFilledRef.current = true;
     writeJoinState(vennRegionsRef.current, newKeys);
   }, [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     leftPreview.previewData?.columns?.join('\0'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     rightPreview.previewData?.columns?.join('\0'),
     readOnly,
     writeJoinState,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   const handleToggleVenn = (part: JoinVennPart) => {

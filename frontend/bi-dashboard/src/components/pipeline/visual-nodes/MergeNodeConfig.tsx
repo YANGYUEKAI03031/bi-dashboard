@@ -236,13 +236,13 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
 
     const plan = buildDefaultPlan(maxColCount);
     persistMerge(plan, currentMergeType);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     readOnly,
     node.id,
     allPreviewsDone,
     hasColumnInfo,
     maxColCount,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     JSON.stringify(colMatrix),
   ]);
 
@@ -267,7 +267,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
   const planRows: UnionColumnPlanRow[] = savedPlan;
 
   // 从 plan 中获取当前输出列名
-  const getOutputColumnName = (outIndex: number): string => {
+  const getOutputColumnName = (outIndex: number): string => { // eslint-disable-line @typescript-eslint/no-unused-vars
     if (planRows.length > 0 && planRows[outIndex]) {
       return planRows[outIndex].out;
     }

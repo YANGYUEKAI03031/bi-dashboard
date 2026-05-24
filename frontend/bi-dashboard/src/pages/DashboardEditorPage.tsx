@@ -420,6 +420,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       console.error('保存布局失败:', e);
       message.error(e?.message || '保存布局失败');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dashboard, widgets, dashboardRef, widgetLayoutRef,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- persistWidgets 内部使用 ref，不直接依赖

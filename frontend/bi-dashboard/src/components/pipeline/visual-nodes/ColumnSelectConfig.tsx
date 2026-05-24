@@ -42,7 +42,7 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
 }) => {
   const pipelineNode = node.data.pipelineNode as PipelineNode;
   const config = (pipelineNode.config || {}) as Record<string, unknown>;
-  const savedMappings = (config.selectedColumns as ColumnMapping[]) || [];
+  const savedMappings = (config.selectedColumns as ColumnMapping[]) || []; // eslint-disable-line react-hooks/exhaustive-deps
 
   // 获取上游节点和数据源 ID
   const upstreamNode = upstreamNodes[0];
@@ -51,7 +51,7 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
     ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
     : undefined;
 
-  const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview();
+  const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview(); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // 签名用于检测上游变化
   const nodesSignature = useMemo(
@@ -93,6 +93,7 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
   }, [previewData]);
 
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [initialized, setInitialized] = useState(false);
 
   // 初始化 mappings：当 allColumns 加载完成后

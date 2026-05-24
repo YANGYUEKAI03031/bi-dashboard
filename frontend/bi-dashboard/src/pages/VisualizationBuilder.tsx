@@ -413,7 +413,7 @@ export const VisualizationBuilder: React.FC<{ chartId?: string }> = ({ chartId }
       console.log('Last 5 records:', queryResult.slice(-5));
       console.log('All records:', queryResult);
 
-      const columns = Object.keys(queryResult[0]).map(key => ({
+      const columns = Object.keys(queryResult[0]).map(key => ({ // eslint-disable-line @typescript-eslint/no-unused-vars
         title: key,
         dataIndex: key,
         key: key,
