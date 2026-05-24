@@ -184,14 +184,8 @@
    Firefox 滚动条
    ══════════════════════════════════════════════════════ */
 * {
-  scrollbar-width: none;
-}
-
-*:hover,
-*:focus-within,
-*:active {
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: rgba(200, 199, 194, 0.2) rgba(30, 30, 46, 0.5);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -200,34 +194,16 @@
 *::-webkit-scrollbar {
   width: var(--scrollbar-size);
   height: var(--scrollbar-size);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-*:hover::-webkit-scrollbar,
-*:focus-within::-webkit-scrollbar,
-*:active::-webkit-scrollbar,
-*::-webkit-scrollbar:hover {
-  opacity: 1;
 }
 
 *::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: rgba(30, 30, 46, 0.3);
   border-radius: var(--scrollbar-radius);
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: rgba(200, 199, 194, 0.3);
   border-radius: var(--scrollbar-radius);
-  transition: background var(--transition-fast);
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
-*::-webkit-scrollbar-corner {
-  background: var(--scrollbar-track);
 }
 
 /* ══════════════════════════════════════════════════════

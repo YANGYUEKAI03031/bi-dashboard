@@ -536,7 +536,7 @@ const DashboardView: React.FC<{
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           border: '1px solid #3a3a50',
           position: 'sticky',
-          top: 8,
+          top: 0,
           zIndex: 100,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
