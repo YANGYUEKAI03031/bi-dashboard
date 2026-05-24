@@ -13,7 +13,7 @@
 import logging
 import re
 from app.core.time_utils import utc_now
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone
 from typing import Dict, Any, Optional
 
 from sqlalchemy import select, update, text
@@ -317,7 +317,12 @@ class TriggerScheduler:
             logger.info(f"触发器 {trigger.id} 首次检查，执行轮询")
             return True
 
-        elapsed = (utc_now() - trigger.last_check_at).total_seconds()
+        # 确保 last_check_at 也有时区信息（数据库可能是 naive datetime）
+        last_check = trigger.last_check_at
+        if last_check.tzinfo is None:
+            last_check = last_check.replace(tzinfo=timezone.utc)
+        
+        elapsed = (utc_now() - last_check).total_seconds()
         can_poll = elapsed >= trigger.poll_interval_seconds
         if not can_poll:
             remaining = trigger.poll_interval_seconds - elapsed
