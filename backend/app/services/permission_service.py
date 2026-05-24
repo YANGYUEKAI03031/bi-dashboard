@@ -10,6 +10,7 @@ import logging
 from app.models.permission import UserRole, ReportPagePermission, ModificationLog, RoleEnum, ResourceTypeEnum
 from app.models.user import User
 from app.core.security import get_password_hash
+from app.exceptions import ValidationException, ResourceExistsException
 
 logger = logging.getLogger(__name__)
 
@@ -79,16 +80,16 @@ class PermissionService:
         """创建新用户（由管理员调用）"""
         accountname = (accountname or "").strip()
         if not accountname:
-            raise ValueError("用户名不能为空")
+            raise ValidationException("accountname", "用户名不能为空")
         if password is None or str(password) == "":
-            raise ValueError("密码不能为空")
+            raise ValidationException("password", "密码不能为空")
 
         # 用户名唯一性检查
         stmt = select(User).where(User.accountname == accountname)
         result = await self.db.execute(stmt)
         existing = result.scalar_one_or_none()
         if existing:
-            raise ValueError("用户名已存在")
+            raise ResourceExistsException("用户", accountname)
 
         # 创建用户（userID 由数据库 AUTO_INCREMENT 自动生成）
         user = User(
@@ -101,7 +102,7 @@ class PermissionService:
 
         # 角色处理（可选）
         if role not in [r.value for r in RoleEnum]:
-            raise ValueError(f"无效的角色: {role}")
+            raise ValidationException("role", f"无效的角色: {role}")
         if role == RoleEnum.ADMIN.value:
             self.db.add(UserRole(user_id=user.userID, role=RoleEnum.ADMIN.value))
 

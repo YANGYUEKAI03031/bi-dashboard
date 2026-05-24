@@ -10,7 +10,7 @@ import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, FilterOutlined, CalendarOutlined, DownCircleOutlined } from '@ant-design/icons';
 import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
 const { Title, Paragraph } = Typography;
@@ -528,35 +528,89 @@ const DashboardView: React.FC<{
     <div className="reports-dashboard-view">
       {/* 筛选器渲染区域 */}
       {filters.length > 0 && (
-        <div style={{ 
-          marginBottom: 16, 
-          padding: 12, 
-          background: '#252536', 
-          borderRadius: 4, 
+        <div style={{
+          marginBottom: 16,
+          padding: '16px 20px',
+          background: '#252536',
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           border: '1px solid #3a3a50',
           position: 'sticky',
           top: 8,
           zIndex: 100,
         }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
-            {filters.map(filter => {
-              // 统一用 filter.id 作 key，与 DashboardEditorPage 一致
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#e0e0e0' }}>筛选条件</span>
+            {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onFilterChange?.({}); }}
+                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
+              >
+                重置全部
+              </a>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+            {filters.map((filter) => {
+              const hasValue = filterValues[filter.id] !== undefined && filterValues[filter.id] !== null;
               const handleFilterChange = (value: any) => {
                 onFilterChange?.({ ...filterValues, [filter.id]: value });
               };
               const currentVal = filterValues[filter.id];
 
+              const getFilterIcon = () => {
+                switch (filter.filter_type) {
+                  case 'date_range':
+                  case 'date_relative':
+                    return <CalendarOutlined style={{ color: '#fa8c16' }} />;
+                  case 'select':
+                  case 'multi_select':
+                    return <DownCircleOutlined style={{ color: '#1890ff' }} />;
+                  case 'input':
+                    return <EditOutlined style={{ color: '#52c41a' }} />;
+                  default:
+                    return <FilterOutlined style={{ color: '#722ed1' }} />;
+                }
+              };
+
+              const getControlWidth = () => {
+                switch (filter.filter_type) {
+                  case 'date_range': return 260;
+                  case 'select':
+                  case 'multi_select':
+                  case 'input': return 160;
+                  default: return 150;
+                }
+              };
+
               return (
-                <div key={filter.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: '#e0e0e0' }}>
+                <div
+                  key={filter.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 12px',
+                    background: hasValue ? '#1a3a1a' : '#1e1e30',
+                    borderRadius: 6,
+                    border: `1px solid ${hasValue ? '#52c41a' : '#3a3a50'}`,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {getFilterIcon()}
+                  <span style={{ fontSize: 13, color: '#e0e0e0', whiteSpace: 'nowrap' }}>
                     {filter.field_label || filter.name}
-                  </label>
+                  </span>
+                  <span style={{ color: '#666', fontSize: 12 }}>:</span>
                   {filter.filter_type === 'date_range' && (
                     <DatePicker.RangePicker
-                      style={{ width: 240 }}
+                      size="small"
+                      style={{ width: getControlWidth() }}
                       value={currentVal ? [
                         currentVal.start ? dayjs(currentVal.start) : null,
-                        currentVal.end ? dayjs(currentVal.end) : null,
+                        currentVal.end ? dayjs(currentVal.end) : null
                       ] : null}
                       onChange={(dates) => {
                         if (dates) {
@@ -582,7 +636,8 @@ const DashboardView: React.FC<{
                   )}
                   {filter.filter_type === 'date_relative' && (
                     <Select
-                      style={{ width: 150 }}
+                      size="small"
+                      style={{ width: getControlWidth() }}
                       placeholder="选择时间范围"
                       allowClear
                       value={currentVal}
@@ -599,7 +654,8 @@ const DashboardView: React.FC<{
                   )}
                   {filter.filter_type === 'select' && (
                     <Select
-                      style={{ width: 150 }}
+                      size="small"
+                      style={{ width: getControlWidth() }}
                       placeholder="请选择"
                       allowClear
                       options={filterSelectOptions[filter.id] || []}
@@ -610,7 +666,8 @@ const DashboardView: React.FC<{
                   )}
                   {filter.filter_type === 'multi_select' && (
                     <Select
-                      style={{ width: 150 }}
+                      size="small"
+                      style={{ width: getControlWidth() }}
                       mode="multiple"
                       placeholder="请选择"
                       allowClear
@@ -622,7 +679,8 @@ const DashboardView: React.FC<{
                   )}
                   {filter.filter_type === 'input' && (
                     <Input
-                      style={{ width: 150 }}
+                      size="small"
+                      style={{ width: getControlWidth() }}
                       placeholder="请输入"
                       value={currentVal}
                       onChange={(e) => handleFilterChange(e.target.value)}

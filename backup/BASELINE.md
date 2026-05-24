@@ -84,3 +84,20 @@
 ```sql
 ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
 ```
+
+## 阶段 2.3 自定义异常 + 全局处理器（2026-05-24 已完成）
+
+- [x] `app/exceptions.py` - 新建异常体系（AppException、业务异常、系统异常）
+- [x] `main_optimized.py` - 全局异常处理器（AppException、HTTPException、Exception）
+- [x] `permission_service.py` - 使用 `ValidationException`、`ResourceExistsException`
+- [x] `tests/test_exceptions.py` - 新建测试（9 个用例）
+- [x] 所有 65 个单元测试通过
+
+**异常响应格式**：
+```json
+{
+  "code": "RESOURCE_NOT_FOUND",
+  "message": "图表 不存在",
+  "details": {"resource": "图表", "identifier": "42"}
+}
+```
