@@ -4,7 +4,7 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from app.core.time_utils import utc_now
 import json
 import logging
 
@@ -109,7 +109,7 @@ class DashboardService:
             if dashboard_data.is_public is not None:
                 update_fields["is_public"] = dashboard_data.is_public
 
-            update_fields["updated_at"] = datetime.utcnow()
+            update_fields["updated_at"] = utc_now()
 
             if update_fields:
                 upd = update(Dashboard).where(
@@ -308,7 +308,7 @@ class DashboardService:
                 update_fields["parameter_mappings"] = update_data.parameter_mappings
             
             # 更新时间戳
-            update_fields["updated_at"] = datetime.utcnow()
+            update_fields["updated_at"] = utc_now()
             
             if update_fields:
                 stmt = update(DashboardCard).where(
@@ -394,7 +394,7 @@ class DashboardService:
                 Dashboard.id == dashboard_id
             ).values(
                 archived=True,
-                updated_at=datetime.utcnow()
+                updated_at=utc_now()
             )
             
             await self.db.execute(stmt)
@@ -622,7 +622,7 @@ class DashboardService:
             if filter_data.position is not None:
                 update_fields["position"] = filter_data.position
             
-            update_fields["updated_at"] = datetime.utcnow()
+            update_fields["updated_at"] = utc_now()
             
             if update_fields:
                 stmt = update(DashboardFilter).where(

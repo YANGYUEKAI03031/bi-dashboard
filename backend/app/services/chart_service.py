@@ -638,7 +638,7 @@ class ChartService:
                 update_fields[VisualizationCard.table_name] = raw_update["table_name"]
             
             # 更新时间戳
-            update_fields[VisualizationCard.updated_at] = datetime.utcnow()
+            update_fields[VisualizationCard.updated_at] = utc_now()
             
             if update_fields:
                 # 仅按 chart_id 更新，权限已在上面 can_edit_chart 中校验（创建者/管理员/报表可编辑）
@@ -717,7 +717,7 @@ class ChartService:
                 VisualizationCard.id == chart_id
             ).values(
                 archived=True,
-                updated_at=datetime.utcnow()
+                updated_at=utc_now()
             )
             
             await self.db.execute(stmt)
@@ -767,7 +767,7 @@ class ChartService:
                 return 0
             
             archived_count = 0
-            now = datetime.utcnow()
+            now = utc_now()
             
             for chart in charts:
                 # 移除仪表盘中对该图表的引用
@@ -831,7 +831,7 @@ class ChartService:
             
             # 软删除：标记为已归档
             chart.archived = True
-            chart.updated_at = datetime.utcnow()
+            chart.updated_at = utc_now()
             await self.db.commit()
             
             logger.info(f"归档节点图表: chart_id={chart.id}, chart_name={chart.name}, node_id={focus_node_id}")

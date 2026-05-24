@@ -4,7 +4,7 @@ from sqlalchemy import select, update, delete, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from datetime import datetime
+from app.core.time_utils import utc_now
 import logging
 
 from app.models.report_page import ReportPage, ReportPageDashboard
@@ -97,7 +97,7 @@ class ReportPageService:
             if page_data.is_active is not None:
                 update_fields["is_active"] = page_data.is_active
 
-            update_fields["updated_at"] = datetime.utcnow()
+            update_fields["updated_at"] = utc_now()
 
             if update_fields:
                 upd = update(ReportPage).where(
@@ -325,7 +325,7 @@ class ReportPageService:
                 ReportPage.id == page_id
             ).values(
                 is_active=False,
-                updated_at=datetime.utcnow()
+                updated_at=utc_now()
             )
             
             await self.db.execute(stmt)

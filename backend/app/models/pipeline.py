@@ -9,8 +9,8 @@
 """
 from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Boolean, BigInteger
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
+from app.core.time_utils import utc_now
 
 # 节点结构存于 DataPipeline.nodes（JSON），类型见 app.schemas.pipeline.PipelineNodeCreate
 
@@ -57,8 +57,8 @@ class DataPipeline(Base):
     is_public = Column(Boolean, default=False)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     def __repr__(self):
         return f"<DataPipeline(id={self.id}, name='{self.name}')>"
@@ -129,7 +129,7 @@ class PipelineWatermark(Base):
     node_id = Column(String(100), nullable=False)  # 节点 ID
     watermark_field = Column(String(100), nullable=False)  # 增量字段名
     last_value = Column(String(255), nullable=True)  # 上次处理的最大值
-    last_processed_at = Column(DateTime, default=datetime.utcnow)
+    last_processed_at = Column(DateTime, default=utc_now)
 
     # 关系
     pipeline = relationship("DataPipeline", backref="watermarks")
@@ -146,7 +146,7 @@ class PipelineDependency(Base):
     pipeline_id = Column(Integer, ForeignKey("data_pipelines.id"), nullable=False)
     depends_on_pipeline_id = Column(Integer, ForeignKey("data_pipelines.id"), nullable=False)
     depends_on_node_id = Column(String(100), nullable=True)  # 可选：依赖特定节点输出
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # 关系
     pipeline = relationship("DataPipeline", foreign_keys=[pipeline_id], backref="dependencies")
@@ -177,8 +177,8 @@ class PipelineTrigger(Base):
     last_row_count = Column(BigInteger, nullable=True)            # 存储上次行数（用于检测删除）
 
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now)
 
     def __repr__(self):
         return f"<PipelineTrigger(pipeline_id={self.pipeline_id}, watermark_field='{self.watermark_field}', enabled={self.enabled})>"

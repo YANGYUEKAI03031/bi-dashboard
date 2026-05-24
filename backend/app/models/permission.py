@@ -1,8 +1,8 @@
 # app/models/permission.py
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, Enum
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
+from app.core.time_utils import utc_now
 import enum
 
 
@@ -20,8 +20,8 @@ class UserRole(Base):
     user_id = Column(Integer, ForeignKey("useraccount.userID"), nullable=False, unique=True)
     role = Column(String(20), default=RoleEnum.USER.value, nullable=False)  # admin 或 user
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # 关系
     user = relationship("User", backref="user_role")
@@ -44,7 +44,7 @@ class ReportPagePermission(Base):
     can_view = Column(Boolean, default=True)  # 是否可以查看
     can_edit = Column(Boolean, default=False)  # 是否可以编辑（包括图表、仪表盘）
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     # 关系
     report_page = relationship("ReportPage", backref="permissions")
@@ -72,7 +72,7 @@ class ModificationLog(Base):
     changes = Column(Text)  # JSON: {"old": {...}, "new": {...}}
     
     # 时间
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # 关系
     user = relationship("User", backref="modification_logs")

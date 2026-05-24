@@ -6,10 +6,11 @@
 import re
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.time_utils import utc_now
 
 from app.models.pipeline import PipelineWatermark
 
@@ -121,7 +122,7 @@ class WatermarkManager:
             if watermark:
                 # 更新现有记录
                 watermark.last_value = value
-                watermark.last_processed_at = datetime.utcnow()
+                watermark.last_processed_at = utc_now()
             else:
                 # 创建新记录
                 watermark = PipelineWatermark(
@@ -129,7 +130,7 @@ class WatermarkManager:
                     node_id=node_id,
                     watermark_field=watermark_field,
                     last_value=value,
-                    last_processed_at=datetime.utcnow()
+                    last_processed_at=utc_now()
                 )
                 self.session.add(watermark)
 

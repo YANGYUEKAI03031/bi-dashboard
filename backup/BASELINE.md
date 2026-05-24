@@ -169,3 +169,24 @@ ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
 - [x] 后端启动正常
 
 ---
+
+## 阶段 3.2 临时表自动清理（2026-05-24 已完成）
+
+- [x] 使用 MySQL TEMPORARY TABLE 实现会话级自动清理
+- [x] 临时表在连接断开后自动删除，零污染
+
+---
+
+## 阶段 3.3 datetime.utcnow 替换（2026-05-24 已完成）
+
+- [x] 创建 `app/core/time_utils.py` - `utc_now()` 函数
+- [x] 替换 models 中的 `datetime.utcnow`（5个文件）：
+  - `dashboard.py`、`permission.py`、`visualization.py`、`report_page.py`、`pipeline.py`
+- [x] 替换 services 中的 `datetime.utcnow`（9个文件）：
+  - `dashboard_service.py`、`report_page_service.py`、`permission_service.py`
+  - `chart_service.py`、`pipeline_service.py`、`pipeline_chart_sync_service.py`
+  - `pipeline/engine.py`、`pipeline/trigger_scheduler.py`、`pipeline/watermark_manager.py`
+- [x] 替换 `core/security.py` 中的 `datetime.utcnow`
+- [x] 后端启动正常
+
+---

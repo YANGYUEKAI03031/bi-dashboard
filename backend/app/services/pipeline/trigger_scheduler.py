@@ -12,7 +12,8 @@
 """
 import logging
 import re
-from datetime import datetime
+from app.core.time_utils import utc_now
+from datetime import datetime as dt
 from typing import Dict, Any, Optional
 
 from sqlalchemy import select, update, text
@@ -316,7 +317,7 @@ class TriggerScheduler:
             logger.info(f"触发器 {trigger.id} 首次检查，执行轮询")
             return True
 
-        elapsed = (datetime.utcnow() - trigger.last_check_at).total_seconds()
+        elapsed = (utc_now() - trigger.last_check_at).total_seconds()
         can_poll = elapsed >= trigger.poll_interval_seconds
         if not can_poll:
             remaining = trigger.poll_interval_seconds - elapsed
@@ -325,7 +326,7 @@ class TriggerScheduler:
 
     async def _record_check_time(self, trigger: PipelineTrigger) -> None:
         """记录本次检查时间（只更新 last_check_at）"""
-        now = datetime.utcnow()
+        now = utc_now()
         stmt = (
             update(PipelineTrigger)
             .where(PipelineTrigger.id == trigger.id)
@@ -497,7 +498,7 @@ class TriggerScheduler:
         """更新触发器状态（水位、行数、时间）"""
         logger.info(f"更新触发器 {trigger.id} 状态: MAX={watermark_value}, COUNT={row_count}")
 
-        now = datetime.utcnow()
+        now = utc_now()
         stmt = (
             update(PipelineTrigger)
             .where(PipelineTrigger.id == trigger.id)

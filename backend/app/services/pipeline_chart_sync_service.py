@@ -18,7 +18,7 @@
 import json
 import logging
 import re
-from datetime import datetime
+from app.core.time_utils import utc_now
 from typing import List, Dict, Any, Optional, Tuple
 
 from sqlalchemy import select, and_
@@ -296,8 +296,8 @@ class PipelineChartSyncService:
         chart.visualization_settings = json.dumps(viz_settings, ensure_ascii=False)
         chart.dataset_query = json.dumps(dataset_query, ensure_ascii=False)
         chart.query_sql = dataset_query.get("native", {}).get("query", "")
-        chart.updated_at = datetime.utcnow()
-        chart.synced_at = datetime.utcnow()
+        chart.updated_at = utc_now()
+        chart.synced_at = utc_now()
 
         await self.db.commit()
         await self.db.refresh(chart)
@@ -326,7 +326,7 @@ class PipelineChartSyncService:
             created_by=creator_id,
             pipeline_id=pipeline_id,
             focus_node_id=focus_node_id,
-            synced_at=datetime.utcnow(),
+            synced_at=utc_now(),
             archived=False,
             is_public=False,
             cache_enabled=True,
@@ -518,7 +518,7 @@ class PipelineChartSyncService:
 
         # 写回数据库
         pipeline.nodes = pipeline_nodes
-        pipeline.updated_at = datetime.utcnow()
+        pipeline.updated_at = utc_now()
         await self.db.commit()
 
         logger.info(

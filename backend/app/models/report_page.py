@@ -1,8 +1,8 @@
 # backend/app/models/report_page.py
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
+from app.core.time_utils import utc_now
 
 class ReportPage(Base):
     """报表页实体"""
@@ -19,8 +19,8 @@ class ReportPage(Base):
     is_active = Column(Boolean, default=True)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     creator = relationship("User", back_populates="created_report_pages")
@@ -36,7 +36,7 @@ class ReportPageDashboard(Base):
     order_index = Column(Integer, default=0)  # 在报表页中的排序
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     # 关系
     report_page = relationship("ReportPage", back_populates="report_page_dashboards")

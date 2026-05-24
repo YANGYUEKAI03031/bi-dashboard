@@ -21,10 +21,12 @@ import logging
 import re
 import time
 from typing import List, Dict, Any, Optional, Tuple, Set
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from sqlalchemy import text, update
+
+from app.core.time_utils import utc_now
 
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.services.pipeline.temp_table_manager import TempTableManager
@@ -131,10 +133,10 @@ class PipelineEngine:
                     execution.id,
                     "running",
                     temp_table_name=self.temp_manager.json_table_name,
-                    started_at=datetime.utcnow()
+                    started_at=utc_now()
                 )
 
-                logs.append({"time": datetime.utcnow().isoformat(), "message": "开始执行管道"})
+                logs.append({"time": utc_now().isoformat(), "message": "开始执行管道"})
 
                 # 按拓扑序执行节点
                 sorted_nodes = topological_sort(nodes)
@@ -166,7 +168,7 @@ class PipelineEngine:
                     upstream = node.get("upstream")
 
                     logs.append({
-                        "time": datetime.utcnow().isoformat(),
+                        "time": utc_now().isoformat(),
                         "message": f"开始执行节点: {node_name} ({step_id})"
                     })
 
@@ -174,7 +176,7 @@ class PipelineEngine:
                     all_step_progress[step_id] = {
                         "status": "running",
                         "rows": 0,
-                        "started_at": datetime.utcnow().isoformat(),
+                        "started_at": utc_now().isoformat(),
                         "phase": "querying",
                         "phase_message": "正在执行 SQL 查询（数据量大时需较长时间）…",
                     }
@@ -377,7 +379,7 @@ class PipelineEngine:
                                 )
                                 await conn.commit()
                                 logs.append({
-                                    "time": datetime.utcnow().isoformat(),
+                                    "time": utc_now().isoformat(),
                                     "message": f"表 {target_plain} 不存在，已自动创建"
                                 })
                             elif write_mode == "replace":
@@ -477,7 +479,7 @@ class PipelineEngine:
                             "node_name": node_name,
                             "row_count": row_count,
                             "columns": columns,
-                            "executed_at": datetime.utcnow().isoformat(),
+                            "executed_at": utc_now().isoformat(),
                             "incremental": is_incremental
                         })
 
@@ -503,7 +505,7 @@ class PipelineEngine:
                                         str(max_value)
                                     )
                                     logs.append({
-                                        "time": datetime.utcnow().isoformat(),
+                                        "time": utc_now().isoformat(),
                                         "message": f"水位线已更新: {incremental_field} = {max_value}"
                                     })
 
@@ -511,7 +513,7 @@ class PipelineEngine:
                         all_step_progress[step_id] = {
                             "status": "completed",
                             "rows": row_count,
-                            "completed_at": datetime.utcnow().isoformat(),
+                            "completed_at": utc_now().isoformat(),
                         }
 
                         result_summary["step_details"].append({
@@ -522,7 +524,7 @@ class PipelineEngine:
                         })
 
                         logs.append({
-                            "time": datetime.utcnow().isoformat(),
+                            "time": utc_now().isoformat(),
                             "message": f"节点 {node_name} 执行完成，{row_count} 行"
                         })
 
@@ -531,7 +533,7 @@ class PipelineEngine:
                     except Exception as step_error:
                         error_msg = f"节点 {node_name} 执行失败: {str(step_error)}"
                         logs.append({
-                            "time": datetime.utcnow().isoformat(),
+                            "time": utc_now().isoformat(),
                             "message": error_msg,
                             "level": "error"
                         })
@@ -541,7 +543,7 @@ class PipelineEngine:
                         all_step_progress[step_id] = {
                             "status": "failed",
                             "error": str(step_error),
-                            "failed_at": datetime.utcnow().isoformat(),
+                            "failed_at": utc_now().isoformat(),
                         }
 
                         # 更新执行状态为失败
@@ -549,7 +551,7 @@ class PipelineEngine:
                             execution.id,
                             "failed",
                             error_message=str(step_error),
-                            completed_at=datetime.utcnow(),
+                            completed_at=utc_now(),
                             execution_time_ms=int((time.time() - start_time) * 1000),
                             completed_steps=completed_steps,
                             step_progress=all_step_progress,
@@ -569,7 +571,7 @@ class PipelineEngine:
                 await self._update_execution_status(
                     execution.id,
                     "completed",
-                    completed_at=datetime.utcnow(),
+                    completed_at=utc_now(),
                     execution_time_ms=execution_time_ms,
                     total_rows=total_rows,
                     completed_steps=completed_steps,
@@ -579,7 +581,7 @@ class PipelineEngine:
                 )
 
                 logs.append({
-                    "time": datetime.utcnow().isoformat(),
+                    "time": utc_now().isoformat(),
                     "message": f"管道执行完成，总行数: {total_rows}，耗时: {execution_time_ms}ms"
                 })
 
@@ -599,7 +601,7 @@ class PipelineEngine:
                 execution.id,
                 "failed",
                 error_message=error_msg,
-                completed_at=datetime.utcnow(),
+                completed_at=utc_now(),
                 execution_time_ms=int((time.time() - start_time) * 1000),
                 completed_steps=completed_steps,
                 logs=logs

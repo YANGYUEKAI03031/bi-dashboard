@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from sqlalchemy import select, update, delete, func, and_
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.time_utils import utc_now
+
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.models.visualization import Database
 from app.services.pipeline.temp_table_manager import TempTableManager
@@ -195,7 +197,7 @@ class PipelineService:
                         if node_id not in new_output_ids and target_table:
                             deleted_output_nodes.append({'node_id': node_id, 'target_table': target_table})
 
-                update_data['updated_at'] = datetime.utcnow()
+                update_data['updated_at'] = utc_now()
                 stmt = (
                     update(DataPipeline)
                     .where(DataPipeline.id == pipeline_id)
@@ -279,7 +281,7 @@ class PipelineService:
             stmt = (
                 update(DataPipeline)
                 .where(DataPipeline.id == pipeline_id)
-                .values(is_active=False, updated_at=datetime.utcnow())
+                .values(is_active=False, updated_at=utc_now())
             )
             await self.db.execute(stmt)
             await self.db.commit()
@@ -400,9 +402,9 @@ class PipelineService:
                 raise ValueError(f"无法取消状态为 {execution.status} 的执行")
 
             execution.status = "cancelled"
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = utc_now()
             execution.logs = (execution.logs or []) + [{
-                "time": datetime.utcnow().isoformat(),
+                "time": utc_now().isoformat(),
                 "message": f"执行被用户 {user_id} 取消"
             }]
 
@@ -418,7 +420,7 @@ class PipelineService:
         """清理过期的执行记录"""
         try:
             # 查找过期的执行记录
-            now = datetime.utcnow()
+            now = utc_now()
             stmt = select(PipelineExecution).where(
                 and_(
                     PipelineExecution.expires_at < now,

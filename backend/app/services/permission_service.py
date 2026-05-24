@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, or_
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from app.core.time_utils import utc_now
 import json
 import logging
 
@@ -43,7 +43,7 @@ class PermissionService:
 
         if user_role:
             user_role.role = role
-            user_role.updated_at = datetime.utcnow()
+            user_role.updated_at = utc_now()
         else:
             user_role = UserRole(user_id=user_id, role=role)
             self.db.add(user_role)

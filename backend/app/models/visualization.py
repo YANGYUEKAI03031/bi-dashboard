@@ -1,8 +1,8 @@
 # backend/app/models/visualization.py
 from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
+from app.core.time_utils import utc_now
 
 class VisualizationCard(Base):
     """图表实体 - 对应现有数据库表结构"""
@@ -37,8 +37,8 @@ class VisualizationCard(Base):
     last_cached_at = Column(DateTime, nullable=True)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     # 管道图表节点关联字段
     pipeline_id = Column(Integer, ForeignKey("data_pipelines.id"), nullable=True)
@@ -69,8 +69,8 @@ class Database(Base):
     last_connected = Column(DateTime)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     visualization_cards = relationship("VisualizationCard", back_populates="database")

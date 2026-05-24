@@ -1,8 +1,9 @@
 # backend/app/models/dashboard.py
 from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
+from app.core.time_utils import utc_now
+
 
 class Dashboard(Base):
     """仪表板实体"""
@@ -22,8 +23,8 @@ class Dashboard(Base):
     archived = Column(Boolean, default=False)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     creator = relationship("User", back_populates="created_dashboards")
@@ -55,8 +56,8 @@ class DashboardCard(Base):
     dashboard_tab_id = Column(Integer, ForeignKey("dashboard_tabs.id"))
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     dashboard = relationship("Dashboard", back_populates="dashboard_cards")
@@ -74,8 +75,8 @@ class DashboardTab(Base):
     position = Column(Integer, default=0)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     dashboard = relationship("Dashboard", back_populates="tabs")
@@ -110,8 +111,8 @@ class DashboardFilter(Base):
     position = Column(Integer, default=0)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # 关系
     dashboard = relationship("Dashboard", back_populates="filters")
@@ -131,7 +132,7 @@ class DashboardFilterBinding(Base):
     param_name = Column(String(100), nullable=False)
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     # 关系
     filter = relationship("DashboardFilter", back_populates="bindings")
