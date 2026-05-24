@@ -84,7 +84,6 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   onEditInsertColumn,
 }) => {
   const [page, setPage] = useState(1);
-  const [contextMenuColumn, setContextMenuColumn] = useState<string | null>(null);
 
   const hasData = data && data.columns.length > 0;
 
@@ -251,10 +250,6 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
         >
           <div
             style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setContextMenuColumn(col);
-            }}
           >
             {typeChip}
             <span style={{ fontSize: 12 }}>{displayName}</span>

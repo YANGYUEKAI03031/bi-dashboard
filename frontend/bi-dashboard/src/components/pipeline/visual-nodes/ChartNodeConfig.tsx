@@ -4,8 +4,8 @@
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
-  Button, Space, Typography, Alert, Empty, Tag,
-  Card, Descriptions, Divider, Spin, message,
+  Button, Space, Typography, Alert, Tag,
+  Card, Descriptions, Divider, message,
 } from 'antd';
 import {
   SettingOutlined, BarChartOutlined, LineChartOutlined,
@@ -24,10 +24,9 @@ import {
   ChartType,
   DEFAULT_CHART_CONFIG,
   getChartTypeLabel,
-  CHART_TYPE_LABELS,
 } from '../../../types/chartNode';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface ChartNodeConfigProps {
   node: GraphNode;

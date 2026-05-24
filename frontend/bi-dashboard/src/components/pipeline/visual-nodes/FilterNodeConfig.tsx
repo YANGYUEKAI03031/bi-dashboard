@@ -2,13 +2,13 @@
  * FilterNodeConfig - Visual WHERE condition builder for "Filter Rows" nodes.
  * Non-technical users build filter conditions by selecting column + operator + value.
  */
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Form, Select, Input, Button, Divider, Tag, Typography,
-  Alert, Card, Tooltip, Space, DatePicker,
+  Select, Divider, Tag, Typography,
+  Alert, Card, DatePicker, Button, Input, Space, Tooltip,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, FilterOutlined, CalendarOutlined } from '@ant-design/icons';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { getDataTypeInfo } from '../../../utils/nodeTypeRegistry';
@@ -152,7 +152,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
     ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
     : undefined;
 
-  const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview();
+  const { previewData, loadPreview, clearPreview } = useNodePreview();
 
   const nodesSignature = useMemo(
     () => JSON.stringify(allNodes.map(n => ({
@@ -265,9 +265,6 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
     // 其他类型：使用标准操作符
     return FILTER_OPERATORS;
   };
-
-  // 判断是否为日期类型的相对日期操作符
-  const isDatePresetOperator = (op: string) => ['before', 'after', 'between', 'preset'].includes(op);
 
   // 判断是否需要显示快捷日期选择
   const needsPresetSelect = (cond: Condition) => cond.operator === 'preset';

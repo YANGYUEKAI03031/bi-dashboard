@@ -26,7 +26,7 @@ import type { MenuProps } from 'antd';
 import {
   PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
   ImportOutlined, BarChartOutlined, SwapOutlined, ColumnHeightOutlined,
-  AppstoreOutlined, ExportOutlined, DownOutlined,
+  ExportOutlined, DownOutlined,
   DatabaseOutlined, ArrowRightOutlined, HolderOutlined,
   PieChartOutlined,
 } from '@ant-design/icons';
@@ -1117,6 +1117,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       setEdges(upstreamEdges);
     }
     setPreviewRefreshTick(t => t + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, readOnly]);
 
   /** 双击：打开右侧配置面板 */
@@ -1289,7 +1290,6 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
 
   const handleImportFromPipeline = useCallback(
     (importedNodes: GraphNode[], importedEdges: GraphEdge[]) => {
-      const existingIds = new Set((nodes as unknown as GraphNode[]).map(n => n.id));
       const maxX = Math.max(...(nodes as unknown as GraphNode[]).map(n => n.position.x), 0);
       const maxY = Math.max(...(nodes as unknown as GraphNode[]).map(n => n.position.y), 0);
       const offsetX = maxX + 120;

@@ -12,7 +12,6 @@ import {
   ColumnHeightOutlined,
   AppstoreOutlined,
   ExportOutlined,
-  HolderOutlined,
   PieChartOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';

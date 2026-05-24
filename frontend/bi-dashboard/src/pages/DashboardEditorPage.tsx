@@ -1691,13 +1691,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
                     <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>筛选条件</span>
                     {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
-                      <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); setFilterValues({}); }}
-                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer' }}
+                      <button
+                        type="button"
+                        onClick={() => setFilterValues({})}
+                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
                       >
                         重置全部
-                      </a>
+                      </button>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>

@@ -467,41 +467,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const effectiveAxisLabelMargin = compact ? Math.min(axisLabelMargin, 10) : axisLabelMargin;
     const effectiveXAxisNameGap = compact ? Math.min(xAxisNameGap, 22) : xAxisNameGap;
 
-    // 估算 Y 轴刻度文字大致占用的宽度，用于在 grid.left / grid.right 上做平衡，
-    // 让「真正的绘图区」而不是整张画布的左上角更接近卡片视觉中心。
-    const estimateYAxisLabelWidth = () => {
-      if (!yFields.length || !sortedData.length) return 40; // 增加默认值
-
-      const sampleCount = Math.min(sortedData.length, 50);
-      let maxChars = 0;
-      let maxValue = 0;
-
-      for (let i = 0; i < sampleCount; i++) {
-        const row = sortedData[i];
-        if (!row || typeof row !== 'object') continue;
-
-        for (const field of yFields) {
-          const v = (row as any)[field];
-          if (v == null) continue;
-          const s = typeof v === 'number' ? v.toString() : String(v);
-          maxChars = Math.max(maxChars, s.length);
-          // 对于数字，也考虑数值大小（大数字可能需要更多空间）
-          if (typeof v === 'number') {
-            maxValue = Math.max(maxValue, Math.abs(v));
-          }
-        }
-      }
-
-      if (maxChars === 0) maxChars = 3;
-      const charWidth = 7; // 稍微增加字符宽度估算（考虑字体和间距）
-      // 对于大数字，可能需要更多空间（考虑千分位、科学计数法等）
-      const valueBasedPadding = maxValue > 1000 ? 8 : 0;
-      const padding = 12 + valueBasedPadding; // 增加基础 padding
-      return maxChars * charWidth + padding;
-    };
-
-    const yAxisLabelWidthEstimate = estimateYAxisLabelWidth();
-
     // 判断是否需要显示图例
     const legendShowExplicit =
       !!config.legend && Object.prototype.hasOwnProperty.call(config.legend, 'show');

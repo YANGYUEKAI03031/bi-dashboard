@@ -543,13 +543,13 @@ const DashboardView: React.FC<{
             <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
             <span style={{ fontSize: 13, fontWeight: 500, color: '#e0e0e0' }}>筛选条件</span>
             {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); onFilterChange?.({}); }}
-                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
+              <button
+                type="button"
+                onClick={() => onFilterChange?.({})}
+                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#1890ff', background: 'none', border: 'none', padding: 0 }}
               >
                 重置全部
-              </a>
+              </button>
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
@@ -1076,6 +1076,7 @@ export const ReportsPage: React.FC = () => {
       });
       loadDashboardDetails(activeDashboardId, charts, true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[], forceRefreshCharts?: boolean) => {

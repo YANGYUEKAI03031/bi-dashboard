@@ -26,9 +26,8 @@ import {
   DEFAULT_CHART_CONFIG,
   ChartType,
 } from '../../types/chartNode';
-import { DATE_PRESETS, getDatePresetExpression } from './visual-nodes/FilterNodeConfig';
+import { DATE_PRESETS } from './visual-nodes/FilterNodeConfig';
 
-const { RangePicker } = DatePicker;
 const { Text } = Typography;
 
 export interface Condition {
@@ -101,7 +100,6 @@ function ConditionRow({
   const isDateComparison = isDateType && needsValue;
   const isPresetOp = cond.operator === 'preset';
   const isBetweenOp = cond.operator === 'between';
-  const isBeforeAfterOp = cond.operator === 'before' || cond.operator === 'after';
   const needsQuickDate = isPresetOp;
   const needsRangePicker = isBetweenOp;
   const needsDatePicker = isDateComparison && !needsQuickDate && !needsRangePicker;
@@ -406,6 +404,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       },
       true
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     previewNode?.id,
     previewConfigKey,
@@ -423,6 +422,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const savedRowLogic = ((pipelineNode?.config as Record<string, unknown>)?.rowFilterLogic as string) || 'AND';
   const savedOutputKeys = useMemo(
     () => ((pipelineNode?.config as Record<string, unknown>)?.outputColumnKeys as string[]) || [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [previewConfigKey]
   );
 
@@ -436,6 +436,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     const conds = [...savedRowConditions];
     setLocalConditions(conds.length > 0 ? conds : [{ id: 'cond_0', column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined }]);
     setLocalLogic(savedRowLogic || 'AND');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewNode?.id, previewConfigKey]);
 
   useEffect(() => {
@@ -504,6 +505,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     }
 
     return Object.keys(result).length > 0 ? result : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewNode, allNodes, pipelineNode?.config, previewConfigKey, columnCatalog]);
 
   const columnRenames = useMemo((): Record<string, string> | undefined => {
@@ -573,6 +575,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       return;
     }
     setVisibleColumnKeys([...cat]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     previewNode?.id,
     previewConfigKey,

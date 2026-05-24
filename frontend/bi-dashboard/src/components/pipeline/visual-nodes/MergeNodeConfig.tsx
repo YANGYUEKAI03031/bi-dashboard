@@ -9,7 +9,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Divider, Tag, Typography,
   Alert, Card, Spin, Radio,
-  Select, Input, Button, Space,
+  Select, Input, Button,
   Table,
 } from 'antd';
 import { ColumnHeightOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';

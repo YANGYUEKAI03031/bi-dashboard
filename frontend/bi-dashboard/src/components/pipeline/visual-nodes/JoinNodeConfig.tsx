@@ -194,6 +194,7 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     rightPreview.previewData?.columns?.join('\0'),
     writeJoinState,
     node.id,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   /** 两表同名列，首次自动填一对匹配键 */
@@ -219,6 +220,7 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     rightPreview.previewData?.columns?.join('\0'),
     readOnly,
     writeJoinState,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
   const handleToggleVenn = (part: JoinVennPart) => {
@@ -250,6 +252,7 @@ export const JoinNodeConfig: React.FC<JoinNodeConfigProps> = ({
     const pn = node.data.pipelineNode as PipelineNode;
     if (String(pn.sql ?? '').trim()) return;
     writeJoinState(vennRegionsRef.current, joinKeysRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly, node.id, writeJoinState]);
 
   if (upstreamNodes.length < 2) {

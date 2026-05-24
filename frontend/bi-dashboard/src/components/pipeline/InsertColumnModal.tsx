@@ -17,7 +17,6 @@ import {
   Typography,
   Divider,
   Alert,
-  Tooltip,
   Tag,
   Switch,
 } from 'antd';
@@ -31,11 +30,9 @@ import {
   SortAscendingOutlined,
   FolderOutlined,
   BarChartOutlined,
-  InfoCircleOutlined,
 } from '@ant-design/icons';
 
-const { Text, Paragraph } = Typography;
-const { TextArea } = Input;
+const { Text } = Typography;
 
 /**
  * 表达式编辑器组件
@@ -103,10 +100,9 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
     });
   }, [value, columns, placeholder]);
 
-  // 处理输入变化
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
-  }, [onChange]);
+  };
 
   return (
     <div
@@ -336,6 +332,7 @@ const SplitForm: React.FC<SplitFormProps> = ({
 
   useEffect(() => {
     setValues(parseSplitState(initialConfig ?? {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initSig]);
 
   useEffect(() => {
@@ -590,6 +587,7 @@ const LookupForm: React.FC<LookupFormProps> = ({
     const next = parseLookupState(initialConfig ?? {});
     setItems(next.items);
     setDefaultValue(next.defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initSig]);
 
   useEffect(() => {
@@ -728,6 +726,7 @@ const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange, initialCon
 
   useEffect(() => {
     setValues(parseRankState(initialConfig ?? {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initSig]);
 
   useEffect(() => {
@@ -854,6 +853,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
     const next = parseCategoryState(initialConfig ?? {});
     setRanges(next.ranges);
     setDefaultLabel(next.defaultLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initSig]);
 
   useEffect(() => {
@@ -1162,13 +1162,6 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
     });
   }, [newColumnName, editConfig, activeTab, sourceColumn, columns, formValues, onConfirm]);
 
-  const resetForm = useCallback(() => {
-    setNewColumnName('');
-    setSourceColumn(undefined);
-    setFormValues({});
-    setActiveTab('calculation');
-  }, []);
-
   // 打开/关闭弹窗或与 editConfig 同步时，在绘制子表单前写入父级状态，避免子表单 mount 用空值覆盖已加载的配置
   useLayoutEffect(() => {
     if (!visible) {
@@ -1190,7 +1183,8 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
       setFormValues({});
       setActiveTab('calculation');
     }
-  }, [visible, editConfig]); // 移除 form 依赖，避免循环更新
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, editConfig]);
 
   const categoryRanges = formValues.ranges;
   const categoryDefaultLabel = formValues.default_label;

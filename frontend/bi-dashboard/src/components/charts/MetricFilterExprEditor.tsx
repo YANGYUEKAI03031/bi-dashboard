@@ -287,6 +287,7 @@ const RuleRow: React.FC<{
       );
     }
     // 用 id/field/op 表征规则语义，避免 child 引用抖动
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child?.id, (child as any)?.field, (child as any)?.op, fieldTypes, root, childId, onChange]);
 
   if (!childExists) return null;

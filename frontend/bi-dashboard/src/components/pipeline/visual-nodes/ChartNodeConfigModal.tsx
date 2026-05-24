@@ -4,44 +4,27 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Modal, Form, Select, Switch, Input, InputNumber,
-  Radio, Button, Space, Divider, Typography, Alert,
-  Tooltip, message, Empty, Transfer, Tag,
+  Modal, Form, Select, Switch, Input,
+  Radio, Space, Divider, Typography, Alert,
+  Tooltip, Empty,
 } from 'antd';
 import {
   BarChartOutlined, LineChartOutlined, PieChartOutlined,
   DotChartOutlined, AreaChartOutlined, RadarChartOutlined,
   FundViewOutlined, ClusterOutlined, FallOutlined,
-  FilterOutlined, RiseOutlined, SettingOutlined,
-  InfoCircleOutlined,
+  FilterOutlined, RiseOutlined, InfoCircleOutlined,
 } from '@ant-design/icons';
-import { ChartFactory } from '../../charts/ChartFactory';
-import { ChartConfig } from '../../charts/ChartFactory';
+import { ChartFactory, ChartConfig } from '../../charts/ChartFactory';
 import {
   ChartNodeConfig as ChartNodeConfigType,
   ChartType,
-  AggregationMethod,
   DEFAULT_CHART_CONFIG,
-  CHART_TYPE_LABELS,
-  AGG_METHOD_LABELS,
   getChartTypeLabel,
-  getAggMethodLabel,
-  getChartFieldMappingConfig,
-  MetricFilter,
-  MetricFilterExprNode,
 } from '../../../types/chartNode';
-import {
-  PREVIEW_COLUMN_DISPLAY_OPTIONS,
-  PREVIEW_COLUMN_DISPLAY_AUTO,
-} from '../../../constants/previewColumnDisplay';
-import {
-  inferMetricFieldTypesFromSampleRows,
-  type MetricFieldKind,
-} from '../../../utils/chartMetric';
+import { inferMetricFieldTypesFromSampleRows, type MetricFieldKind } from '../../../utils/chartMetric';
 import dayjs from 'dayjs';
 
-const { Text, Paragraph } = Typography;
-const { TextArea } = Input;
+const { Text } = Typography;
 
 interface PreviewData {
   columns: string[];
@@ -172,6 +155,122 @@ const ORDER_OPTIONS = [
   { value: 'desc', label: '降序' },
 ];
 
+/** Get chart field mapping config based on chart type */
+const getChartFieldConfig = (chartType: string) => {
+  switch (chartType.toLowerCase()) {
+    case 'pie':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showColorField: false,
+        showMultipleY: false,
+        title: '饼图',
+        description: '需要1个分类字段和1个数值字段',
+        defaultXGroupBy: true
+      };
+    case 'scatter':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 2,
+        yFieldsMax: 2,
+        showColorField: true,
+        showMultipleY: false,
+        title: '散点图',
+        description: '需要2个数值字段作为X和Y坐标',
+        defaultXGroupBy: false
+      };
+    case 'radar':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 2,
+        yFieldsMax: 10,
+        showColorField: false,
+        showMultipleY: true,
+        title: '雷达图',
+        description: '需要多个数值字段作为维度',
+        defaultXGroupBy: true
+      };
+    case 'boxplot':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showColorField: false,
+        showMultipleY: true,
+        title: '箱线图',
+        description: '需要数值字段用于箱体计算',
+        defaultXGroupBy: true
+      };
+    case 'bar_line':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 2,
+        yFieldsMax: 10,
+        showColorField: false,
+        showMultipleY: true,
+        title: '柱线组合图',
+        description: '分组柱状 + 折线 + 双Y轴；默认最后2个指标为折线，可在下方指定',
+        defaultXGroupBy: true
+      };
+    case 'funnel':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showColorField: false,
+        showMultipleY: false,
+        title: '漏斗图',
+        description: '需要1个阶段字段和1个数值字段',
+        defaultXGroupBy: true
+      };
+    case 'waterfall':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showColorField: false,
+        showMultipleY: false,
+        title: '瀑布图',
+        description: '需要1个阶段字段和1个增量数值字段',
+        defaultXGroupBy: true
+      };
+    case 'stacked_bar':
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showColorField: true,
+        showMultipleY: true,
+        title: '堆积柱形图',
+        description: '需要1个分类字段和多个数值字段进行堆积',
+        defaultXGroupBy: true
+      };
+    case 'metric':
+      return {
+        xFieldRequired: false,
+        yFieldsRequired: 1,
+        yFieldsMax: 1,
+        showColorField: false,
+        showMultipleY: false,
+        title: '指标卡',
+        description: '图表构建器 · 指标图：选择数值列与聚合方式。下方「数据筛选」仅作用于本指标的计算结果，可嵌套组内「且 / 或」；与仪表盘筛选器无关，保存后仍不随全局筛选变化。',
+        defaultXGroupBy: false
+      };
+    default:
+      return {
+        xFieldRequired: true,
+        yFieldsRequired: 1,
+        yFieldsMax: 10,
+        showColorField: true,
+        showMultipleY: true,
+        title: '柱状图/折线图',
+        description: '需要1个分类字段和1个或多个数值字段',
+        defaultXGroupBy: true
+      };
+  }
+};
+
 export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   open,
   nodeConfig,
@@ -299,7 +398,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         defaultYFields = remainingFields.slice(0, Math.min(3, remainingFields.length));
       }
 
-      const fc = getChartFieldMappingConfig(prev.chartType);
+      const fc = getChartFieldConfig(prev.chartType);
       defaultYFields = defaultYFields.slice(0, fc.yFieldsMax);
 
       return {
@@ -591,7 +690,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
 
   // All available fields for X/Y selects (same as VisualizationBuilder)
   const fieldOptions = availableFields.map((f) => ({ label: f, value: f }));
-  const fieldMappingConfig = getChartFieldMappingConfig(config.chartType);
+  const fieldMappingConfig = getChartFieldConfig(config.chartType);
 
   return (
     <Modal

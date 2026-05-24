@@ -130,6 +130,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveDsId, selectedTable, readOnly]);
 
   const handleDataSourceChange = (dsId: number | undefined) => {

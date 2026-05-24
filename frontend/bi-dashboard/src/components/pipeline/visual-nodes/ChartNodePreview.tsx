@@ -247,6 +247,7 @@ export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
   const validationError = useMemo<string | null>(() => {
     if (isValid) return null;
     return getValidationError(config);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
   // Loading state

@@ -10,7 +10,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Select, Divider, Tag, Typography,
-  Alert, Checkbox, Space, Tooltip, Spin, Empty,
+  Alert, Checkbox, Space, Spin,
 } from 'antd';
 import { SwapOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
