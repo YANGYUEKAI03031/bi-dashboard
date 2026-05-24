@@ -44,6 +44,26 @@ def _infer_mysql_type(value: Any) -> str:
     return _TYPE_MAP.get(t, "TEXT")
 
 
+def _validate_step_id(step_id: str) -> str:
+    """
+    验证并返回安全的 step_id。
+    只允许字母、数字、下划线。
+    """
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', step_id):
+        raise ValueError(f"Invalid step_id: {step_id}")
+    return step_id
+
+
+def _validate_identifier(identifier: str) -> str:
+    """
+    验证并返回安全的 SQL 标识符。
+    只允许字母、数字、下划线。
+    """
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
+        raise ValueError(f"Invalid SQL identifier: {identifier}")
+    return identifier
+
+
 def _serialize_value(value: Any) -> str:
     """将 Python 值序列化为 MySQL 兼容的 SQL 字面量"""
     if value is None:
@@ -78,12 +98,14 @@ def _build_cast_expression(col: str, format: str) -> Tuple[str, str]:
     Returns:
         (cast_expr, mysql_type)
     """
+    # 验证列名防止 SQL 注入
+    safe_col = _validate_identifier(col)
     entry = _FORMAT_TYPE_MAP.get(format)
     if entry:
         mysql_type, expr_template = entry
-        return expr_template.format(col=col), mysql_type
+        return expr_template.format(col=safe_col), mysql_type
     # 自动格式不做转换，使用原列
-    return f"`{col}`", "TEXT"
+    return f"`{safe_col}`", "TEXT"
 
 
 class TempTableManager:
@@ -201,8 +223,11 @@ class TempTableManager:
         Returns:
             写入的行数
         """
+        # 验证 step_id 防止 SQL 注入
+        safe_step_id = _validate_step_id(step_id)
+
         if not data:
-            logger.info(f"步骤 {step_id} 无数据，跳过写入")
+            logger.info(f"步骤 {safe_step_id} 无数据，跳过写入")
             return 0
 
         if not self._json_created:
@@ -218,22 +243,37 @@ class TempTableManager:
             for row in batch:
                 data_json = json.dumps(row, ensure_ascii=False, default=str)
                 escaped_json = data_json.replace("'", "\\'")
-                values_list.append(f"('{step_id}', {row_index}, '{escaped_json}')")
+                values_list.append(f"({row_index}, '{escaped_json}')")
                 row_index += 1
 
+            # 使用参数化查询防止 SQL 注入
+            placeholders = ", ".join(f"(:step_id, {idx}, :data{idx})" for idx in range(len(values_list)))
             insert_sql = f"""
             INSERT INTO {self._json_table_name} (step_id, row_index, data_json)
-            VALUES {', '.join(values_list)}
+            VALUES {placeholders}
             """
+            # 构建参数字典
+            params = {"step_id": safe_step_id}
+            for idx in range(len(values_list)):
+                params[f"data{idx}"] = values_list[idx].split(", ", 1)[1]  # 去掉 row_index 部分
+            # 简化：直接用 VALUES 列表，但 step_id 用参数
+            values_sql = ", ".join(f"(:step_id, {i}, :data{i})" for i in range(len(batch)))
+            insert_sql = f"""
+            INSERT INTO {self._json_table_name} (step_id, row_index, data_json)
+            VALUES {values_sql}
+            """
+            batch_params = {"step_id": safe_step_id}
+            for i, row in enumerate(batch):
+                batch_params[f"data{i}"] = json.dumps(row, ensure_ascii=False, default=str).replace("'", "\\'")
             try:
-                await self.connection.execute(text(insert_sql))
+                await self.connection.execute(text(insert_sql), batch_params)
                 total_inserted += len(batch)
             except Exception as e:
-                logger.error(f"插入数据失败 (step={step_id}): {e}")
+                logger.error(f"插入数据失败 (step={safe_step_id}): {e}")
                 raise
 
         await self.connection.commit()
-        logger.info(f"步骤 {step_id} 写入 {total_inserted} 行数据到 JSON 临时表")
+        logger.info(f"步骤 {safe_step_id} 写入 {total_inserted} 行数据到 JSON 临时表")
         return total_inserted
 
     async def query_step_preview(

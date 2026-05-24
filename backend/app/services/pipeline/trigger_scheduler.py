@@ -11,6 +11,7 @@
 - 防并发：检查 pipeline 是否正在运行，若正在运行则跳过本次触发
 """
 import logging
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -21,6 +22,16 @@ from app.models.pipeline import PipelineTrigger, PipelineExecution, DataPipeline
 from app.models.visualization import Database
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_identifier(name: str) -> str:
+    """
+    验证并返回安全的 SQL 标识符（表名、字段名）。
+    只允许字母、数字、下划线。
+    """
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        raise ValueError(f"Invalid SQL identifier: {name}")
+    return name
 
 
 def _build_mysql_url(db_model: Database) -> str:
@@ -346,8 +357,9 @@ class TriggerScheduler:
             return None, None
 
         try:
-            safe_table = trigger.source_table.replace("`", "")
-            safe_field = trigger.watermark_field.replace("`", "")
+            # 验证表名和字段名防止 SQL 注入
+            safe_table = _validate_identifier(trigger.source_table)
+            safe_field = _validate_identifier(trigger.watermark_field)
 
             sql = f"SELECT MAX(`{safe_field}`), COUNT(*) FROM `{safe_table}`"
 
@@ -521,7 +533,11 @@ class TriggerScheduler:
             return False, f"数据源 {data_source_id} 的 engine 不存在"
 
         try:
-            sql = f"SHOW INDEX FROM `{source_table}` WHERE Column_name = '{watermark_field}'"
+            # 验证表名和字段名防止 SQL 注入
+            safe_table = _validate_identifier(source_table)
+            safe_field = _validate_identifier(watermark_field)
+
+            sql = f"SHOW INDEX FROM `{safe_table}` WHERE Column_name = '{safe_field}'"
 
             async with engine.connect() as conn:
                 result = await conn.execute(text(sql))

@@ -897,25 +897,28 @@ class ChartService:
                         start_value = param_value.get('start')
                         end_value = param_value.get('end')
                         if start_value and end_value:
-                            # 日期范围: BETWEEN
-                            condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                            # 日期范围: BETWEEN（使用转义函数）
+                            esc_start = _sql_escape_sql_string(str(start_value))
+                            esc_end = _sql_escape_sql_string(str(end_value))
+                            condition = f"{_quote_sql_identifier(actual_field_name)} BETWEEN '{esc_start}' AND '{esc_end}'"
                             where_conditions.append(condition)
                         elif start_value:
-                            # 只有开始日期: >=
-                            condition = f"`{actual_field_name}` >= '{start_value}'"
+                            esc_start = _sql_escape_sql_string(str(start_value))
+                            condition = f"{_quote_sql_identifier(actual_field_name)} >= '{esc_start}'"
                             where_conditions.append(condition)
                         elif end_value:
-                            # 只有结束日期: <=
-                            condition = f"`{actual_field_name}` <= '{end_value}'"
+                            esc_end = _sql_escape_sql_string(str(end_value))
+                            condition = f"{_quote_sql_identifier(actual_field_name)} <= '{esc_end}'"
                             where_conditions.append(condition)
                     # 处理多值列表 ['广东', '浙江']
                     elif isinstance(param_value, list) and len(param_value) > 0:
-                        values_str = "', '".join(str(v) for v in param_value)
-                        condition = f"`{actual_field_name}` IN ('{values_str}')"
+                        esc_values = ", ".join(f"'{_sql_escape_sql_string(str(v))}'" for v in param_value)
+                        condition = f"{_quote_sql_identifier(actual_field_name)} IN ({esc_values})"
                         where_conditions.append(condition)
                     # 处理单值 '广东' 或无法解析的字符串
                     else:
-                        condition = f"`{actual_field_name}` = '{param_value}'"
+                        esc_val = _sql_escape_sql_string(str(param_value))
+                        condition = f"{_quote_sql_identifier(actual_field_name)} = '{esc_val}'"
                         where_conditions.append(condition)
 
             if is_metric_chart:
@@ -1062,25 +1065,30 @@ class ChartService:
 
                                 # 只保留表中存在的字段
                                 if actual_field_name.lower() in table_fields:
-                                    # 重新生成条件
+                                    # 重新生成条件（使用转义函数）
                                     if isinstance(param_value, dict) and 'start' in param_value and 'end' in param_value:
                                         start_value = param_value.get('start')
                                         end_value = param_value.get('end')
                                         if start_value and end_value:
-                                            condition = f"`{actual_field_name}` BETWEEN '{start_value}' AND '{end_value}'"
+                                            esc_start = _sql_escape_sql_string(str(start_value))
+                                            esc_end = _sql_escape_sql_string(str(end_value))
+                                            condition = f"{_quote_sql_identifier(actual_field_name)} BETWEEN '{esc_start}' AND '{esc_end}'"
                                             valid_conditions.append(condition)
                                         elif start_value:
-                                            condition = f"`{actual_field_name}` >= '{start_value}'"
+                                            esc_start = _sql_escape_sql_string(str(start_value))
+                                            condition = f"{_quote_sql_identifier(actual_field_name)} >= '{esc_start}'"
                                             valid_conditions.append(condition)
                                         elif end_value:
-                                            condition = f"`{actual_field_name}` <= '{end_value}'"
+                                            esc_end = _sql_escape_sql_string(str(end_value))
+                                            condition = f"{_quote_sql_identifier(actual_field_name)} <= '{esc_end}'"
                                             valid_conditions.append(condition)
                                     elif isinstance(param_value, list) and len(param_value) > 0:
-                                        values_str = "', '".join(str(v) for v in param_value)
-                                        condition = f"`{actual_field_name}` IN ('{values_str}')"
+                                        esc_values = ", ".join(f"'{_sql_escape_sql_string(str(v))}'" for v in param_value)
+                                        condition = f"{_quote_sql_identifier(actual_field_name)} IN ({esc_values})"
                                         valid_conditions.append(condition)
                                     else:
-                                        condition = f"`{actual_field_name}` = '{param_value}'"
+                                        esc_val = _sql_escape_sql_string(str(param_value))
+                                        condition = f"{_quote_sql_identifier(actual_field_name)} = '{esc_val}'"
                                         valid_conditions.append(condition)
 
                             # 如果有有效条件，重新生成SQL

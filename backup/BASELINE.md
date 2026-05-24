@@ -43,3 +43,12 @@
 - [x] `security.py` 移除明文兼容逻辑
 - [x] `user.py` 模型移除 `password` 字段
 - [x] 登录 API 验证通过
+
+## 批次 2 SQL 注入修复（2026-05-24 已完成）
+
+- [x] `chart_service.py` - 仪表盘筛选参数值转义
+- [x] `chart_service.py` - 重试逻辑中的参数值转义
+- [x] `temp_table_manager.py` - `step_id` 白名单校验
+- [x] `temp_table_manager.py` - `insert_step_data` 参数化查询
+- [x] `temp_table_manager.py` - 列名白名单校验
+- [x] `trigger_scheduler.py` - 表名/字段名白名单校验
