@@ -2,6 +2,7 @@
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from datetime import datetime, timezone
 import uvicorn
 import logging
 import traceback
@@ -154,7 +155,7 @@ async def health_check():
         "status": "healthy" if (db_healthy and cache_healthy) else "unhealthy",
         "database": "connected" if db_healthy else "disconnected",
         "cache": "connected" if cache_healthy else "disconnected",
-        "timestamp": "2026-02-04T13:07:02"
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -173,8 +174,9 @@ async def check_database_health():
     """检查数据库连接健康状态"""
     try:
         from app.db.session import AsyncSessionLocal
+        from sqlalchemy import text
         async with AsyncSessionLocal() as session:
-            result = await session.execute("SELECT 1")
+            result = await session.execute(text("SELECT 1"))
             return result.scalar() == 1
     except Exception as e:
         logger.error(f"Database health check failed: {e}")

@@ -101,3 +101,46 @@ ALTER TABLE useraccount MODIFY COLUMN userID INT NOT NULL AUTO_INCREMENT;
   "details": {"resource": "图表", "identifier": "42"}
 }
 ```
+
+## 阶段 2.4 Alembic 数据库迁移工具（2026-05-24 已完成）
+
+- [x] 安装 `alembic>=1.12.0` 和 `pymysql`
+- [x] `alembic init alembic` 初始化目录
+- [x] `alembic/env.py` 导入所有 models（Base.metadata）
+- [x] `alembic.ini` 配置数据库 URL（从 settings.DATABASE_URL_SYNC 读取）
+- [x] 创建空白 baseline migration（`966efaac8f36`）
+- [x] `alembic stamp head` 标记当前状态
+- [x] 后端启动正常（自动检测到 env.py 变更并 reload）
+
+**重要**：
+- autogenerate 功能有兼容性问题（MySQL 类型推断错误）
+- 未来数据库变更建议写手动 migration
+- 当前 baseline revision 是空的，标记当前 DB 状态为 head
+
+## 阶段 2.5 配置外部化 + 小修复（2026-05-24 已完成）
+
+- [x] `config.py` 新增配置项：
+  - `CHART_QUERY_LIMIT = 10000`
+  - `PIPELINE_BATCH_SIZE = 1000`
+  - `TEMP_TABLE_RETENTION_MINUTES = 60`
+  - `CACHE_TTL = 300`
+- [x] `chart_service.py` 替换硬编码：
+  - `_ENGINE_EXPIRE_SECONDS` → `settings.CACHE_TTL`
+  - `10000` → `settings.CHART_QUERY_LIMIT`
+- [x] `engine.py` 替换硬编码：
+  - `_default_batch_size = 5000` → `settings.PIPELINE_BATCH_SIZE`
+- [x] `main_optimized.py` 修复：
+  - `/health` timestamp 使用动态值 `datetime.now(timezone.utc)`
+  - `check_database_health()` 使用 `text("SELECT 1")`
+- [x] 后端启动正常
+
+## 阶段 2.6 清理死代码（2026-05-24 已完成）
+
+- [x] 删除 `backend/main.py`（已不再使用，启动使用 `launch_server.py`）
+- [x] 补全 `models/__init__.py`（导出所有模型，便于 Alembic autogenerate）
+- [x] 无空文件/过时脚本
+- [x] 后端启动正常
+
+---
+
+## P1 基础工程全部完成

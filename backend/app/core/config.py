@@ -32,6 +32,14 @@ class Settings(BaseSettings):
         )
 
     @property
+    def DATABASE_URL_SYNC(self) -> str:
+        """同步数据库 URL，用于 Alembic 迁移"""
+        return (
+            f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
+            f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
+        )
+
+    @property
     def REDIS_URL(self) -> str:
         if self.REDIS_PASSWORD:
             return (
@@ -59,6 +67,16 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "BI Dashboard API"
     PROJECT_VERSION: str = "1.0.0"
     DEBUG: bool = True
+
+    # 图表查询配置
+    CHART_QUERY_LIMIT: int = 10000  # 单次图表查询最大行数
+
+    # Pipeline 配置
+    PIPELINE_BATCH_SIZE: int = 1000  # Pipeline 批处理大小
+    TEMP_TABLE_RETENTION_MINUTES: int = 60  # 临时表保留时间（分钟）
+
+    # 缓存配置
+    CACHE_TTL: int = 300  # 缓存 TTL（秒），默认 5 分钟
 
     class Config:
         env_file = ".env"

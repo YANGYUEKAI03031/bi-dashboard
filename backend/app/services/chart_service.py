@@ -11,11 +11,12 @@ import re
 from contextlib import asynccontextmanager
 
 from app.core.crypto import decrypt_password
+from app.core.config import settings
 
 
 # 缓存数据源引擎，避免每次查询都创建新引擎
 _data_source_engines: Dict[str, Any] = {}
-_ENGINE_EXPIRE_SECONDS = 300  # 5分钟过期
+_ENGINE_EXPIRE_SECONDS = settings.CACHE_TTL  # 使用配置项
 
 
 # 相对时间预设（与前端 date_relative 选项一致）
@@ -251,7 +252,7 @@ def _apply_default_limit(sql: str, limit_rows: int) -> str:
         return sql
     if _sql_has_limit(sql):
         return sql
-    safe_limit = int(limit_rows) if limit_rows and int(limit_rows) > 0 else 10000
+    safe_limit = int(limit_rows) if limit_rows and int(limit_rows) > 0 else settings.CHART_QUERY_LIMIT
     stripped = sql.rstrip()
     if stripped.endswith(";"):
         stripped = stripped[:-1].rstrip()
@@ -999,7 +1000,7 @@ class ChartService:
             # 对“明细大结果”做兜底保护：无 LIMIT 才追加 LIMIT
             #（如果上面已经做了 GROUP BY，一般结果会很小且需要完整返回，所以不要强行 LIMIT）
             if "GROUP BY" not in (sql_query or "").upper():
-                sql_query = _apply_default_limit(sql_query, 10000)
+                sql_query = _apply_default_limit(sql_query, settings.CHART_QUERY_LIMIT)
 
             # 获取数据源连接信息
             db_model = await self.db.get(Database, chart.data_source_id)
@@ -1120,7 +1121,7 @@ class ChartService:
                                     else:
                                         sql_query = sql_query.rstrip().rstrip(';') + " WHERE " + where_clause
 
-                                sql_query = _apply_default_limit(sql_query, 10000)
+                                sql_query = _apply_default_limit(sql_query, settings.CHART_QUERY_LIMIT)
                                 async with temp_engine.connect() as conn:
                                     result = await conn.execute(text(sql_query))
                                     rows = result.fetchall()

@@ -29,6 +29,7 @@ from sqlalchemy import text, update
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.services.pipeline.temp_table_manager import TempTableManager
 from app.services.pipeline.watermark_manager import WatermarkManager
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class PipelineEngine:
         self.data_source_id = data_source_id
         self.temp_manager: Optional[TempTableManager] = None
         self.watermark_manager: Optional[WatermarkManager] = None
-        self._default_batch_size = 5000  # 默认批次大小
+        self._default_batch_size = settings.PIPELINE_BATCH_SIZE  # 从配置读取
 
     async def run(
         self,
