@@ -44,15 +44,9 @@ from app.services.pipeline.type_inferrer import (
 from app.services.pipeline import sql_expressions
 from app.services.pipeline import graph_builder
 from app.core.config import settings
+from app.services.pipeline.validator import canonical_pipeline_node_type
 
 logger = logging.getLogger(__name__)
-
-
-# 与前端 nodeTypeRegistry LEGACY_TYPE_MAP 一致：预览 SQL 生成用规范类型
-_PIPELINE_NODE_TYPE_CANON = {
-    "transform": "filter",
-    "merge": "join",
-}
 
 
 class PipelineEngine:
@@ -500,8 +494,9 @@ class PipelineEngine:
                                 # 从列式表读取最大值（列式表直接可查）
                                 if step_id in self.temp_manager._struct_tables:
                                     tbl_name, _ = self.temp_manager._struct_tables[step_id]
-                                    safe_col = f"`{incremental_field.replace('`', '')}`"
-                                    max_sql = f"SELECT MAX({safe_col}) FROM {tbl_name}"
+                                    safe_col = sql_expressions._safe_identifier(incremental_field)
+                                    safe_tbl = self.temp_manager._safe_table_name(tbl_name)
+                                    max_sql = f"SELECT MAX({safe_col}) FROM {safe_tbl}"
                                 else:
                                     max_sql = actual_sql
                                 max_value = await self._get_max_value_from_select(
@@ -2454,8 +2449,8 @@ class PipelineEngine:
 
     @staticmethod
     def _canonical_pipeline_node_type(node_type: str) -> str:
-        """规范管道节点类型名称，委托给 sql_expressions 模块"""
-        return sql_expressions.canonical_pipeline_node_type(node_type)
+        """规范管道节点类型名称"""
+        return canonical_pipeline_node_type(node_type)
 
     @staticmethod
     def _source_table_name(config: Dict[str, Any]) -> str:

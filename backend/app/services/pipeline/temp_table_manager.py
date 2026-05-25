@@ -654,7 +654,8 @@ class TempTableManager:
             orphans = [r[0] for r in res.fetchall()]
             for tbl in orphans:
                 try:
-                    await self.connection.execute(text(f"DROP TABLE IF EXISTS `{tbl}`"))
+                    safe_tbl = self._safe_table_name(tbl)
+                    await self.connection.execute(text(f"DROP TABLE IF EXISTS {safe_tbl}"))
                     logger.info(f"兜底清理孤立临时表: {tbl}")
                 except Exception as e:
                     logger.warning(f"兜底删除表 {tbl} 失败: {e}")

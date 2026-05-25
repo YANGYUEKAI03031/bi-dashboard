@@ -8,6 +8,8 @@ import re
 import logging
 from typing import List, Optional, Dict, Any, Tuple, Set
 
+from app.services.pipeline.validator import canonical_pipeline_node_type
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,8 +18,32 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 def _safe_identifier(name: str) -> str:
-    """安全地包裹表名/列名，避免 SQL 注入"""
-    return f"`{name.replace('`', '``')}`"
+    """安全地包裹表名/列名，白名单校验"""
+    raw = (name or "").strip()
+    if not raw:
+        raise ValueError("标识符不能为空")
+    # 支持点号分隔 schema.table，以及反引号包裹的标识符
+    clean = raw.replace("`", "").strip()
+    # MySQL 允许标识符以字母、下划线、中文开头，也可以数字开头
+    # 第一个正则：允许字母、下划线、中文开头
+    # 第二个正则：允许数字开头（MySQL 允许，但需要反引号包裹）
+    if not re.match(r'^[a-zA-Z_\u4e00-\u9fff][\w\u4e00-\u9fff.]*$', clean):
+        if not re.match(r'^\d[\w\u4e00-\u9fff.]*$', clean):
+            raise ValueError(f"非法标识符: {name}")
+    parts = [p for p in clean.split(".") if p]
+    escaped = [p.replace("`", "``") for p in parts]
+    return ".".join(f"`{p}`" for p in escaped)
+
+
+def _escape_sql_string(value: str) -> str:
+    """转义SQL字符串值中的特殊字符，防止SQL注入"""
+    return (value or "").replace("\\", "\\\\").replace("'", "''")
+
+
+def _escape_like_value(value: str) -> str:
+    """转义LIKE模式中的特殊字符（%、_、反斜杠）"""
+    escaped = _escape_sql_string(value)
+    return escaped.replace("%", "\\%").replace("_", "\\_")
 
 
 def _split_select_columns(sql: str) -> List[str]:
@@ -144,23 +170,6 @@ def _extract_sql_aliases(sql: str) -> List[str]:
             if identifiers:
                 aliases.append(identifiers[-1])
     return aliases
-
-
-# ============================================================
-# Pipeline 节点类型规范化
-# ============================================================
-
-_PIPELINE_NODE_TYPE_CANON = {
-    "transform": "filter",
-    "merge": "join",
-}
-
-
-def canonical_pipeline_node_type(node_type: str) -> str:
-    """规范管道节点类型名称"""
-    if not node_type:
-        return node_type
-    return _PIPELINE_NODE_TYPE_CANON.get(node_type, node_type)
 
 
 def source_table_name(config: Dict[str, Any]) -> str:
@@ -489,7 +498,9 @@ def build_filter_sql(
             if preset:
                 dates = get_date_preset_expression(preset)
                 if dates:
-                    clauses.append(f"{col} BETWEEN '{dates[0]}' AND '{dates[1]}'")
+                    d0 = _escape_sql_string(str(dates[0]))
+                    d1 = _escape_sql_string(str(dates[1]))
+                    clauses.append(f"{col} BETWEEN '{d0}' AND '{d1}'")
             continue
 
         if op == "before":
@@ -497,7 +508,8 @@ def build_filter_sql(
             if preset:
                 dates = get_date_preset_expression(preset)
                 if dates:
-                    clauses.append(f"{col} < '{dates[0]}'")
+                    d0 = _escape_sql_string(str(dates[0]))
+                    clauses.append(f"{col} < '{d0}'")
             continue
 
         if op == "after":
@@ -505,40 +517,49 @@ def build_filter_sql(
             if preset:
                 dates = get_date_preset_expression(preset)
                 if dates:
-                    clauses.append(f"{col} > '{dates[1]}'")
+                    d1 = _escape_sql_string(str(dates[1]))
+                    clauses.append(f"{col} > '{d1}'")
             continue
 
         if op == "between":
             range_start = str(cond.get("rangeStart", ""))
             range_end = str(cond.get("rangeEnd", ""))
             if range_start and range_end:
-                clauses.append(f"{col} BETWEEN '{range_start}' AND '{range_end}'")
+                s = _escape_sql_string(range_start)
+                e = _escape_sql_string(range_end)
+                clauses.append(f"{col} BETWEEN '{s}' AND '{e}'")
             continue
 
+        ev = _escape_sql_string(val)
         if op == "eq":
-            clauses.append(f"{col} = '{val}'")
+            clauses.append(f"{col} = '{ev}'")
         elif op == "ne":
-            clauses.append(f"{col} != '{val}'")
+            clauses.append(f"{col} != '{ev}'")
         elif op == "gt":
-            clauses.append(f"{col} > '{val}'")
+            clauses.append(f"{col} > '{ev}'")
         elif op == "ge":
-            clauses.append(f"{col} >= '{val}'")
+            clauses.append(f"{col} >= '{ev}'")
         elif op == "lt":
-            clauses.append(f"{col} < '{val}'")
+            clauses.append(f"{col} < '{ev}'")
         elif op == "le":
-            clauses.append(f"{col} <= '{val}'")
+            clauses.append(f"{col} <= '{ev}'")
         elif op == "contains":
-            clauses.append(f"{col} LIKE '%{val}%'")
+            escaped = _escape_like_value(val)
+            clauses.append(f"{col} LIKE '%{escaped}%' ESCAPE '\\\\'")
         elif op == "startsWith":
-            clauses.append(f"{col} LIKE '{val}%'")
+            escaped = _escape_like_value(val)
+            clauses.append(f"{col} LIKE '{escaped}%' ESCAPE '\\\\'")
         elif op == "endsWith":
-            clauses.append(f"{col} LIKE '%{val}'")
+            escaped = _escape_like_value(val)
+            clauses.append(f"{col} LIKE '%{escaped}' ESCAPE '\\\\'")
         elif op == "isNull":
             clauses.append(f"{col} IS NULL")
         elif op == "isNotNull":
             clauses.append(f"{col} IS NOT NULL")
         elif op == "in":
-            items = ", ".join(f"'{v.strip()}'" for v in val.split(",") if v.strip())
+            items = ", ".join(
+                f"'{_escape_sql_string(v.strip())}'" for v in val.split(",") if v.strip()
+            )
             if not items:
                 continue
             clauses.append(f"{col} IN ({items})")

@@ -60,7 +60,7 @@ class Database(Base):
     host = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False)
     username = Column(String(100), nullable=False)
-    password = Column(String(255), nullable=False)
+    password = Column(String(512), nullable=False)  # 512可容纳Fernet加密密文
     database_name = Column(String(100), nullable=False)
     description = Column(Text)
     

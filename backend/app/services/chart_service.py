@@ -1041,7 +1041,8 @@ class ChartService:
                             temp_engine2 = await _get_db_engine(db_model)
                             try:
                                 async with temp_engine2.connect() as conn2:
-                                    result = await conn2.execute(text(f"DESCRIBE `{table_name}`"))
+                                    quoted_table = _quote_mysql_identifier(table_name)
+                                    result = await conn2.execute(text(f"DESCRIBE {quoted_table}"))
                                     table_fields = set()
                                     for row in result.fetchall():
                                         table_fields.add(row[0].lower())

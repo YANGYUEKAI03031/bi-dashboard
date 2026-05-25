@@ -87,13 +87,11 @@ def decrypt_password(encrypted_password: str) -> str:
         decrypted = f.decrypt(encrypted_password.encode("utf-8"))
         return decrypted.decode("utf-8")
     except InvalidToken:
-        # 尝试作为明文处理
-        logger.warning("密码解密失败，尝试作为明文处理")
-        return encrypted_password
+        logger.error("密码解密失败，密文可能已损坏或ENCRYPTION_KEY已变更")
+        raise ValueError("密码解密失败，请重新配置数据源密码")
     except Exception as e:
         logger.error(f"密码解密失败: {e}")
-        # 出错时返回原文，避免系统无法启动
-        return encrypted_password
+        raise ValueError(f"密码解密失败: {e}")
 
 
 def _is_plaintext(password: str) -> bool:
