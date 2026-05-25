@@ -41,6 +41,7 @@ from app.services.pipeline.type_inferrer import (
     preview_value_to_column_type,
     infer_preview_column_types,
 )
+from app.services.pipeline import sql_expressions
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -886,17 +887,7 @@ class PipelineEngine:
         on_right_cols: Optional[List[str]] = None,
         join_type: str = "inner",
     ) -> str:
-        """
-        将关联 SQL 中的 SELECT * 展开为显式列。
-
-        LEFT/RIGHT JOIN 语义：结果 = 左/右表全部列 + 另一表不含 ON 列的列。
-        例如 ON a.id = b.ref_id → 右表的 ref_id 不出现在结果中（id 已来自左表）。
-        
-        对于 LEFT/RIGHT JOIN，若只知一表列，另一表用 a.* / b.* + _b 后缀别名避免冲突。
-        与 _expand_join_select_for_preview 逻辑保持一致。
-
-        若不传 on_right_cols，仅做向后兼容的去重（同名列只保留一个）。
-        """
+        """将关联 SQL 中的 SELECT * 展开为显式列，委托给 sql_expressions"""
         if len(upstream_step_ids) < 2:
             return sql
         lc = struct_table_map.get(upstream_step_ids[0])
@@ -910,11 +901,7 @@ class PipelineEngine:
         up = sql.upper()
         if " JOIN " not in up or " AS A " not in up or " AS B " not in up:
             return sql
-
-        # 与 _expand_join_select_for_preview 保持一致的展开逻辑
-        sel = PipelineEngine._join_explicit_select_list(
-            left_cols, right_cols, on_right_cols, join_type
-        )
+        sel = sql_expressions.join_explicit_select_list(left_cols, right_cols, on_right_cols)
         return re.sub(
             r"SELECT\s+\*\s+FROM\s+",
             f"SELECT {sel} FROM ",
@@ -929,82 +916,8 @@ class PipelineEngine:
         on_right_cols: Optional[List[str]] = None,
         join_type: str = "inner",
     ) -> str:
-        """
-        生成 JOIN 结果的显式列列表。
-
-        展开规则（与 _expand_join_select_for_preview 一致）：
-        - 两侧列均已知：左表全列 + 右表列（排除右表 ON 列及与左表同名列）。
-        - 仅右表列已知：a.* + 右表显式列（排除 ON 右列，右表列加 _b 后缀别名）。
-        - 仅左表列已知：LEFT/RIGHT JOIN 用左显式列 + 右表显式列（排除 ON 右列，加 _b 别名）。
-        - 两侧均未知：不展开。
-
-        无 on_right_cols 时：左表全列 + 右表列（排除同名）。
-        """
-        left_set = set(left_cols) if left_cols else set()
-        right_set = set(right_cols) if right_cols else set()
-        on_right_set = set(on_right_cols) if on_right_cols else set()
-        
-        # 两侧列均已知
-        if left_cols and right_cols:
-            parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-            for c in right_cols:
-                if c in on_right_set:
-                    continue  # ON 列不添加（左表对应列已在结果中）
-                if c in left_set:
-                    # 同名列：添加递增后缀（如 _b, _c, _d...）
-                    # 找出左表中已有该 base 的最大后缀
-                    base = c
-                    max_suffix = 0
-                    # 匹配模式：base、base_b、base_c 等
-                    suffix_pattern = re.compile(rf"^{re.escape(base)}(?:_([a-z]))?$")
-                    for lc in left_cols:
-                        m = suffix_pattern.match(lc)
-                        if m:
-                            suf = m.group(1)
-                            if suf is None:
-                                # 基础列本身（未加后缀），视为 suffix=0
-                                max_suffix = max(max_suffix, 0)
-                            else:
-                                # 转换 a=1, b=2, c=3, ...
-                                val = ord(suf) - ord('a') + 1
-                                max_suffix = max(max_suffix, val)
-                    # 下一个后缀
-                    next_suffix = chr(ord('a') + max_suffix)
-                    b_col = PipelineEngine._safe_identifier(c)
-                    b_alias = PipelineEngine._safe_identifier(f"{c}_{next_suffix}")
-                    parts.append(f"b.{b_col} AS {b_alias}")
-                else:
-                    parts.append(f"b.{PipelineEngine._safe_identifier(c)}")
-            return ", ".join(parts)
-        
-        # 仅右表列已知
-        if right_cols and not left_cols:
-            right_parts = []
-            for c in right_cols:
-                if c not in on_right_set:
-                    b_expr = f"b.{PipelineEngine._safe_identifier(c)}"
-                    alias = PipelineEngine._safe_identifier(f"{c}_b")
-                    right_parts.append(f"{b_expr} AS {alias}")
-            sel = f"a.*, {', '.join(right_parts)}" if right_parts else "a.*"
-            return sel
-        
-        # 仅左表列已知
-        if left_cols and not right_cols:
-            if join_type in ("left", "right") and on_right_cols:
-                sel_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-                for c in right_cols or []:
-                    if c not in on_right_set:
-                        sel_parts.append(
-                            f"b.{PipelineEngine._safe_identifier(c)} AS {PipelineEngine._safe_identifier(c)}_b"
-                        )
-            else:
-                # INNER 且右列未知：直接用 b.*
-                sel_parts = [f"a.{PipelineEngine._safe_identifier(c)}" for c in left_cols]
-                sel_parts.append("b.*")
-            return ", ".join(sel_parts)
-        
-        # 两侧均未知：不展开
-        return "a.*, b.*"
+        """生成 JOIN 结果的显式列列表，委托给 sql_expressions"""
+        return sql_expressions.join_explicit_select_list(left_cols, right_cols, on_right_cols)
 
     @staticmethod
     def _build_sql_from_inserted_columns(
@@ -1129,81 +1042,10 @@ class PipelineEngine:
         on_right_cols: Optional[List[str]],
         symmetric_union_plan: Optional[List[Any]] = None,
     ) -> Optional[Set[str]]:
-        """
-        链式预览中，JOIN 内层子查询在「当前类型 + 列推断」下实际存在的列名集合。
-        用于过滤 config.outputColumnKeys 中已失效的键（例如 Inner 时产生的 sum_星级_b
-        在 Left Anti 下不存在）。
-
-        若无法完整枚举（如 inner/left/right 且仅一侧列可知、另一侧为 a.* / b.*），返回 None
-        表示不按白名单过滤。
-        """
-        jt = (join_type or "inner").lower()
-        on_set = set(on_right_cols) if on_right_cols else set()
-        
-        # DEBUG: 打印输入参数
-        logger.debug(f"[JOIN ALLOWED COLS] jt={jt}, left_cols={left_cols}, right_cols={right_cols}, on_right_cols={list(on_set)}")
-
-        if jt == "left_anti":
-            return set(left_cols) if left_cols is not None else None
-        if jt == "right_anti":
-            return set(right_cols) if right_cols is not None else None
-        if jt == "symmetric_diff":
-            plan = symmetric_union_plan
-            if isinstance(plan, list) and plan:
-                outs: List[str] = []
-                for row in plan:
-                    if isinstance(row, dict):
-                        o = str(row.get("out") or row.get("alias") or "").strip()
-                        if o:
-                            outs.append(o)
-                if outs:
-                    return set(outs)
-            return None
-        # FULL OUTER 两半 UNION 的列与 LEFT JOIN 结果一致，按 left 枚举可投影列
-        if jt == "full":
-            jt = "left"
-        if jt not in ("inner", "left", "right"):
-            return None
-
-        if left_cols is not None and right_cols is not None:
-            left_set = set(left_cols)
-            names: List[str] = list(left_cols)
-            for c in right_cols:
-                if c in on_set:
-                    # ON 列不添加（左表对应列已在结果中）
-                    continue
-                if c not in left_set:
-                    # 右表独有的列，直接添加
-                    names.append(c)
-                else:
-                    # 同名列：计算递增后缀，与 _join_explicit_select_list 保持一致
-                    base = c
-                    max_suffix = 0
-                    suffix_pattern = re.compile(rf"^{re.escape(base)}(?:_([a-z]))?$")
-                    for lc in left_cols:
-                        m = suffix_pattern.match(lc)
-                        if m:
-                            suf = m.group(1)
-                            if suf is None:
-                                max_suffix = max(max_suffix, 0)
-                            else:
-                                val = ord(suf) - ord('a') + 1
-                                max_suffix = max(max_suffix, val)
-                    next_suffix = chr(ord('a') + max_suffix)
-                    names.append(f"{c}_{next_suffix}")
-            result = set(names)
-            return result
-
-        if left_cols is not None and right_cols is None and jt in ("left", "right") and on_right_cols:
-            # LEFT/RIGHT JOIN：左表全列 + 右表独有列（ON 列排除）
-            # 注意：当 join 类型为 left/right 时，_expand_join_select_for_preview 会给右表独有列加 _b 后缀
-            names = list(left_cols)
-            for c in (right_cols or []):
-                if c not in on_set:
-                    names.append(f"{c}_b")  # 加 _b 后缀，与 _expand_join_select_for_preview 一致
-            return set(names)
-
-        return None
+        """计算 JOIN 预览中实际可用的列名集合，委托给 sql_expressions"""
+        return sql_expressions.join_preview_allowed_sql_columns(
+            join_type, left_cols, right_cols, on_right_cols, symmetric_union_plan
+        )
 
     def _build_step_sql(
         self,
@@ -1500,81 +1342,18 @@ class PipelineEngine:
 
     @staticmethod
     def _safe_identifier(name: str) -> str:
-        """安全地包裹表名/列名，避免 SQL 注入"""
-        return f"`{name.replace('`', '``')}`"
+        """安全地包裹表名/列名，委托给 sql_expressions 模块"""
+        return sql_expressions._safe_identifier(name)
 
     @staticmethod
     def _extract_columns_from_select(sql: str) -> List[str]:
-        """
-        从 SELECT ... FROM (...) 中提取列名。
-        用于确定当前作用域内可用的列名列表，以便 insertedColumns 表达式可以引用这些列。
-        支持中文列名、复杂表达式和带 AS 别名的列。
-        """
-        sql_stripped = sql.strip()
-        if not sql_stripped.upper().startswith("SELECT"):
-            return []
-        # 匹配 SELECT ... FROM（支持子查询嵌套）
-        m = re.match(r"^SELECT\s+(.*?)(\s+FROM\s+)", sql_stripped, re.IGNORECASE | re.DOTALL)
-        if not m:
-            return []
-        cols_str = m.group(1).strip()
-        if cols_str == "*":
-            return []  # 无法推断具体列名
-
-        # 逐列解析（处理嵌套括号和 AS 别名）
-        # 策略：遇到 AS 时，检查 AS 前是否为简单函数调用
-        # - 简单函数调用如 SUM(x)、COUNT(x)：提取 AS 后的别名
-        # - 简单列引用如 count_评价文本_1：提取列名本身（去掉 AS 别名）
-        # - 其他表达式如 count_评价文本_1 + ...：提取 AS 后的别名
-        cols: List[str] = []
-        depth = 0
-        buf = ""
-        for ch in cols_str:
-            if ch == "(":
-                depth += 1
-                buf += ch
-            elif ch == ")":
-                depth -= 1
-                buf += ch
-            elif ch == "," and depth == 0:
-                col = buf.strip()
-                # 从右向左找 AS 分隔别名（支持中文别名，用 \S+ 而非 \w+）
-                as_match = re.match(r"^(.*?)\s+AS\s+(\S+)$", col, re.IGNORECASE)
-                if as_match:
-                    inner = as_match.group(1).strip()
-                    # 检查最外层是否是简单函数调用（如 SUM(x)、COUNT(x)、MAX(x)）
-                    fn_match = re.match(r"^\w+\([^)]*\)$", inner, re.IGNORECASE)
-                    if fn_match:
-                        # 函数调用 → 提取别名（如 SUM(x) AS sum_x → sum_x）
-                        col = as_match.group(2)
-                    else:
-                        # 非函数调用 → 提取原始列名（如 count_评价文本_1 AS count_评价文本_1 → count_评价文本_1）
-                        col = inner
-                cols.append(col)
-                buf = ""
-            else:
-                buf += ch
-        if buf.strip():
-            col = buf.strip()
-            as_match = re.match(r"^(.*?)\s+AS\s+(\S+)$", col, re.IGNORECASE)
-            if as_match:
-                inner = as_match.group(1).strip()
-                fn_match = re.match(r"^\w+\([^)]*\)$", inner, re.IGNORECASE)
-                if fn_match:
-                    col = as_match.group(2)
-                else:
-                    col = inner
-            cols.append(col)
-
-        return [c.strip() for c in cols if c.strip()]
+        """从 SELECT ... FROM (...) 中提取列名，委托给 sql_expressions"""
+        return sql_expressions._extract_columns_from_select(sql)
 
     @staticmethod
     def _join_on_equality_sql(left_col: str, right_col: str) -> str:
-        """ON 条件两侧统一 COLLATE，避免 MySQL 1267（utf8mb4_unicode_ci / utf8mb4_0900_ai_ci 混用）。"""
-        la = f"a.{PipelineEngine._safe_identifier(left_col)}"
-        rb = f"b.{PipelineEngine._safe_identifier(right_col)}"
-        coll = "utf8mb4_unicode_ci"
-        return f"{la} COLLATE {coll} = {rb} COLLATE {coll}"
+        """ON 条件两侧统一 COLLATE，委托给 sql_expressions"""
+        return sql_expressions.join_on_equality_sql(left_col, right_col)
 
     @staticmethod
     def _symmetric_diff_union_sql(
@@ -1586,67 +1365,13 @@ class PipelineEngine:
         join_keys: List[Dict[str, Any]],
         plan: Optional[List[Dict[str, Any]]],
     ) -> str:
-        """
-        对称差 UNION ALL：两侧 SELECT * 会在 UNION 时因列隐含排序规则不一致触发 1267。
-        用 CAST(... AS CHAR) COLLATE utf8mb4_unicode_ci 统一每列；列顺序/别名由 plan 指定。
-        """
-        coll = "utf8mb4_unicode_ci"
-        rows: List[Dict[str, Any]] = []
-        if plan:
-            for p in plan:
-                if not isinstance(p, dict):
-                    continue
-                out = str(p.get("out") or p.get("alias") or "").strip()
-                lc = str(p.get("L") or p.get("leftCol") or "").strip()
-                rc = str(p.get("R") or p.get("rightCol") or "").strip()
-                if out or lc or rc:
-                    if not out:
-                        out = lc or rc or "col"
-                    rows.append({"out": out, "L": lc, "R": rc})
-        if not rows and join_keys:
-            k0 = join_keys[0]
-            if isinstance(k0, dict):
-                lc = str(k0.get("leftCol", "") or "").strip()
-                rc = str(k0.get("rightCol", "") or "").strip()
-                if lc or rc:
-                    rows.append({"out": lc or rc or "k", "L": lc, "R": rc})
-        if not rows:
-            return (
-                f"SELECT a.* FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_b} "
-                f"UNION ALL "
-                f"SELECT b.* FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
-            )
-
-        def _cast_a(row: Dict[str, Any]) -> str:
-            lc = str(row.get("L") or "").strip()
-            out = str(row.get("out") or lc or "c").strip()
-            safe_out = PipelineEngine._safe_identifier(out)
-            if lc:
-                expr = f"CAST(a.{PipelineEngine._safe_identifier(lc)} AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
-            else:
-                expr = f"CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
-            return f"{expr} AS {safe_out}"
-
-        def _cast_b(row: Dict[str, Any]) -> str:
-            rc = str(row.get("R") or "").strip()
-            out = str(row.get("out") or rc or "c").strip()
-            safe_out = PipelineEngine._safe_identifier(out)
-            if rc:
-                expr = f"CAST(b.{PipelineEngine._safe_identifier(rc)} AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
-            else:
-                expr = f"CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
-            return f"{expr} AS {safe_out}"
-
-        sel_l = ", ".join(_cast_a(r) for r in rows)
-        sel_r = ", ".join(_cast_b(r) for r in rows)
-        return (
-            f"SELECT {sel_l} FROM ({left_ref}) AS a LEFT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_b} "
-            f"UNION ALL "
-            f"SELECT {sel_r} FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
+        """对称差 UNION ALL，委托给 sql_expressions"""
+        return sql_expressions.symmetric_diff_union_sql(
+            left_ref, right_ref, on_clause, null_b, null_a, join_keys, plan
         )
 
     async def _fetch_mysql_table_columns(self, conn, table_name_plain: str) -> List[str]:
-        """从 information_schema 读取当前库下表的列名顺序。"""
+        """从 information_schema 读取当前库下表的列名顺序"""
         stmt = text("""
             SELECT COLUMN_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl
@@ -1656,38 +1381,9 @@ class PipelineEngine:
         return [row[0] for row in result.fetchall()]
 
     @staticmethod
-    def _get_date_preset_expression(preset: str) -> tuple:
-        """根据快捷日期选项获取开始和结束日期"""
-        from datetime import datetime, timedelta
-        from dateutil.relativedelta import relativedelta
-
-        today = datetime.now().date()
-        yesterday = today - timedelta(days=1)
-        fmt = "%Y-%m-%d"
-
-        presets = {
-            "today": (today, today),
-            "yesterday": (yesterday, yesterday),
-            "last_7_days": (today - timedelta(days=6), today),
-            "last_30_days": (today - timedelta(days=29), today),
-            "this_month": (today.replace(day=1), (today + relativedelta(months=1) - timedelta(days=1))),
-            "last_month": ((today - relativedelta(months=1)).replace(day=1),
-                          (today - timedelta(days=today.day))),
-            "this_year": (today.replace(month=1, day=1), today.replace(month=12, day=31)),
-            "last_year": ((today.replace(year=today.year - 1, month=1, day=1)),
-                         (today.replace(year=today.year - 1, month=12, day=31))),
-            # 昨日基准的快捷选项
-            "yesterday_last_7_days": (yesterday - timedelta(days=6), yesterday),
-            "yesterday_last_30_days": (yesterday - timedelta(days=29), yesterday),
-            "yesterday_last_90_days": (yesterday - timedelta(days=89), yesterday),
-            "yesterday_last_month": ((yesterday - relativedelta(months=1)).replace(day=1),
-                                    (yesterday - timedelta(days=yesterday.day))),
-        }
-
-        dates = presets.get(preset)
-        if dates:
-            return (dates[0].strftime(fmt), dates[1].strftime(fmt))
-        return None
+    def _get_date_preset_expression(preset: str):
+        """根据快捷日期选项获取开始和结束日期，委托给 sql_expressions"""
+        return sql_expressions.get_date_preset_expression(preset)
 
     @staticmethod
     def _build_filter_sql(
@@ -1695,278 +1391,38 @@ class PipelineEngine:
         conditions: List[Dict[str, Any]],
         logic: str = "AND",
     ) -> str:
-        """根据可视化配置构建 WHERE 子句"""
-        if not conditions:
-            return ""
-        clauses = []
-        for cond in conditions:
-            col_name = str(cond.get("column", "") or "").strip()
-            if not col_name:
-                continue
-            col = PipelineEngine._safe_identifier(col_name)
-            op = str(cond.get("operator", "eq"))
-            val = str(cond.get("value", ""))
-
-            # 日期快捷操作符
-            if op == "preset":
-                preset = str(cond.get("preset", ""))
-                if preset:
-                    dates = PipelineEngine._get_date_preset_expression(preset)
-                    if dates:
-                        clauses.append(f"{col} BETWEEN '{dates[0]}' AND '{dates[1]}'")
-                continue
-
-            if op == "before":
-                preset = str(cond.get("preset", ""))
-                if preset:
-                    dates = PipelineEngine._get_date_preset_expression(preset)
-                    if dates:
-                        clauses.append(f"{col} < '{dates[0]}'")
-                continue
-
-            if op == "after":
-                preset = str(cond.get("preset", ""))
-                if preset:
-                    dates = PipelineEngine._get_date_preset_expression(preset)
-                    if dates:
-                        clauses.append(f"{col} > '{dates[1]}'")
-                continue
-
-            if op == "between":
-                range_start = str(cond.get("rangeStart", ""))
-                range_end = str(cond.get("rangeEnd", ""))
-                if range_start and range_end:
-                    clauses.append(f"{col} BETWEEN '{range_start}' AND '{range_end}'")
-                continue
-
-            if op == "eq":
-                clauses.append(f"{col} = '{val}'")
-            elif op == "ne":
-                clauses.append(f"{col} != '{val}'")
-            elif op == "gt":
-                clauses.append(f"{col} > '{val}'")
-            elif op == "ge":
-                clauses.append(f"{col} >= '{val}'")
-            elif op == "lt":
-                clauses.append(f"{col} < '{val}'")
-            elif op == "le":
-                clauses.append(f"{col} <= '{val}'")
-            elif op == "contains":
-                clauses.append(f"{col} LIKE '%{val}%'")
-            elif op == "startsWith":
-                clauses.append(f"{col} LIKE '{val}%'")
-            elif op == "endsWith":
-                clauses.append(f"{col} LIKE '%{val}'")
-            elif op == "isNull":
-                clauses.append(f"{col} IS NULL")
-            elif op == "isNotNull":
-                clauses.append(f"{col} IS NOT NULL")
-            elif op == "in":
-                items = ", ".join(f"'{v.strip()}'" for v in val.split(",") if v.strip())
-                if not items:
-                    continue
-                clauses.append(f"{col} IN ({items})")
-        if not clauses:
-            return ""
-        sep = f" {logic} "
-        return f" WHERE {sep.join(clauses)}"
+        """根据可视化配置构建 WHERE 子句，委托给 sql_expressions"""
+        return sql_expressions.build_filter_sql(table_ref, conditions, logic)
 
     @staticmethod
     def _aggregation_sql_fragment(agg: Dict[str, Any]) -> Optional[str]:
-        """单条聚合配置 -> SELECT 片段；列无效时返回 None（避免生成非法 SQL）。"""
-        fn = str(agg.get("func", "count") or "count").lower().strip()
-        col_raw = agg.get("column")
-        col = str(col_raw).strip() if col_raw is not None else ""
-        alias_raw = agg.get("alias")
-        alias = str(alias_raw).strip() if alias_raw else ""
-        if not alias:
-            alias = f"{fn}_{col}" if col else f"{fn}_col"
-
-        if fn == "count_distinct":
-            if not col:
-                return None
-            return (
-                f"COUNT(DISTINCT {PipelineEngine._safe_identifier(col)}) "
-                f"AS {PipelineEngine._safe_identifier(alias)}"
-            )
-        if fn == "count":
-            if not col or col == "*":
-                return f"COUNT(*) AS {PipelineEngine._safe_identifier(alias)}"
-            return f"COUNT({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
-
-        if not col:
-            return None
-        sql_fn = {
-            "sum": "SUM",
-            "avg": "AVG",
-            "max": "MAX",
-            "min": "MIN",
-        }.get(fn, fn.upper())
-        return f"{sql_fn}({PipelineEngine._safe_identifier(col)}) AS {PipelineEngine._safe_identifier(alias)}"
+        """单条聚合配置 -> SELECT 片段，委托给 sql_expressions"""
+        return sql_expressions.aggregation_sql_fragment(agg)
 
     @staticmethod
     def _apply_row_filter(sql: str, config: Dict[str, Any]) -> str:
-        """
-        若 config 中含 rowFilterConditions，对已有 sql 包装 SELECT * FROM (...) WHERE ...
-        等效于在下游前插入一个 filter 节点。
-        """
-        if not sql:
-            return ""
-        conditions = config.get("rowFilterConditions", [])
-        if not conditions:
-            return sql
-        logic = config.get("rowFilterLogic", "AND")
-        where = PipelineEngine._build_filter_sql(sql, conditions, logic)
-        if not where:
-            return sql
-        return f"SELECT * FROM ({sql}) AS _r{where}"
+        """包装 rowFilterConditions，委托给 sql_expressions"""
+        return sql_expressions.apply_row_filter(sql, config)
 
     @staticmethod
     def _build_column_format_expr(col_expr: str, col_name: str, fmt: str) -> str:
-        """
-        根据预览格式生成 MySQL 表达式。
-
-        Args:
-            col_expr: 列表达式（如 '`col_name`' 或 'DATE(`col`) AS `col`'）
-            col_name: 列名（用于别名）
-            fmt: 预览格式（来自 previewColumnFormats）
-
-        Returns:
-            格式化后的表达式，如 'DATE(`col`) AS `col`'
-        """
-        if fmt == 'date':
-            return f"DATE({col_expr}) AS {PipelineEngine._safe_identifier(col_name)}"
-        elif fmt == 'datetime':
-            # DATE() 在 MySQL 中返回 'YYYY-MM-DD' 格式
-            # 对于 datetime 类型，需要保留时间部分，使用 CAST 转换为 DATE 会丢失时间
-            # 使用 DATE(col) 只取日期部分（如果前端只需要日期）
-            return f"DATE({col_expr}) AS {PipelineEngine._safe_identifier(col_name)}"
-        elif fmt == 'percent':
-            # 百分比格式：value * 100
-            return f"({col_expr} * 100) AS {PipelineEngine._safe_identifier(col_name)}"
-        elif fmt == 'number':
-            # 数字格式：保持原样（已处理了）
-            return col_expr
-        elif fmt == 'string':
-            # 文本格式：转换为字符串
-            return f"CAST({col_expr} AS CHAR) AS {PipelineEngine._safe_identifier(col_name)}"
-        # auto 或其他未知格式：保持原样
-        return col_expr
+        """根据预览格式生成 MySQL 表达式，委托给 sql_expressions"""
+        return sql_expressions.build_column_format_expr(col_expr, col_name, fmt)
 
     @staticmethod
     def _apply_column_formats(sql: str, config: Dict[str, Any]) -> str:
-        """
-        根据 previewColumnFormats 对 SELECT 列应用格式转换。
-        这会在外层包装一个 SELECT，应用日期提取、百分比转换等。
-        """
-        formats: Dict[str, str] = config.get("previewColumnFormats", {})
-        if not formats:
-            return sql
-
-        sql_stripped = sql.strip()
-        if not sql_stripped.upper().startswith("SELECT"):
-            return sql
-
-        # 提取列名列表
-        cols = PipelineEngine._extract_columns_from_select(sql_stripped)
-        if not cols:
-            return sql
-
-        # 检查是否有需要格式化的列
-        cols_to_format = [c for c in cols if c in formats]
-        if not cols_to_format:
-            return sql
-
-        # 构建 SELECT 列表达式
-        select_parts: List[str] = []
-        for col in cols:
-            safe_col = PipelineEngine._safe_identifier(col)
-            fmt = formats.get(col)
-            if fmt and fmt != 'auto':
-                # 需要格式化的列
-                expr = PipelineEngine._build_column_format_expr(safe_col, col, fmt)
-                select_parts.append(expr)
-            else:
-                # 不需要格式化的列
-                select_parts.append(safe_col)
-
-        cols_str = ", ".join(select_parts)
-        # 提取 FROM 及之后的部分
-        m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
-        if not m:
-            return sql
-        from_part = m.group(1)
-        return f"SELECT {cols_str}{from_part}"
+        """根据 previewColumnFormats 对 SELECT 列应用格式转换，委托给 sql_expressions"""
+        return sql_expressions.apply_column_formats(sql, config)
 
     @staticmethod
-    def _apply_column_renames(
-        sql: str,
-        renames: Dict[str, str],
-    ) -> str:
-        """
-        应用列重命名：将 SQL 中的原始列名替换为重命名后的列名（作为别名）。
+    def _apply_column_renames(sql: str, renames: Dict[str, str]) -> str:
+        """应用列重命名映射，委托给 sql_expressions"""
+        return sql_expressions.apply_column_renames(sql, renames)
 
-        Args:
-            sql: 原始 SQL
-            renames: { original_column_name: renamed_column_name }
-
-        Returns:
-            重命名后的 SQL
-        """
-        if not sql or not renames:
-            return sql
-
-        sql_stripped = sql.strip()
-        if not sql_stripped.upper().startswith("SELECT"):
-            return sql
-
-        # 提取列名列表（从最外层 SELECT ... FROM）
-        cols = PipelineEngine._extract_columns_from_select(sql_stripped)
-        # 去掉反引号，用于后续匹配
-        cols = [c.replace('`', '') for c in cols]
-        
-        # 如果最外层是 SELECT *，需要深入到最内层子查询获取实际列名
-        if not cols:
-            cols = PipelineEngine._extract_columns_from_nested_select(sql_stripped)
-        
-        if not cols:
-            return sql
-
-        # 检查是否有需要重命名的列
-        cols_to_rename = [c for c in cols if c in renames]
-        if not cols_to_rename:
-            return sql
-
-        # 构建 SELECT 列表达式
-        select_parts: List[str] = []
-        for col in cols:
-            safe_col = PipelineEngine._safe_identifier(col)
-            new_name = renames.get(col)
-            if new_name and new_name != col:
-                safe_new = PipelineEngine._safe_identifier(new_name)
-                select_parts.append(f"{safe_col} AS {safe_new}")
-            else:
-                select_parts.append(safe_col)
-
-        cols_str = ", ".join(select_parts)
-        
-        # 如果最外层是 SELECT *，需要替换成 SELECT new_cols FROM (inner_sql)
-        if sql_stripped.upper().startswith("SELECT *"):
-            # 提取 FROM 及之后的部分
-            m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
-            if m:
-                from_part = m.group(1)
-                return f"SELECT {cols_str}{from_part}"
-        
-        # 普通情况：替换 SELECT ... 部分
-        m = re.match(r'^SELECT\s+.*?(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
-        if not m:
-            return sql
-        from_part = m.group(1)
-        return f"SELECT {cols_str}{from_part}"
-    
     @staticmethod
     def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> List[str]:
+        """递归从嵌套 SELECT 提取列名，委托给 sql_expressions"""
+        return sql_expressions._extract_columns_from_nested_select(sql, max_depth)
         """
         从嵌套 SELECT 中提取最内层的实际列名。
         例如：SELECT * FROM (SELECT * FROM (SELECT a, b FROM t) AS x) AS y
@@ -2212,63 +1668,13 @@ class PipelineEngine:
 
     @staticmethod
     def _split_select_columns(sql: str) -> List[str]:
-        """
-        将 SELECT ... FROM 之间的列表达式按顶层逗号分割。
-        忽略括号内和字符串字面量内的逗号。
-        """
-        m = re.match(r"^SELECT\s+(.*?)\s+FROM\s+", sql, re.IGNORECASE | re.DOTALL)
-        if not m:
-            return []
-        cols_str = m.group(1)
-        parts: List[str] = []
-        depth = 0
-        in_str = False
-        str_char = ""
-        i = 0
-        while i < len(cols_str):
-            c = cols_str[i]
-            is_escaped = i > 0 and cols_str[i - 1] == "\\"
-            if c in ("'", '"', "`") and not is_escaped:
-                if not in_str:
-                    in_str = True
-                    str_char = c
-                elif c == str_char:
-                    in_str = False
-                    str_char = ""
-            if not in_str:
-                if c == "(":
-                    depth += 1
-                elif c == ")":
-                    depth -= 1
-                elif c == "," and depth == 0:
-                    parts.append(cols_str[:i].strip())
-                    cols_str = cols_str[i + 1 :]
-                    i = -1
-            i += 1
-        parts.append(cols_str.strip())
-        return parts
+        """将 SELECT ... FROM 之间的列表达式按顶层逗号分割，委托给 sql_expressions"""
+        return sql_expressions._split_select_columns(sql)
 
     @staticmethod
     def _extract_sql_aliases(sql: str) -> List[str]:
-        """
-        从 SELECT 语句中提取每个列表达式的最终列名。
-        格式为 'expr AS alias' 时取 alias；无 AS 时取最后一个标识符。
-        支持 groupBy 列（无 AS）、聚合别名、反引号、中文列名等。
-        """
-        aliases: List[str] = []
-        parts = PipelineEngine._split_select_columns(sql)
-        for part in parts:
-            part = part.strip()
-            # 匹配末尾的 AS alias（忽略括号内的 AS）
-            m = re.search(r"\bAS\s+([^\s,)]+)\s*$", part, re.IGNORECASE)
-            if m:
-                aliases.append(m.group(1).strip("`\"'"))
-            else:
-                # 无 AS：取最后一个标识符作为列名（如 groupBy 列）
-                identifiers = re.findall(r"\b([a-zA-Z_\u4e00-\u9fff]\w*)\b", part)
-                if identifiers:
-                    aliases.append(identifiers[-1])
-        return aliases
+        """从 SELECT 语句中提取每个列表达式的最终列名，委托给 sql_expressions"""
+        return sql_expressions._extract_sql_aliases(sql)
 
     def _preview_infer_output_columns(
         node_type: str,
@@ -3076,23 +2482,13 @@ class PipelineEngine:
 
     @staticmethod
     def _canonical_pipeline_node_type(node_type: str) -> str:
-        if not node_type:
-            return node_type
-        return _PIPELINE_NODE_TYPE_CANON.get(node_type, node_type)
+        """规范管道节点类型名称，委托给 sql_expressions 模块"""
+        return sql_expressions.canonical_pipeline_node_type(node_type)
 
     @staticmethod
     def _source_table_name(config: Dict[str, Any]) -> str:
-        """解析源表名：config.tableName / table_name，或节点 sql 字段中的 FROM `tbl`。"""
-        for key in ("tableName", "table_name"):
-            v = config.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-        sql = config.get("sql")
-        if isinstance(sql, str) and sql.strip():
-            m = re.search(r"FROM\s+[`\"]?([a-zA-Z0-9_]+)[`\"]?", sql, re.IGNORECASE)
-            if m:
-                return m.group(1)
-        return ""
+        """解析源表名，委托给 sql_expressions 模块"""
+        return sql_expressions.source_table_name(config)
 
     @staticmethod
     def _union_branches_from_plan(

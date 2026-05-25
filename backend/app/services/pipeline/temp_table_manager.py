@@ -57,9 +57,12 @@ def _validate_step_id(step_id: str) -> str:
 def _validate_identifier(identifier: str) -> str:
     """
     验证并返回安全的 SQL 标识符。
-    只允许字母、数字、下划线。
+    支持字母、数字、下划线、中文等 Unicode 字符。
     """
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', identifier):
+    if not identifier:
+        raise ValueError(f"Invalid SQL identifier: empty")
+    # 支持 Unicode 字母（包括中文）+ 数字 + 下划线
+    if not re.match(r'^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$', identifier, re.UNICODE):
         raise ValueError(f"Invalid SQL identifier: {identifier}")
     return identifier
 

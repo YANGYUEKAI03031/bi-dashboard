@@ -23,6 +23,7 @@ from app.db.session import get_db
 from app.services.pipeline_service import PipelineService
 from app.services.pipeline.engine import PipelineEngine
 from app.services.pipeline.temp_table_manager import TempTableManager
+from app.services.pipeline.validator import validate_pipeline_config
 from app.services.pipeline_chart_sync_service import PipelineChartSyncService
 from app.schemas.pipeline import (
     PipelineCreate, PipelineUpdate, PipelineResponse,
@@ -52,7 +53,7 @@ async def create_pipeline(
 
         # 验证管道配置
         nodes_dict = [n.dict() for n in pipeline_data.nodes]
-        is_valid, error_msg = PipelineEngine.validate_pipeline_config(nodes_dict)
+        is_valid, error_msg = validate_pipeline_config(nodes_dict)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error_msg)
 
@@ -158,7 +159,7 @@ async def update_pipeline(
         # 验证管道配置（如果有节点更新）
         if update_data.nodes is not None:
             nodes_dict = [n.dict() for n in update_data.nodes]
-            is_valid, error_msg = PipelineEngine.validate_pipeline_config(nodes_dict)
+            is_valid, error_msg = validate_pipeline_config(nodes_dict)
             if not is_valid:
                 raise HTTPException(status_code=400, detail=error_msg)
 

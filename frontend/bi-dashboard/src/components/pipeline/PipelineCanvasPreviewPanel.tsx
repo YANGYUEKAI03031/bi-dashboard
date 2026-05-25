@@ -100,7 +100,8 @@ function ConditionRow({
   const isDateComparison = isDateType && needsValue;
   const isPresetOp = cond.operator === 'preset';
   const isBetweenOp = cond.operator === 'between';
-  const needsQuickDate = isPresetOp;
+  // 快捷日期选择器：preset 操作符，以及早于/晚于操作符
+  const needsQuickDate = isPresetOp || cond.operator === 'before' || cond.operator === 'after';
   const needsRangePicker = isBetweenOp;
   const needsDatePicker = isDateComparison && !needsQuickDate && !needsRangePicker;
   const showNormalInput = needsValue && !isDateComparison;
@@ -449,10 +450,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   }, [previewNode?.id]);
 
   const dataCols = previewData?.columns ?? [];
-  const columnCatalog =
-    previewData?.allColumns && previewData.allColumns.length > 0
-      ? previewData.allColumns
-      : dataCols;
+  // columnCatalog 和 columnTypesMap 必须使用相同的数据源，否则列名与类型对应不上
+  // 使用 columns（与 columnTypesMap 一致），确保筛选器能正确识别列类型
+  const columnCatalog = dataCols;
 
   // 合并所有上游节点的 previewColumnFormats
   const mergedPreviewFormats = useMemo((): Record<string, string> | undefined => {

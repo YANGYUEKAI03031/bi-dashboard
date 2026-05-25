@@ -28,9 +28,12 @@ logger = logging.getLogger(__name__)
 def _validate_identifier(name: str) -> str:
     """
     验证并返回安全的 SQL 标识符（表名、字段名）。
-    只允许字母、数字、下划线。
+    支持字母、数字、下划线、中文等 Unicode 字符。
     """
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+    if not name:
+        raise ValueError(f"Invalid SQL identifier: empty")
+    # 支持 Unicode 字母（包括中文）+ 数字 + 下划线
+    if not re.match(r'^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$', name, re.UNICODE):
         raise ValueError(f"Invalid SQL identifier: {name}")
     return name
 
