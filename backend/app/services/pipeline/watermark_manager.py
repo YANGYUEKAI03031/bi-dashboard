@@ -293,26 +293,35 @@ class WatermarkManager:
         return original_sql
 
     def _safe_identifier(self, name: str) -> str:
-        """安全地包裹标识符"""
-        # 移除反引号后重新包裹
-        safe_name = name.replace("`", "")
-        return f"`{safe_name}`"
+        """
+        安全地包裹标识符，只允许字母数字下划线和点号。
+        防止 SQL 注入攻击。
+        """
+        if not name:
+            raise ValueError("标识符不能为空")
+        # 去除自带反引号
+        clean = name.replace("`", "").strip()
+        # 白名单: 字母/数字/下划线/点号(支持schema.table)
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', clean):
+            raise ValueError(f"非法标识符: {name}")
+        if len(clean) > 64:
+            raise ValueError(f"标识符过长: {name}")
+        # 支持点号分隔的 schema.table
+        parts = clean.split(".")
+        escaped = [p.replace("`", "``") for p in parts]
+        return ".".join(f"`{p}`" for p in escaped)
 
     def _format_watermark_value(self, value: str) -> str:
-        """格式化水位线值"""
+        """格式化水位线值，防止 SQL 注入"""
         if not value:
             return "NULL"
 
         # 尝试检测值类型
-        # 如果是数字，保持原样
-        try:
-            float(value)
+        # 如果是数字，严格校验
+        if re.match(r'^-?\d+(\.\d+)?$', value):
             return value
-        except ValueError:
-            pass
 
-        # 如果是日期时间格式，加引号
-        # 常见格式: 2024-01-01, 2024-01-01 12:00:00, 2024-01-01T12:00:00
+        # 如果是日期时间格式，加引号并转义单引号
         date_patterns = [
             r"^\d{4}-\d{2}-\d{2}$",  # 2024-01-01
             r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$",  # 2024-01-01 12:00:00
@@ -321,11 +330,10 @@ class WatermarkManager:
 
         for pattern in date_patterns:
             if re.match(pattern, value):
-                return f"'{value}'"
+                # 转义单引号防注入
+                escaped = value.replace("\\", "\\\\").replace("'", "''")
+                return f"'{escaped}'"
 
-        # 如果是纯数字字符串，保持原样
-        if value.isdigit():
-            return value
-
-        # 其他情况加引号
-        return f"'{value}'"
+        # 其他情况加引号并转义
+        escaped = value.replace("\\", "\\\\").replace("'", "''")
+        return f"'{escaped}'"

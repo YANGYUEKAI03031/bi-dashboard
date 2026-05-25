@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # Application settings
     PROJECT_NAME: str = "BI Dashboard API"
     PROJECT_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False  # 生产环境默认关闭
 
     # 图表查询配置
     CHART_QUERY_LIMIT: int = 10000  # 单次图表查询最大行数
@@ -83,3 +83,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# 启动时强制检查 SECRET_KEY，未配置则退出
+if not settings.SECRET_KEY:
+    import sys
+    print("FATAL: SECRET_KEY 未配置，请在 .env 中设置 SECRET_KEY=<随机字符串>", file=sys.stderr)
+    print("  生成方式: python -c \"import secrets; print(secrets.token_urlsafe(32))\"", file=sys.stderr)
+    sys.exit(1)

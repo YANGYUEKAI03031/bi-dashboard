@@ -1141,7 +1141,7 @@ class PipelineEngine:
         on_set = set(on_right_cols) if on_right_cols else set()
         
         # DEBUG: 打印输入参数
-        print(f"[JOIN ALLOWED COLS] jt={jt}, left_cols={left_cols}, right_cols={right_cols}, on_right_cols={list(on_set)}")
+        logger.debug(f"[JOIN ALLOWED COLS] jt={jt}, left_cols={left_cols}, right_cols={right_cols}, on_right_cols={list(on_set)}")
 
         if jt == "left_anti":
             return set(left_cols) if left_cols is not None else None
@@ -2307,14 +2307,14 @@ class PipelineEngine:
 
         if canonical == "aggregate":
             # DEBUG: 打印输入
-            print(f"[AGG INFER] node_type={node_type}, upstream_cols={upstream_cols}, aggregations={config.get('aggregations')}, insertedColumns={config.get('insertedColumns')}")
+            logger.debug(f"[AGG INFER] node_type={node_type}, upstream_cols={upstream_cols}, aggregations={config.get('aggregations')}, insertedColumns={config.get('insertedColumns')}")
             
             # 优先从 node.sql 解析 AS 别名，这是实际执行的真实列名
             node_sql: str = config.get("sql", "") or ""
             if node_sql:
                 aliases_from_sql = PipelineEngine._extract_sql_aliases(node_sql)
                 if aliases_from_sql:
-                    print(f"[AGG INFER] 从 SQL 解析别名: {aliases_from_sql}")
+                    logger.debug(f"[AGG INFER] 从 SQL 解析别名: {aliases_from_sql}")
                     return aliases_from_sql
 
             group_by: List[str] = config.get("groupBy", []) or []
@@ -2340,7 +2340,7 @@ class PipelineEngine:
                         if new_name:
                             parts.append(new_name)
             
-            print(f"[AGG INFER] parts={parts}, raw_aggs={raw_aggs}, inserted_columns={inserted_columns}")
+            logger.debug(f"[AGG INFER] parts={parts}, raw_aggs={raw_aggs}, inserted_columns={inserted_columns}")
             
             # 如果有输出列，返回；否则透传上游列
             if parts:
@@ -2355,9 +2355,9 @@ class PipelineEngine:
                             new_name = str(col_config.get("name", "")).strip()
                             if new_name:
                                 result.append(new_name)
-                    print(f"[AGG INFER] no agg but has inserted, returning {len(result)} columns: {result}")
+                    logger.debug(f"[AGG INFER] no agg but has inserted, returning {len(result)} columns: {result}")
                     return result
-                print(f"[AGG INFER] returning parts: {parts}")
+                logger.debug(f"[AGG INFER] returning parts: {parts}")
                 return parts
             if upstream_cols and upstream_cols[0] is not None:
                 return list(upstream_cols[0])
@@ -2395,13 +2395,13 @@ class PipelineEngine:
 
         if canonical == "deduplicate":
             dedup_columns: List[str] = config.get("dedupColumns", []) or []
-            print(f"[DEDUP INFER] dedupColumns={dedup_columns}, upstream_cols={upstream_cols}")
+            logger.debug(f"[DEDUP INFER] dedupColumns={dedup_columns}, upstream_cols={upstream_cols}")
             # 去重后输出列与上游相同
             if upstream_cols and upstream_cols[0] is not None:
                 result = list(upstream_cols[0])
-                print(f"[DEDUP INFER] returning {len(result)} columns: {result}")
+                logger.debug(f"[DEDUP INFER] returning {len(result)} columns: {result}")
                 return result
-            print(f"[DEDUP INFER] upstream_cols is None, returning None")
+            logger.debug(f"[DEDUP INFER] upstream_cols is None, returning None")
             return None
 
         if canonical == "join":
@@ -3660,7 +3660,7 @@ class PipelineEngine:
 
             # 推断当前节点的输出列（用于下游 JOIN 展开）
             rename_nm: Dict[str, str] = dict(nconfig.get("renameMap") or {})
-            print(f"[BUILD SQL] node={nid}, type={ntype}, joinType={nconfig.get('joinType')}, output_keys={output_keys}, upstream_cols={upstream_cols}, allowed_proj={allowed_proj}")
+            logger.debug(f"[BUILD SQL] node={nid}, type={ntype}, joinType={nconfig.get('joinType')}, output_keys={output_keys}, upstream_cols={upstream_cols}, allowed_proj={allowed_proj}")
             
             # JOIN 节点：当无 outputColumnKeys 时，直接用 allowed_proj 作为输出列
             # allowed_proj 已经包含了 _b 后缀的列（如 avg_星级_b），比静态推断更准确
@@ -3804,7 +3804,7 @@ class PipelineEngine:
                             limit=1,
                         )
                         if sql_full and sql_full.strip():
-                            print(f"[ALL COLS SQL] sql_full: {sql_full[:500]}")
+                            logger.debug(f"[ALL COLS SQL] sql_full: {sql_full[:500]}")
                             try:
                                 r_meta = await conn.execute(text(sql_full))
                                 all_columns = (
@@ -3812,7 +3812,7 @@ class PipelineEngine:
                                     if hasattr(r_meta, "keys") and r_meta.keys()
                                     else []
                                 )
-                                print(f"[ALL COLS] all_columns: {all_columns}")
+                                logger.debug(f"[ALL COLS] all_columns: {all_columns}")
                             except Exception as meta_err:
                                 logger.warning(
                                     "预览全列名查询失败（列选择 UI 将退化为当前投影列）: %s",

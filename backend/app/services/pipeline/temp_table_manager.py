@@ -135,6 +135,20 @@ class TempTableManager:
         # 列式表：step_id -> (table_name, columns)，持久表跨连接可访问
         self._struct_tables: Dict[str, Tuple[str, List[str]]] = {}
 
+    def _safe_table_name(self, name: str) -> str:
+        """
+        验证并包裹表名，只允许 tmp_pipeline_ / pipeline_json_ 前缀的合法表名。
+        防止 SQL 注入攻击。
+        """
+        if not name:
+            raise ValueError("表名不能为空")
+        # 白名单: 只允许项目约定前缀的表名
+        safe_pattern = r'^(tmp_pipeline_\d+_\d+|tmp_pipeline_\d+_json|pipeline_json_\d+)$'
+        if not re.match(safe_pattern, name):
+            raise ValueError(f"非法表名: {name}")
+        # 用反引号包裹，内部转义反引号
+        return f"`{name.replace('`', '``')}`"
+
     @property
     def json_table_name(self) -> str:
         return self._json_table_name
@@ -187,7 +201,7 @@ class TempTableManager:
             return self._json_table_name
 
         create_sql = f"""
-        CREATE TABLE IF NOT EXISTS {self._json_table_name} (
+        CREATE TABLE IF NOT EXISTS {self._safe_table_name(self._json_table_name)} (
             step_id VARCHAR(50) NOT NULL,
             row_index INT NOT NULL,
             data_json JSON NOT NULL,
@@ -249,7 +263,7 @@ class TempTableManager:
             # 使用参数化查询防止 SQL 注入
             placeholders = ", ".join(f"(:step_id, {idx}, :data{idx})" for idx in range(len(values_list)))
             insert_sql = f"""
-            INSERT INTO {self._json_table_name} (step_id, row_index, data_json)
+            INSERT INTO {self._safe_table_name(self._json_table_name)} (step_id, row_index, data_json)
             VALUES {placeholders}
             """
             # 构建参数字典
@@ -259,7 +273,7 @@ class TempTableManager:
             # 简化：直接用 VALUES 列表，但 step_id 用参数
             values_sql = ", ".join(f"(:step_id, {i}, :data{i})" for i in range(len(batch)))
             insert_sql = f"""
-            INSERT INTO {self._json_table_name} (step_id, row_index, data_json)
+            INSERT INTO {self._safe_table_name(self._json_table_name)} (step_id, row_index, data_json)
             VALUES {values_sql}
             """
             batch_params = {"step_id": safe_step_id}
@@ -298,8 +312,9 @@ class TempTableManager:
             tbl_name, columns = self._struct_tables[step_id]
             try:
                 # 查总数
+                safe_tbl = self._safe_table_name(tbl_name)
                 count_res = await self.connection.execute(
-                    text(f"SELECT COUNT(*) FROM {tbl_name}")
+                    text(f"SELECT COUNT(*) FROM {safe_tbl}")
                 )
                 total = count_res.fetchone()[0]
 
@@ -309,7 +324,7 @@ class TempTableManager:
                 # 查数据
                 safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
                 data_res = await self.connection.execute(
-                    text(f"SELECT {safe_cols} FROM {tbl_name} LIMIT :limit OFFSET :offset"),
+                    text(f"SELECT {safe_cols} FROM {safe_tbl} LIMIT :limit OFFSET :offset"),
                     {"limit": limit, "offset": offset}
                 )
                 rows = data_res.fetchall()
@@ -336,10 +351,11 @@ class TempTableManager:
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name = :tname
             """), {"tname": self._json_table_name})
-            if not json_exists.fetchone() or json_exists.fetchone()[0] == 0:
+            json_exists_row = json_exists.fetchone()
+            if not json_exists_row or json_exists_row[0] == 0:
                 return {"step_id": step_id, "columns": [], "rows": [], "total": 0, "has_more": False}
 
-            count_sql = f"SELECT COUNT(*) FROM {self._json_table_name} WHERE step_id = :step_id"
+            count_sql = f"SELECT COUNT(*) FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id"
             count_result = await self.connection.execute(text(count_sql), {"step_id": step_id})
             count_row = count_result.fetchone()
             total = count_row[0] if count_row else 0
@@ -349,7 +365,7 @@ class TempTableManager:
 
             query_sql = f"""
             SELECT data_json
-            FROM {self._json_table_name}
+            FROM {self._safe_table_name(self._json_table_name)}
             WHERE step_id = :step_id
             ORDER BY row_index
             LIMIT :limit OFFSET :offset
@@ -484,7 +500,7 @@ class TempTableManager:
             f"`{c.replace('`', '``')}` {ct}" for c, ct in zip(columns, final_col_types)
         )
         create_sql = f"""
-        CREATE TABLE IF NOT EXISTS {tbl_name} (
+        CREATE TABLE IF NOT EXISTS {self._safe_table_name(tbl_name)} (
             {col_defs}
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
@@ -511,16 +527,16 @@ class TempTableManager:
         # INSERT 时使用原列名列表（表创建时已用正确类型）
         safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
         if column_formats:
-            insert_sql = f"INSERT INTO {tbl_name} ({safe_cols}) SELECT {', '.join(select_exprs)} FROM ({safe_sql}) AS _src"
+            insert_sql = f"INSERT INTO {self._safe_table_name(tbl_name)} ({safe_cols}) SELECT {', '.join(select_exprs)} FROM ({safe_sql}) AS _src"
         else:
-            insert_sql = f"INSERT INTO {tbl_name} ({safe_cols}) {safe_sql}"
+            insert_sql = f"INSERT INTO {self._safe_table_name(tbl_name)} ({safe_cols}) {safe_sql}"
 
         try:
             result = await self.connection.execute(text(insert_sql))
             await self.connection.commit()
             row_count = result.rowcount if result.rowcount and result.rowcount > 0 else 0
             if row_count == 0:
-                count_res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {tbl_name}"))
+                count_res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}"))
                 row_count = count_res.fetchone()[0]
         except Exception as e:
             logger.error(f"INSERT...SELECT 失败 (step={step_id}): {e}")
@@ -534,7 +550,7 @@ class TempTableManager:
         if step_id in self._struct_tables:
             tbl_name = self._struct_tables[step_id][0]
             try:
-                res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {tbl_name}"))
+                res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}"))
                 return res.fetchone()[0]
             except Exception as e:
                 logger.warning(f"列式表行数查询失败: {e}")
@@ -542,10 +558,11 @@ class TempTableManager:
         if not self._json_created:
             return 0
         res = await self.connection.execute(
-            text(f"SELECT COUNT(*) FROM {self._json_table_name} WHERE step_id = :step_id"),
+            text(f"SELECT COUNT(*) FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id"),
             {"step_id": step_id}
         )
-        return res.fetchone()[0] if res.fetchone() else 0
+        row = res.fetchone()
+        return row[0] if row else 0
 
     async def drop_struct_table(self, step_id: str):
         """删除指定步骤的列式持久表"""
@@ -553,7 +570,7 @@ class TempTableManager:
             return
         tbl_name = self._struct_tables[step_id][0]
         try:
-            await self.connection.execute(text(f"DROP TABLE IF EXISTS {tbl_name}"))
+            await self.connection.execute(text(f"DROP TABLE IF EXISTS {self._safe_table_name(tbl_name)}"))
             await self.connection.commit()
         except Exception as e:
             logger.warning(f"删除列式表 {tbl_name} 失败: {e}")
@@ -567,7 +584,7 @@ class TempTableManager:
         # 优先列式表
         for step_id, (tbl_name, columns) in self._struct_tables.items():
             try:
-                res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {tbl_name}"))
+                res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}"))
                 count = res.fetchone()[0]
                 result.append({"step_id": step_id, "row_count": count, "columns": columns, "mode": "struct"})
             except Exception as e:
@@ -582,7 +599,7 @@ class TempTableManager:
             if json_exists_count > 0:
                 rows = (await self.connection.execute(text(f"""
                     SELECT step_id, COUNT(*) as row_count, MIN(created_at) as created_at
-                    FROM {self._json_table_name}
+                    FROM {self._safe_table_name(self._json_table_name)}
                     GROUP BY step_id
                     ORDER BY created_at
                 """))).fetchall()
@@ -607,7 +624,7 @@ class TempTableManager:
         # 1. 先删已注册到 _struct_tables 的表
         for step_id, (tbl_name, _) in list(self._struct_tables.items()):
             try:
-                await self.connection.execute(text(f"DROP TABLE IF EXISTS {tbl_name}"))
+                await self.connection.execute(text(f"DROP TABLE IF EXISTS {self._safe_table_name(tbl_name)}"))
             except Exception as e:
                 logger.warning(f"删除列式表 {tbl_name} 失败: {e}")
         self._struct_tables.clear()
@@ -639,7 +656,7 @@ class TempTableManager:
 
         if not self._json_created:
             return
-        drop_sql = f"DROP TABLE IF EXISTS {self._json_table_name}"
+        drop_sql = f"DROP TABLE IF EXISTS {self._safe_table_name(self._json_table_name)}"
         try:
             await self.connection.execute(text(drop_sql))
             await self.connection.commit()
@@ -656,14 +673,14 @@ class TempTableManager:
         if step_id in self._struct_tables:
             tbl_name = self._struct_tables[step_id][0]
             try:
-                await self.connection.execute(text(f"TRUNCATE TABLE {tbl_name}"))
+                await self.connection.execute(text(f"TRUNCATE TABLE {self._safe_table_name(tbl_name)}"))
                 await self.connection.commit()
             except Exception:
                 await self.drop_struct_table(step_id)
 
         if self._json_created:
             await self.connection.execute(
-                text(f"DELETE FROM {self._json_table_name} WHERE step_id = :step_id"),
+                text(f"DELETE FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id"),
                 {"step_id": step_id}
             )
             await self.connection.commit()
@@ -679,7 +696,7 @@ class TempTableManager:
 
         if not self._json_created:
             return []
-        query_sql = f"SELECT data_json FROM {self._json_table_name} WHERE step_id = :step_id LIMIT 1"
+        query_sql = f"SELECT data_json FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id LIMIT 1"
         result = await self.connection.execute(text(query_sql), {"step_id": step_id})
         row = result.fetchone()
         if not row:
