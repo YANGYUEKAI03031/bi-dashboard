@@ -350,41 +350,6 @@ export const PipelineTestPage: React.FC = () => {
       width: 180,
       render: (text) => text ? new Date(text).toLocaleString('zh-CN') : '-',
     },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 120,
-      render: (_, record) => (
-        <Space>
-          {record.status === 'completed' && (
-            <Button
-              size="small"
-              onClick={() => selectedPipeline && openPreviewDrawer(selectedPipeline, record)}
-            >
-              预览
-            </Button>
-          )}
-          {record.status === 'running' && (
-            <Popconfirm
-              title="确定要取消执行吗？"
-              onConfirm={async () => {
-                try {
-                  await PipelineService.cancelExecution(record.id);
-                  message.success('执行已取消');
-                  loadExecutions(record.pipeline_id);
-                } catch (error: any) {
-                  message.error(error.message || '取消失败');
-                }
-              }}
-              okText="确定"
-              cancelText="取消"
-            >
-              <Button danger size="small">取消</Button>
-            </Popconfirm>
-          )}
-        </Space>
-      ),
-    },
   ];
 
   return (

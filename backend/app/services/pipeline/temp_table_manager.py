@@ -534,13 +534,19 @@ class TempTableManager:
         else:
             insert_sql = f"INSERT INTO {self._safe_table_name(tbl_name)} ({safe_cols}) {safe_sql}"
 
+        # 调试：记录生成的 SQL 前 500 字符
+        debug_sql = insert_sql[:500] + "..." if len(insert_sql) > 500 else insert_sql
+        logger.info(f"[DEBUG INSERT] step={step_id}, tbl={tbl_name}, sql={debug_sql}")
+
         try:
             result = await self.connection.execute(text(insert_sql))
             await self.connection.commit()
             row_count = result.rowcount if result.rowcount and result.rowcount > 0 else 0
+            logger.info(f"[DEBUG INSERT] result.rowcount={result.rowcount}, row_count={row_count}")
             if row_count == 0:
                 count_res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}"))
                 row_count = count_res.fetchone()[0]
+                logger.info(f"[DEBUG INSERT] After COUNT: row_count={row_count}")
         except Exception as e:
             logger.error(f"INSERT...SELECT 失败 (step={step_id}): {e}")
             raise

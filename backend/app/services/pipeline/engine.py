@@ -42,6 +42,7 @@ from app.services.pipeline.type_inferrer import (
     infer_preview_column_types,
 )
 from app.services.pipeline import sql_expressions
+from app.services.pipeline import graph_builder
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -143,6 +144,14 @@ class PipelineEngine:
                 sorted_nodes = topological_sort(nodes)
                 if sorted_nodes is None:
                     return False, "管道配置存在循环依赖", result_summary
+
+                logger.info(f"[DEBUG] _parse_nodes returned {len(sorted_nodes)} nodes:")
+                for n in sorted_nodes:
+                    nid = n.get("id", "?")
+                    ntype = n.get("type", "?")
+                    nup = n.get("upstream", [])
+                    nsql = "yes" if n.get("sql") else "no"
+                    logger.info(f"[DEBUG]   node: {nid}, type: {ntype}, has_sql: {nsql}, upstream: {nup}")
 
                 # 构建 node_id -> step_id 映射表
                 node_step_map: Dict[str, str] = {}
@@ -1423,43 +1432,6 @@ class PipelineEngine:
     def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> List[str]:
         """递归从嵌套 SELECT 提取列名，委托给 sql_expressions"""
         return sql_expressions._extract_columns_from_nested_select(sql, max_depth)
-        """
-        从嵌套 SELECT 中提取最内层的实际列名。
-        例如：SELECT * FROM (SELECT * FROM (SELECT a, b FROM t) AS x) AS y
-        返回: ['a', 'b']
-        """
-        depth = 0
-        for _ in range(max_depth):
-            # 查找 SELECT ... FROM ( 模式
-            m = re.search(r'SELECT\s+\*\s+FROM\s+\(', sql, re.IGNORECASE)
-            if not m:
-                # 没有 SELECT * FROM ( 了，提取当前层的列名
-                cols = PipelineEngine._extract_columns_from_select(sql)
-                # 去掉反引号用于匹配
-                return [c.replace('`', '') for c in cols]
-            depth += 1
-            # 找到最内层子查询的位置
-            # 需要匹配括号对
-            start = m.end() - 1  # '(' 的位置
-            depth_count = 1
-            i = start + 1
-            while i < len(sql) and depth_count > 0:
-                if sql[i] == '(' and (i == 0 or sql[i-1] != '`'):
-                    depth_count += 1
-                elif sql[i] == ')' and (i == 0 or sql[i-1] != '`'):
-                    depth_count -= 1
-                i += 1
-            # 提取最内层子查询
-            inner = sql[start+1:i-1]
-            # 在最内层子查询中找 SELECT 列名
-            cols = PipelineEngine._extract_columns_from_select(inner)
-            # 去掉反引号用于匹配
-            cols = [c.replace('`', '') for c in cols]
-            if cols:
-                return cols
-            # 如果最内层也是 SELECT *，继续往内找
-            sql = inner
-        return []
 
     @staticmethod
     def _apply_column_projection(
@@ -3109,14 +3081,7 @@ class PipelineEngine:
         focus_node_id: str,
     ) -> Dict[str, Dict[str, Any]]:
         """深拷贝图并在 focus 节点上去掉 outputColumnKeys，用于预览「全列」元数据查询。"""
-        out = copy.deepcopy(graph_nodes)
-        if focus_node_id not in out:
-            return out
-        node = out[focus_node_id]
-        cfg = dict(node.get("config") or {})
-        cfg.pop("outputColumnKeys", None)
-        out[focus_node_id] = {**node, "config": cfg}
-        return out
+        return graph_builder.graph_focus_without_output_column_keys(graph_nodes, focus_node_id)
 
     async def preview_node(
         self,
