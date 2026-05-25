@@ -15,6 +15,35 @@ from typing import List, Dict, Any, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def canonical_pipeline_node_type(node_type: str) -> str:
+    """
+    规范管道节点类型名称。
+
+    Args:
+        node_type: 原始节点类型字符串
+
+    Returns:
+        规范化的节点类型
+    """
+    mapping = {
+        "sql": "sql", "source": "sql",
+        "join": "join", "merge": "join",
+        "transform": "filter",
+        "aggregate": "aggregate", "aggregation": "aggregate",
+        "filter": "filter", "rowfilter": "filter",
+        "output": "output", "export": "output",
+        "dedup": "dedup", "deduplicate": "dedup",
+        "calculation": "calculation", "calculate": "calculation",
+        "lookup": "lookup",
+        "rank": "rank",
+        "split": "split",
+        "pivot": "pivot",
+        "category": "category",
+        "bin": "bin",
+    }
+    return mapping.get(node_type.lower().strip(), node_type.lower().strip())
+
+
 def topological_sort(nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
     """
     Kahn 算法拓扑排序
@@ -158,8 +187,7 @@ def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
             return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | union all"
 
         # 输出节点：目标表与写入模式
-        from app.services.pipeline.engine import PipelineEngine
-        ntype = PipelineEngine._canonical_pipeline_node_type(str(node.get("type") or ""))
+        ntype = canonical_pipeline_node_type(str(node.get("type") or ""))
         if ntype == "output":
             cfg = node.get("config") or {}
             tt = str(cfg.get("targetTable") or "").strip()

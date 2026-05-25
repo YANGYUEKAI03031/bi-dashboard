@@ -1196,16 +1196,16 @@ class ChartService:
                         s = param_value.get("start")
                         e = param_value.get("end")
                         if s and e:
-                            parts.append(f"{qf} BETWEEN '{s}' AND '{e}'")
+                            parts.append(f"{qf} BETWEEN '{_sql_escape_sql_string(str(s))}' AND '{_sql_escape_sql_string(str(e))}'")
                         elif s:
-                            parts.append(f"{qf} >= '{s}'")
+                            parts.append(f"{qf} >= '{_sql_escape_sql_string(str(s))}'")
                         elif e:
-                            parts.append(f"{qf} <= '{e}'")
+                            parts.append(f"{qf} <= '{_sql_escape_sql_string(str(e))}'")
                     elif isinstance(param_value, list) and param_value:
-                        vals = "', '".join(str(v) for v in param_value)
+                        vals = "', '".join(_sql_escape_sql_string(str(v)) for v in param_value)
                         parts.append(f"{qf} IN ('{vals}')")
                     else:
-                        parts.append(f"{qf} = '{param_value}'")
+                        parts.append(f"{qf} = '{_sql_escape_sql_string(str(param_value))}'")
                 return parts
 
             cascade_parts = _build_cascade_parts(filter_conditions)

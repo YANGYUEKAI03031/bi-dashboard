@@ -90,3 +90,9 @@ if not settings.SECRET_KEY:
     print("FATAL: SECRET_KEY 未配置，请在 .env 中设置 SECRET_KEY=<随机字符串>", file=sys.stderr)
     print("  生成方式: python -c \"import secrets; print(secrets.token_urlsafe(32))\"", file=sys.stderr)
     sys.exit(1)
+
+# ENCRYPTION_KEY 未配置时发出警告（暂不强制退出，支持渐进式迁移明文密码）
+if not settings.ENCRYPTION_KEY:
+    import sys
+    print("WARNING: ENCRYPTION_KEY 未配置，数据源密码将以明文存储。", file=sys.stderr)
+    print("  设置方式: 在 .env 中添加 ENCRYPTION_KEY=$(python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\")", file=sys.stderr)
