@@ -1,15 +1,20 @@
 /* ══════════════════════════════════════════════════════════════
-   ReportsSidebar — 统一视觉风格
+   ReportsSidebar — 统一暗色风格 (与 DashboardEditorPage 一致)
+
+   色板：
+     背景    #0f172a    面板    rgba(30, 41, 59, 0.5)
+     边框    rgba(255,255,255,0.06)   主文字  #e2e8f0
+     副文字  #94a3b8    强调色  #6366F1
    ══════════════════════════════════════════════════════════════ */
 
 .reports-sidebar {
   width: 250px;
   flex: 0 0 250px;
-  background: var(--theme-background);
-  border-right: 1px solid var(--theme-border);
+  background: #0f172a;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  transition: width var(--transition-spring), flex-basis var(--transition-spring);
+  transition: width 0.3s ease, flex-basis 0.3s ease;
   overflow: hidden;
 }
 
@@ -20,68 +25,68 @@
 }
 
 .sidebar-header {
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--theme-border);
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--theme-card-background);
+  background: rgba(30, 41, 59, 0.4);
 }
 
 .sidebar-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--theme-text-primary);
+  color: #e2e8f0;
 }
 
 .collapse-btn {
-  padding: var(--space-xs);
-  color: var(--theme-text-secondary);
-  border-radius: var(--radius-xs);
-  transition: color var(--transition-base), background var(--transition-base);
+  padding: 4px;
+  color: #94a3b8;
+  border-radius: 4px;
+  transition: color 0.2s ease, background 0.2s ease;
 }
 
 .collapse-btn:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-sm);
+  padding: 8px;
 }
 
 .tag-section {
-  margin-bottom: var(--space-lg);
+  margin-bottom: 16px;
 }
 
 .tag-header {
   display: flex;
   align-items: center;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--theme-card-background);
-  border-radius: var(--radius-sm);
-  margin-bottom: var(--space-xs);
-  border: 1.5px solid var(--theme-border);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  padding: 8px 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .tag-header:hover {
-  border-color: var(--theme-primary);
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.06);
 }
 
 .tag-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--theme-text-primary);
+  color: #e2e8f0;
   flex: 1;
 }
 
 .tag-name.active {
-  color: var(--theme-primary);
+  color: #6366F1;
   font-weight: 600;
 }
 
@@ -92,42 +97,63 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--theme-text-secondary);
-  border-radius: var(--radius-xs);
-  transition: color var(--transition-base), background var(--transition-base);
+  color: #94a3b8;
+  border-radius: 4px;
+  transition: color 0.2s ease, background 0.2s ease;
 }
 
 .add-btn:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .dashboard-item {
-  padding: var(--space-sm) var(--space-md) !important;
+  padding: 8px 12px !important;
   margin-left: 12px;
-  border-left: 2px solid var(--theme-border);
+  border-left: 2px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  border-radius: 0 4px 4px 0;
+  color: #94a3b8;
 }
 
 .dashboard-item:hover {
-  background: var(--theme-primary-light);
-  border-left-color: var(--theme-primary);
-  color: var(--theme-primary);
+  background: rgba(99, 102, 241, 0.06);
+  border-left-color: #6366F1;
+  color: #e2e8f0;
 }
 
 .dashboard-item.active {
-  background: var(--theme-primary-light);
-  border-left-color: var(--theme-primary);
+  background: rgba(99, 102, 241, 0.1);
+  border-left-color: #6366F1;
 }
 
 .dashboard-item.active span {
-  color: var(--theme-primary);
+  color: #e2e8f0;
   font-weight: 500;
 }
 
 .dashboard-item span {
   font-size: 13px;
-  color: var(--theme-text-secondary);
+  color: #94a3b8;
+}
+
+/* Ant Design List.Item 暗色化（sidebar 内） */
+.reports-sidebar .ant-list-item {
+  border-bottom-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.reports-sidebar .ant-list-item:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.reports-sidebar .ant-input,
+.reports-sidebar .ant-input-affix-wrapper {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+.reports-sidebar .ant-input::placeholder {
+  color: #64748b !important;
 }

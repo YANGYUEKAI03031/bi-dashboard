@@ -452,10 +452,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // 若本图 x 轴与选中值无任何匹配（xlabel 不一样），则所有项 isSelected 均为 false，整图会统一变暗为 0.35
     const selectedNormalized = selectedXValue != null ? normalizeLinkValue(selectedXValue) : '';
 
-    // 默认颜色调色板
+    // 现代高级感调色板（Tailwind CSS 色系）
     const colorPalette = [
-      '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
-      '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#ff9f7f'
+      '#6366F1', // Indigo
+      '#06B6D4', // Cyan
+      '#F59E0B', // Amber
+      '#EF4444', // Red
+      '#10B981', // Emerald
+      '#8B5CF6', // Violet
+      '#EC4899', // Pink
+      '#F97316', // Orange
+      '#14B8A6', // Teal
+      '#3B82F6', // Blue
     ];
 
     const axisLabelFromConfig = config.xAxis?.axisLabel || {};
@@ -486,7 +494,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       show: defaultLegendShow,
       textStyle: {
         fontSize: compact ? 10 : 12,
-        color: '#c0c0c0'
+        color: '#94A3B8'
       },
       itemGap: compact ? 12 : 18,
       itemWidth: 14,
@@ -561,7 +569,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
-              color: '#b0b0b0'
+              color: '#E2E8F0'
             },
             padding: [10, 15, 4, 15],
             textAlign: 'center',
@@ -570,24 +578,29 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         : { show: false },
       tooltip: config.tooltip || {
         trigger: 'axis',
-        backgroundColor: 'rgba(50, 50, 50, 0.95)',
-        borderColor: '#e2e8f0',
+        backgroundColor: 'rgba(15, 23, 42, 0.88)',
+        borderColor: 'rgba(99, 102, 241, 0.3)',
         borderWidth: 1,
+        borderRadius: 8,
         textStyle: {
-          color: '#fff',
+          color: '#E2E8F0',
           fontSize: 12
         },
         axisPointer: {
           type: 'cross',
           crossStyle: {
-            color: '#718096'
+            color: '#6366F1',
+            opacity: 0.3
           },
           lineStyle: {
             type: 'dashed',
-            width: 1
+            width: 1,
+            color: '#6366F1',
+            opacity: 0.5
           }
         },
-        padding: [8, 12]
+        padding: [12, 16],
+        extraCssText: 'backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.3);'
       },
       legend: legendOption,
       grid: gridOption,
@@ -602,22 +615,19 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         nameGap: config.xAxis?.nameGap ?? effectiveXAxisNameGap,
         nameTextStyle: {
           fontSize: 12,
-          color: '#c0c0c0',
+          color: '#94A3B8',
           padding: [8, 0, 0, 0],
-          align: 'center', // 确保文本居中对齐，而不是左对齐
+          align: 'center',
           ...(config.xAxis?.nameTextStyle || {})
         },
         axisLine: {
           lineStyle: {
-            color: '#d0d0d0',
+            color: '#334155',
             width: 1
           }
         },
         axisTick: {
-          show: true,
-          lineStyle: {
-            color: '#d0d0d0'
-          }
+          show: false
         },
         splitLine: {
           show: false
@@ -640,11 +650,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             show: axisLabelFromConfig.show ?? !veryCompact,
             margin: effectiveAxisLabelMargin,
             fontSize: effectiveAxisLabelFontSize,
-            color: '#c0c0c0',
+            color: '#94A3B8',
             // 富文本样式必须挂在 axisLabel.rich 上，否则会把 `{highlight|...}` 当普通文本显示出来
             rich: {
               highlight: {
-                color: '#1890ff',
+                color: '#818CF8',
                 fontWeight: 'bold',
                 fontSize: effectiveAxisLabelFontSize + 1
               }
@@ -673,33 +683,30 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         name: config.yAxis?.name || (compact ? '' : 'Y轴'),
         nameTextStyle: {
           fontSize: 12,
-          color: '#c0c0c0',
+          color: '#94A3B8',
           padding: [0, 0, 8, 0]
         },
         axisLine: {
           show: true,
           lineStyle: {
-            color: '#d0d0d0',
+            color: '#334155',
             width: 1
           }
         },
         axisTick: {
-          show: true,
-          lineStyle: {
-            color: '#d0d0d0'
-          }
+          show: false
         },
         splitLine: {
           show: true,
           lineStyle: {
-            color: '#d8d8d8',
+            color: '#1E293B',
             type: 'dashed',
-            width: 1
+            width: 0.5
           }
         },
         axisLabel: {
           fontSize: 11,
-          color: '#c0c0c0'
+          color: '#94A3B8'
         }
       },
       animation: true,
@@ -757,10 +764,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           emphasis: {
             focus: 'self',
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 20,
               shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)',
+              shadowOffsetY: 4,
+              shadowColor: 'rgba(99, 102, 241, 0.4)',
               borderColor: '#fff',
               borderWidth: 2,
               opacity: 1
@@ -783,9 +790,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           showSymbol: false,
           lineStyle: {
             width: 2.5,
-            color: colorPalette[index % colorPalette.length]
+            color: colorPalette[index % colorPalette.length],
+            shadowBlur: 8,
+            shadowColor: colorPalette[index % colorPalette.length] + '40',
           },
-          emphasis: { focus: 'self' },
+          emphasis: {
+            focus: 'self',
+            lineStyle: { width: 3.5 },
+            itemStyle: {
+              shadowBlur: 16,
+              shadowColor: colorPalette[index % colorPalette.length] + '60',
+            }
+          },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
           } : {})
@@ -802,7 +818,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           showSymbol: false,
           lineStyle: {
             width: 2.5,
-            color: colorPalette[index % colorPalette.length]
+            color: colorPalette[index % colorPalette.length],
+            shadowBlur: 8,
+            shadowColor: colorPalette[index % colorPalette.length] + '40',
           },
           areaStyle: {
             color: {
@@ -813,12 +831,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] + 'CC' },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + '20' }
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '08' }
               ]
             }
           },
           emphasis: {
-            focus: 'series'
+            focus: 'series',
+            lineStyle: { width: 3.5 },
           },
           ...(config.colorField ? {
             encode: { x: config.xField, y: field }
@@ -864,21 +883,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               show: true,
               formatter: '{b}: {c} ({d}%)',
               fontSize: 11,
-              color: '#a0a0a0'
+              color: '#94A3B8'
             },
             labelLine: {
               show: true,
               lineStyle: {
-                color: '#b0b0b0'
+                color: '#475569'
               }
             },
             emphasis: {
               focus: 'self',
               itemStyle: {
-                shadowBlur: 15,
+                shadowBlur: 20,
                 shadowOffsetX: 0,
                 shadowOffsetY: 0,
-                shadowColor: 'rgba(0, 0, 0, 0.4)'
+                shadowColor: 'rgba(99, 102, 241, 0.4)'
               },
               label: {
                 fontSize: 13,
@@ -914,8 +933,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             emphasis: {
               itemStyle: {
                 opacity: 1,
-                shadowBlur: 10,
-                shadowColor: 'rgba(0, 0, 0, 0.3)'
+                shadowBlur: 16,
+                shadowColor: 'rgba(99, 102, 241, 0.4)'
               }
             }
           }];
@@ -939,25 +958,25 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           splitNumber: 5,
           radius: '70%',
           axisName: {
-            color: '#a0a0a0',
+            color: '#94A3B8',
             fontSize: 12,
             fontWeight: 'normal'
           },
           splitArea: {
             show: true,
             areaStyle: {
-              color: ['rgba(84, 112, 198, 0.05)', 'rgba(84, 112, 198, 0.1)']
+              color: ['rgba(99, 102, 241, 0.03)', 'rgba(99, 102, 241, 0.06)']
             }
           },
           splitLine: {
             lineStyle: {
-              color: '#e0e0e0',
+              color: '#334155',
               width: 1
             }
           },
           axisLine: {
             lineStyle: {
-              color: '#e0e0e0',
+              color: '#334155',
               width: 1
             }
           }
@@ -1064,10 +1083,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 20,
               shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+              shadowOffsetY: 4,
+              shadowColor: 'rgba(99, 102, 241, 0.4)'
             }
           }
         }));
@@ -1104,21 +1123,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             type: 'value',
             name: config.yAxis?.name || (compact ? '' : 'Y轴(左)'),
             position: 'left',
-            nameTextStyle: { fontSize: 12, color: '#c0c0c0', padding: [0, 0, 8, 0] },
-            axisLine: { show: true, lineStyle: { color: '#d0d0d0', width: 1 } },
-            axisTick: { show: true, lineStyle: { color: '#d0d0d0' } },
-            splitLine: { show: true, lineStyle: { color: '#d8d8d8', type: 'dashed', width: 1 } },
-            axisLabel: { fontSize: 11, color: '#c0c0c0' }
+            nameTextStyle: { fontSize: 12, color: '#94A3B8', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#334155', width: 1 } },
+            axisTick: { show: false },
+            splitLine: { show: true, lineStyle: { color: '#1E293B', type: 'dashed', width: 0.5 } },
+            axisLabel: { fontSize: 11, color: '#94A3B8' }
           },
           {
             type: 'value',
             name: config.y_axis_right_title || (compact ? '' : 'Y轴(右)'),
             position: 'right',
-            nameTextStyle: { fontSize: 12, color: '#c0c0c0', padding: [0, 0, 8, 0] },
-            axisLine: { show: true, lineStyle: { color: '#d0d0d0', width: 1 } },
-            axisTick: { show: true, lineStyle: { color: '#d0d0d0' } },
+            nameTextStyle: { fontSize: 12, color: '#94A3B8', padding: [0, 0, 8, 0] },
+            axisLine: { show: true, lineStyle: { color: '#334155', width: 1 } },
+            axisTick: { show: false },
             splitLine: { show: false },
-            axisLabel: { fontSize: 11, color: '#c0c0c0' }
+            axisLabel: { fontSize: 11, color: '#94A3B8' }
           }
         ];
         baseOption.grid = {
@@ -1159,7 +1178,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               ]
             }
           },
-          emphasis: { focus: 'self' as const }
+          emphasis: { focus: 'self' as const, itemStyle: { shadowBlur: 20, shadowOffsetY: 4, shadowColor: 'rgba(99, 102, 241, 0.4)', borderColor: '#fff', borderWidth: 2 } }
         }));
 
         const lineSeries = effectiveLineFields.map((field, index) => ({
@@ -1173,9 +1192,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           showSymbol: true,
           lineStyle: {
             width: 2.5,
-            color: colorPalette[(effectiveBarFields.length + index) % colorPalette.length]
+            color: colorPalette[(effectiveBarFields.length + index) % colorPalette.length],
+            shadowBlur: 8,
+            shadowColor: colorPalette[(effectiveBarFields.length + index) % colorPalette.length] + '40',
           },
-          emphasis: { focus: 'self' as const }
+          emphasis: { focus: 'self' as const, lineStyle: { width: 3.5 } }
         }));
 
         baseOption.series = [...barSeries, ...lineSeries];
@@ -1215,8 +1236,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                 x2: 0,
                 y2: 1,
                 colorStops: [
-                  { offset: 0, color: item.value >= 0 ? '#5470c6' : '#ee6666' },
-                  { offset: 1, color: (item.value >= 0 ? '#5470c6' : '#ee6666') + 'CC' }
+                  { offset: 0, color: item.value >= 0 ? '#6366F1' : '#EF4444' },
+                  { offset: 1, color: (item.value >= 0 ? '#6366F1' : '#EF4444') + 'CC' }
                 ]
               }
             }
@@ -1225,14 +1246,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           barMaxWidth: 36,
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 20,
               shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+              shadowOffsetY: 4,
+              shadowColor: 'rgba(99, 102, 241, 0.4)'
             }
           }
         }];
-        
+
         // 添加辅助线显示累计值
         baseOption.series.push({
           name: '累计值',
@@ -1242,10 +1263,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           showSymbol: false,
           lineStyle: {
             type: 'dashed',
-            width: 2,
-            color: '#b0b0b0'
+            width: 1.5,
+            color: '#475569'
           },
-          itemStyle: { color: '#b0b0b0' }
+          itemStyle: { color: '#475569' }
         });
         break;
         
@@ -1279,20 +1300,20 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             lineStyle: {
               width: 1,
               type: 'solid',
-              color: '#b0b0b0'
+              color: '#475569'
             }
           },
           itemStyle: {
-            borderColor: '#fff',
-            borderWidth: 2,
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            borderWidth: 1,
             borderRadius: 4
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 20,
               shadowOffsetX: 0,
               shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+              shadowColor: 'rgba(99, 102, 241, 0.4)'
             },
             label: {
               fontSize: 14
@@ -1336,7 +1357,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffcc', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
           },
           textStyle: {
-            color: '#a0a0a0',
+            color: '#94A3B8',
             fontSize: 11
           },
           itemWidth: 15,
@@ -1351,7 +1372,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           label: {
             show: true,
             fontSize: 10,
-            color: '#b0b0b0'
+            color: '#94A3B8'
           },
           itemStyle: {
             borderColor: '#fff',
@@ -1359,8 +1380,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.5)',
+              shadowBlur: 16,
+              shadowColor: 'rgba(99, 102, 241, 0.4)',
               borderWidth: 2
             }
           }
@@ -1373,7 +1394,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           axisLabel: {
             fontSize: 11,
-            color: '#a0a0a0'
+            color: '#94A3B8'
           }
         };
         baseOption.yAxis = {
@@ -1384,7 +1405,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           axisLabel: {
             fontSize: 11,
-            color: '#a0a0a0'
+            color: '#94A3B8'
           }
         };
         break;
@@ -1424,10 +1445,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           },
           emphasis: {
             itemStyle: {
-              shadowBlur: 10,
+              shadowBlur: 20,
               shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+              shadowOffsetY: 4,
+              shadowColor: 'rgba(99, 102, 241, 0.4)'
             }
           }
         }));
@@ -1761,11 +1782,12 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           style={{
             width: '100%',
             maxWidth: '100%',
-            border: '1px solid #252536',
-            borderRadius: 8,
-            background: '#252536',
+            border: '1px solid #1E293B',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
             padding: 'clamp(12px, 4%, 24px)',
             boxSizing: 'border-box',
+            boxShadow: '0 4px 24px rgba(99, 102, 241, 0.08)',
           }}
         >
           {metricDisplay ? (
@@ -1783,14 +1805,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                   style={{
                     fontSize: 'clamp(22px, 5vw, 32px)',
                     fontWeight: 700,
-                    color: '#2f54eb',
+                    color: '#818CF8',
                     lineHeight: 1.2,
                   }}
                 >
                   {metricDisplay.text}
                 </span>
                 {metricDisplay.unit ? (
-                  <span style={{ fontSize: 14, color: '#2f54eb', fontWeight: 500 }}>
+                  <span style={{ fontSize: 14, color: '#818CF8', fontWeight: 500 }}>
                     {metricDisplay.unit}
                   </span>
                 ) : null}
@@ -1800,7 +1822,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                   style={{
                     marginTop: 10,
                     fontSize: 13,
-                    color: '#597ef7',
+                    color: '#94A3B8',
                     textAlign: 'center',
                     lineHeight: 1.4,
                   }}

@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ReportsPage — Cursor-Inspired Design System
-   基于 getdesign.md/cursor/design-md 设计规范
+   ReportsPage — Dark Theme (与 DashboardEditorPage 一致)
 
-   设计理念：暖奶油背景 + 玻璃态卡片 + 橙色品牌强调
+   色板：
+     背景    #0b1120    面板    rgba(30, 41, 59, 0.6)
+     边框    rgba(255,255,255,0.06)   主文字  #e2e8f0
+     副文字  #94a3b8    强调色  #6366F1
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .reports-page-wrapper {
@@ -11,7 +13,7 @@
   width: 100%;
   overflow: hidden;
   padding: 0;
-  background-color: #1e1e2e;
+  background-color: #0b1120;
   min-width: 0;
 }
 
@@ -28,15 +30,19 @@
 
 /* ── 页面头部卡片 ── */
 .reports-header-card {
-  background: #252536;
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 0;
   border: none;
-  border-bottom: 1px solid #252536;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   margin-bottom: 0;
+  box-shadow: none;
 }
 
 .reports-header-card .ant-card-body {
   padding: 16px;
+  color: #e2e8f0;
 }
 
 .reports-header-content {
@@ -57,17 +63,19 @@
 
 /* ── 仪表盘导航卡片 ── */
 .reports-dashboard-nav-card {
-  background: #252536;
+  background: rgba(30, 41, 59, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 0;
   border: none;
-  border-bottom: 1px solid #252536;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   margin-bottom: 0;
   position: relative;
   z-index: 1;
 }
 
 .reports-dashboard-nav-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 
 .reports-dashboard-nav-card .ant-card-body {
@@ -80,7 +88,7 @@
   align-items: flex-end;
   gap: 0;
   flex-wrap: wrap;
-  border-bottom: 1px solid #252536;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding: 0 16px;
 }
 
@@ -96,16 +104,14 @@
 .dashboard-nav-tag {
   display: inline-flex;
   align-items: center;
-  padding: 12px var(--space-md);
+  padding: 12px 16px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: #94a3b8;
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-fast),
-              border-color var(--transition-fast),
-              background var(--transition-fast);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -113,26 +119,26 @@
   height: 46px;
   box-sizing: border-box;
   position: relative;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-radius: 4px 4px 0 0;
 }
 
 .dashboard-nav-tag:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dashboard-nav-tag.active {
-  color: var(--theme-primary);
+  color: #6366F1;
   font-weight: 500;
-  border-bottom-color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  border-bottom-color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .dashboard-nav-tag.active:disabled {
   opacity: 1;
   cursor: default;
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 /* ── 三点操作按钮 ── */
@@ -143,23 +149,23 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  margin-left: var(--space-2);
-  margin-right: var(--space-xs);
+  margin-left: 4px;
+  margin-right: 4px;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: 4px;
   background: transparent;
-  color: var(--theme-text-tertiary);
+  color: #64748b;
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   flex-shrink: 0;
   box-sizing: border-box;
   opacity: 0.6;
 }
 
 .dashboard-nav-tag-more-btn:hover {
-  background: var(--surface-300);
-  color: var(--theme-text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
   opacity: 1;
 }
 
@@ -175,10 +181,10 @@
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  background: #ffffff;
-  color: var(--theme-warning);
-  border: 1px solid var(--theme-warning);
-  border-radius: var(--radius-xs);
+  background: rgba(15, 23, 42, 0.8);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -190,15 +196,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2) var(--space-sm);
+  padding: 4px 8px;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: 4px;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: #94a3b8;
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-fast),
-              background var(--transition-fast);
+  transition: color 0.2s ease, background 0.2s ease;
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -206,8 +211,8 @@
 }
 
 .dashboard-nav-add-tag:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 /* ── 添加图标按钮 ── */
@@ -221,11 +226,10 @@
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--theme-text-tertiary);
+  color: #64748b;
   font-size: 14px;
   cursor: pointer;
-  transition: color var(--transition-fast),
-              background var(--transition-fast);
+  transition: color 0.2s ease, background 0.2s ease;
   margin: 0;
   font-family: inherit;
   flex-shrink: 0;
@@ -233,13 +237,13 @@
 }
 
 .dashboard-nav-add-icon-btn:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-light);
+  color: #6366F1;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .dashboard-nav-empty-text {
   display: inline-block;
-  color: #b0b0c0;
+  color: #64748b;
   font-size: 14px;
   line-height: 46px;
   height: 46px;
@@ -256,10 +260,10 @@
 }
 
 .reports-content-card {
-  background: #252536;
+  background: transparent;
   border-radius: 0;
   border: none;
-  border-top: 1px solid #252536;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex: 1;
   width: 100%;
   max-width: none !important;
@@ -271,6 +275,9 @@
   flex-direction: column;
   max-width: none !important;
   width: 100% !important;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .reports-content-card .ant-card-body {
@@ -280,6 +287,7 @@
   flex-direction: column;
   max-width: none !important;
   width: 100% !important;
+  color: #cbd5e1;
 }
 
 .reports-dashboard-view {
@@ -287,7 +295,7 @@
   height: 100%;
   min-height: 0;
   padding: 16px;
-  background-color: #252536;
+  background-color: #0b1120;
   display: flex;
   flex-direction: column;
 }
@@ -300,8 +308,18 @@
   height: 100%;
 }
 
+/* Reports 只读模式：禁止拖拽和缩放 */
 .reports-dashboard-view .react-grid-item {
   transition: none;
+  cursor: default !important;
+  user-select: auto !important;
+}
+
+.reports-dashboard-view .react-grid-item:hover > .react-resizable-handle,
+.reports-dashboard-view .react-grid-item > .react-resizable-handle {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .reports-dashboard-view .react-grid-item > div {
@@ -309,11 +327,94 @@
   height: 100%;
 }
 
+/* ── 图表卡片（网格内） ── */
+.reports-dashboard-view .ant-card {
+  background: rgba(30, 41, 59, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.reports-dashboard-view .ant-card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  transform: translateY(-2px);
+}
+
+.reports-dashboard-view .ant-card-head {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: #e2e8f0 !important;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.reports-dashboard-view .ant-card-head-title {
+  color: #e2e8f0 !important;
+}
+
+.reports-dashboard-view .ant-card-body {
+  background: transparent !important;
+}
+
+/* ── 筛选条件栏 ── */
+.reports-filter-bar {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── 筛选器芯片 ── */
+.reports-filter-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border-radius: 8px;
+}
+
+.reports-filter-chip.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.reports-filter-chip .ant-select-selector,
+.reports-filter-chip .ant-picker {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+/* ── 空状态 ── */
+.reports-page .ant-empty-description {
+  color: #64748b;
+}
+
+/* ── Typography ── */
+.reports-page .ant-typography {
+  color: #e2e8f0;
+}
+
+.reports-page .ant-typography.ant-typography-secondary {
+  color: #94a3b8;
+}
+
+/* ── Divider ── */
+.reports-page .ant-divider {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
 /* ── 响应式 ── */
 @media (max-width: 768px) {
   .reports-page {
-    padding: var(--space-md);
-    gap: var(--space-sm);
+    padding: 16px;
+    gap: 8px;
   }
 
   .reports-header-content {

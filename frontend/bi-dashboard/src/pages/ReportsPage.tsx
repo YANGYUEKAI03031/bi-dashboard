@@ -104,7 +104,13 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
   return (
     <div ref={containerRef} style={{ width: '100%' }}>
       {mounted && width > 0 && (
-        <ReactGridLayout width={width} {...props} />
+        <ReactGridLayout
+          width={width}
+          {...props}
+          // Reports 页面强制只读（v2 API）
+          dragConfig={{ enabled: false }}
+          resizeConfig={{ enabled: false }}
+        />
       )}
     </div>
   );
@@ -277,7 +283,7 @@ const ChartCardComponent: React.FC<{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            color: '#888',
+            color: '#64748b',
           }}
         >
           <div style={{ textAlign: 'center' }}>
@@ -522,31 +528,29 @@ const DashboardView: React.FC<{
       })),
   ].sort((a, b) => a.y - b.y);
 
-  const mergedLayout = sortedItems;
+  // Reports 只读模式：所有布局项设为 static，禁止拖拽和缩放
+  const mergedLayout = sortedItems.map(item => ({ ...item, static: true }));
 
   return (
     <div className="reports-dashboard-view">
       {/* 筛选器渲染区域 */}
       {filters.length > 0 && (
-        <div style={{
+        <div className="reports-filter-bar" style={{
           marginBottom: 16,
           padding: '16px 20px',
-          background: '#252536',
-          borderRadius: 8,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          border: '1px solid #3a3a50',
+          borderRadius: 12,
           position: 'sticky',
           top: 0,
           zIndex: 100,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
-            <span style={{ fontSize: 13, fontWeight: 500, color: '#e0e0e0' }}>筛选条件</span>
+            <FilterOutlined style={{ color: '#6366F1', fontSize: 16 }} />
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>筛选条件</span>
             {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
               <button
                 type="button"
                 onClick={() => onFilterChange?.({})}
-                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#1890ff', background: 'none', border: 'none', padding: 0 }}
+                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#6366F1', background: 'none', border: 'none', padding: 0 }}
               >
                 重置全部
               </button>
@@ -564,14 +568,14 @@ const DashboardView: React.FC<{
                 switch (filter.filter_type) {
                   case 'date_range':
                   case 'date_relative':
-                    return <CalendarOutlined style={{ color: '#fa8c16' }} />;
+                    return <CalendarOutlined style={{ color: '#f59e0b' }} />;
                   case 'select':
                   case 'multi_select':
-                    return <DownCircleOutlined style={{ color: '#1890ff' }} />;
+                    return <DownCircleOutlined style={{ color: '#6366F1' }} />;
                   case 'input':
-                    return <EditOutlined style={{ color: '#52c41a' }} />;
+                    return <EditOutlined style={{ color: '#22c55e' }} />;
                   default:
-                    return <FilterOutlined style={{ color: '#722ed1' }} />;
+                    return <FilterOutlined style={{ color: '#a855f7' }} />;
                 }
               };
 
@@ -588,22 +592,21 @@ const DashboardView: React.FC<{
               return (
                 <div
                   key={filter.id}
+                  className={`reports-filter-chip ${hasValue ? 'active' : ''}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
                     padding: '6px 12px',
-                    background: hasValue ? '#1a3a1a' : '#1e1e30',
-                    borderRadius: 6,
-                    border: `1px solid ${hasValue ? '#52c41a' : '#3a3a50'}`,
+                    borderRadius: 8,
                     transition: 'all 0.2s ease',
                   }}
                 >
                   {getFilterIcon()}
-                  <span style={{ fontSize: 13, color: '#e0e0e0', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 13, color: '#e2e8f0', whiteSpace: 'nowrap' }}>
                     {filter.field_label || filter.name}
                   </span>
-                  <span style={{ color: '#666', fontSize: 12 }}>:</span>
+                  <span style={{ color: '#64748b', fontSize: 12 }}>:</span>
                   {filter.filter_type === 'date_range' && (
                     <DatePicker.RangePicker
                       size="small"
@@ -699,9 +702,6 @@ const DashboardView: React.FC<{
           cols={12}
           rowHeight={30}
           margin={[12, 12]}
-          isDraggable={false}
-          isResizable={false}
-          preventCollision={true}
           layout={mergedLayout}
         >
           {widgets
@@ -712,22 +712,24 @@ const DashboardView: React.FC<{
                   size="small"
                   style={{
                     height: '100%',
-                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} #3a3a50`,
+                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} rgba(255, 255, 255, 0.06)`,
                     display: 'flex',
                     flexDirection: 'column',
-                    border: '1px solid #3a3a50',
-                    background: '#252536',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    borderRadius: 12,
+                    backdropFilter: 'blur(12px)',
                   }}
                   styles={{
-                    body: { height: '100%', padding: '2px 6px', background: '#252536' }
+                    body: { height: '100%', padding: '2px 6px', background: 'transparent' }
                   }}
                 >
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Title level={w.level || 1} style={{ margin: 0, color: '#1677FF' }}>
+                    <Title level={w.level || 1} style={{ margin: 0, color: '#e2e8f0' }}>
                       {w.title}
                     </Title>
                     {w.subtitle && (
-                      <Paragraph style={{ margin: 0, color: '#666', fontSize: 11 }}>
+                      <Paragraph style={{ margin: 0, color: '#94a3b8', fontSize: 11 }}>
                         {w.subtitle}
                       </Paragraph>
                     )}
@@ -740,18 +742,17 @@ const DashboardView: React.FC<{
               <Card
                 size="small"
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', color: '#fff', fontWeight: 500 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', color: '#e2e8f0', fontWeight: 500 }}>
                     <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
                   </div>
                 }
-                style={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid #1677FF', background: '#252536' }}
-                headStyle={{ background: '#1677FF', borderBottom: '1px solid #1677FF' }}
+                style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                headStyle={{ background: 'transparent', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}
                 bodyStyle={{
                   flex: 1,
                   padding: 8,
                   display: 'flex',
                   alignItems: 'stretch',
-                  background: '#252536',
                 }}
               >
                 <ChartCardComponent 
@@ -1343,10 +1344,10 @@ export const ReportsPage: React.FC = () => {
         <Card className="reports-header-card">
           <div className="reports-header-content">
             <div className="reports-header-left">
-              <Title level={2} style={{ margin: 0, fontWeight: 600, color: '#e0e0e0' }}>
+              <Title level={2} style={{ margin: 0, fontWeight: 600, color: '#e2e8f0' }}>
                 {reportPage ? reportPage.name : '报表中心'}
               </Title>
-              <Paragraph style={{ margin: '8px 0 0 0', color: '#b0b0c0', fontSize: '14px' }}>
+              <Paragraph style={{ margin: '8px 0 0 0', color: '#94a3b8', fontSize: '14px' }}>
                 {reportPage ? reportPage.description || '查看报表页中的仪表盘' : '查看和管理您的仪表盘报表'}
               </Paragraph>
             </div>

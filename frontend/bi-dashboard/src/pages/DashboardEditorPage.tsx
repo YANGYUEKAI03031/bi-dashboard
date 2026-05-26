@@ -1377,14 +1377,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   return (
-    <Layout style={{ height: '100%', minHeight: 0, background: '#f5f7fa', display: 'flex', flexDirection: 'row' }}>
+    <Layout className="dashboard-editor-dark" style={{ height: '100%', minHeight: 0, background: '#0b1120', display: 'flex', flexDirection: 'row' }}>
       <Sider
         collapsed={collapsed}
         collapsedWidth={0}
         width={320}
         style={{
-          background: '#fff',
-          borderRight: '1px solid #f0f0f0',
+          background: '#0f172a',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
           padding: collapsed ? 0 : '16px',
           overflowX: 'hidden',
           overflowY: 'auto',
@@ -1447,7 +1447,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               </Button>
             }
           >
-            <div style={{ fontSize: 12, color: '#999' }}>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
               用于添加章节标题/说明文字（无需绑定图表）。
             </div>
           </Card>
@@ -1472,7 +1472,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               }
             >
               {filters.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#999' }}>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>
                   暂无筛选器，点击"新建"添加筛选器。
                 </div>
               ) : (
@@ -1480,18 +1480,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   {filters.map(filter => (
                     <div
                       key={filter.id}
+                      className="dashboard-editor-filter-list-item"
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '8px 12px',
-                        background: '#f5f5f5',
                         borderRadius: 4,
                       }}
                     >
                       <div>
                         <div style={{ fontWeight: 500 }}>{filter.name}</div>
-                        <div style={{ fontSize: 12, color: '#888' }}>
+                        <div style={{ fontSize: 12, color: '#94a3b8' }}>
                           {filter.filter_type} | 绑定 {filter.bindings?.length || 0} 个图表
                         </div>
                       </div>
@@ -1578,8 +1578,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             }
           >
             {charts.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#999' }}>
-                暂无可用图表，请先在“图表管理”中创建图表。
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                暂无可用图表，请先在"图表管理"中创建图表。
               </div>
             ) : (
               <div className="dashboard-editor-chart-search-panel">
@@ -1655,7 +1655,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               }}
             >
               <Spin size="large" tip="加载仪表盘画布中..." />
-              <div style={{ fontSize: 13, color: '#999' }}>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>
                 正在加载图表列表与仪表盘配置…
               </div>
             </div>
@@ -1667,7 +1667,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#999',
+                color: '#94a3b8',
               }}
             >
               <div style={{ fontSize: 32, marginBottom: 12 }}>🖼️</div>
@@ -1680,22 +1680,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             <div className="dashboard-editor-grid">
               {/* 筛选器渲染区域 */}
               {filters.length > 0 && (
-                <div style={{
+                <div className="dashboard-editor-filter-bar" style={{
                   marginBottom: 16,
                   padding: '16px 20px',
-                  background: '#fff',
-                  borderRadius: 8,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
-                  border: '1px solid #f0f0f0',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>筛选条件</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>筛选条件</span>
                     {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
                       <button
                         type="button"
                         onClick={() => setFilterValues({})}
-                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
+                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', background: 'none', border: 'none', padding: 0, color: '#94a3b8' }}
                       >
                         重置全部
                       </button>
@@ -1736,22 +1732,21 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       return (
                         <div
                           key={filter.id}
+                          className={`dashboard-editor-filter-chip ${hasValue ? 'active' : ''}`}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: 8,
                             padding: '6px 12px',
-                            background: hasValue ? '#f6ffed' : '#fafafa',
                             borderRadius: 6,
-                            border: `1px solid ${hasValue ? '#b7eb8f' : '#e8e8e8'}`,
                             transition: 'all 0.2s ease',
                           }}
                         >
                           {getFilterIcon()}
-                          <span style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 13, color: '#e2e8f0', whiteSpace: 'nowrap' }}>
                             {filter.field_label || filter.name}
                           </span>
-                          <span style={{ color: '#d9d9d9', fontSize: 12 }}>:</span>
+                          <span style={{ color: '#64748b', fontSize: 12 }}>:</span>
                           {filter.filter_type === 'date_range' && (
                             <DatePicker.RangePicker
                               size="small"
@@ -1954,7 +1949,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           {w.title}
                         </Typography.Title>
                         {w.subtitle ? (
-                          <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#666' }}>
+                          <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0, color: '#94a3b8' }}>
                             {w.subtitle}
                           </Typography.Paragraph>
                         ) : null}

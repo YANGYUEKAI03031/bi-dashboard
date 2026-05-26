@@ -1,15 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ReportsSidebar — Cursor-Inspired Design System
-   基于 getdesign.md/cursor/design-md 设计规范
+   ReportsSidebar — Dark Theme (与 DashboardEditorPage 一致)
 
-   设计理念：与侧边栏主布局保持一致，使用暖棕边框和圆角
+   色板：
+     背景    #0f172a    面板    rgba(30, 41, 59, 0.5)
+     边框    rgba(255,255,255,0.06)   主文字  #e2e8f0
+     副文字  #94a3b8    强调色  #6366F1
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .reports-sidebar {
   width: 280px;
   flex-shrink: 0;
-  background: var(--theme-card-background);
-  border-right: 1px solid var(--theme-border);
+  background: #0f172a;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -17,66 +19,68 @@
 }
 
 .reports-sidebar-header {
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--theme-border);
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
 .reports-sidebar-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--theme-text-primary);
-  margin: 0 0 var(--space-xs) 0;
+  color: #e2e8f0;
+  margin: 0 0 4px 0;
 }
 
 .reports-sidebar-subtitle {
   font-size: 12px;
-  color: var(--theme-text-secondary);
+  color: #94a3b8;
   margin: 0;
 }
 
 .reports-sidebar-search {
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--theme-border);
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
 .reports-sidebar-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-sm);
+  padding: 8px;
 }
 
 .reports-sidebar-item {
   display: flex;
   align-items: center;
-  padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-2);
-  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   border: 1px solid transparent;
+  color: #cbd5e1;
 }
 
 .reports-sidebar-item:hover {
-  background: var(--surface-200);
-  border-color: var(--theme-border);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .reports-sidebar-item.active {
-  background: var(--theme-primary-light);
-  border-color: rgba(74, 144, 226, 0.20);
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #e2e8f0;
 }
 
 .reports-sidebar-item-icon {
   font-size: 16px;
-  margin-right: var(--space-sm);
-  color: var(--theme-text-secondary);
+  margin-right: 8px;
+  color: #94a3b8;
   flex-shrink: 0;
 }
 
 .reports-sidebar-item.active .reports-sidebar-item-icon {
-  color: var(--theme-primary);
+  color: #6366F1;
 }
 
 .reports-sidebar-item-text {
@@ -86,31 +90,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  color: var(--theme-text-primary);
+  color: #cbd5e1;
 }
 
 .reports-sidebar-item.active .reports-sidebar-item-text {
-  color: var(--theme-primary);
+  color: #e2e8f0;
   font-weight: 500;
 }
 
 .reports-sidebar-item-count {
   font-size: 11px;
-  color: var(--theme-text-tertiary);
-  background: var(--surface-300);
+  color: #64748b;
+  background: rgba(15, 23, 42, 0.8);
   padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  margin-left: var(--space-xs);
+  border-radius: 12px;
+  margin-left: 4px;
 }
 
 .reports-sidebar-item.active .reports-sidebar-item-count {
-  background: rgba(74, 144, 226, 0.15);
-  color: var(--theme-primary);
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366F1;
 }
 
 .reports-sidebar-footer {
-  padding: var(--space-md);
-  border-top: 1px solid var(--theme-border);
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
@@ -119,21 +123,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--theme-primary);
+  gap: 4px;
+  padding: 8px 12px;
+  background: #6366F1;
   color: #ffffff;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.20);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .reports-sidebar-footer-btn:hover {
-  background: var(--theme-primary-hover);
+  background: #5558e6;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.30);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }

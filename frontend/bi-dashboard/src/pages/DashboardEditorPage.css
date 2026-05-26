@@ -121,3 +121,201 @@
   height: 100%;
   overflow: hidden;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   暗色主题覆盖 — DashboardEditorPage 专用
+   参考风格：Grafana / Metabase 暗色仪表盘
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 整体页面背景 ── */
+.dashboard-editor-dark {
+  background: #0b1120 !important;
+}
+
+/* ── 左侧编辑面板 Sider ── */
+.dashboard-editor-dark .ant-layout-sider {
+  background: #0f172a !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Sider 内所有 Card */
+.dashboard-editor-dark .ant-layout-sider .ant-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.dashboard-editor-dark .ant-layout-sider .ant-card-head {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.dashboard-editor-dark .ant-layout-sider .ant-card-head-title {
+  color: #e2e8f0;
+}
+
+.dashboard-editor-dark .ant-layout-sider .ant-card-body {
+  background: transparent;
+  color: #cbd5e1;
+}
+
+/* Sider 内输入框暗色化 */
+.dashboard-editor-dark .ant-layout-sider .ant-input,
+.dashboard-editor-dark .ant-layout-sider .ant-input-affix-wrapper,
+.dashboard-editor-dark .ant-layout-sider .ant-select-selector,
+.dashboard-editor-dark .ant-layout-sider .ant-input-textarea {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+.dashboard-editor-dark .ant-layout-sider .ant-input::placeholder,
+.dashboard-editor-dark .ant-layout-sider .ant-input-textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Sider 内按钮默认样式 */
+.dashboard-editor-dark .ant-layout-sider .ant-btn-default {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+/* ── 画布网格区域 ── */
+.dashboard-editor-grid {
+  background: #0b1120;
+  background-image: none;
+}
+
+/* ── 画布内所有 Card（图表卡片 + 画布容器）── */
+.dashboard-editor-dark .ant-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.dashboard-editor-dark .ant-card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+/* Card 标题栏 — 融入背景，去掉突兀的蓝色条 */
+.dashboard-editor-dark .ant-card-head {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.dashboard-editor-dark .ant-card-head-title {
+  color: #e2e8f0;
+}
+
+.dashboard-editor-dark .ant-card-extra {
+  color: #94a3b8;
+}
+
+.dashboard-editor-dark .ant-card-extra .ant-btn {
+  color: #94a3b8;
+}
+
+.dashboard-editor-dark .ant-card-extra .ant-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-editor-dark .ant-card-body {
+  background: transparent;
+}
+
+/* ── 筛选条件栏 ── */
+.dashboard-editor-filter-bar {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── 筛选器芯片 ── */
+.dashboard-editor-filter-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+.dashboard-editor-filter-chip.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.dashboard-editor-filter-chip .ant-select-selector,
+.dashboard-editor-filter-chip .ant-picker {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
+}
+
+/* ── 筛选器列表项（左侧面板）── */
+.dashboard-editor-filter-list-item {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+}
+
+/* ── 图表搜索项（左侧面板）── */
+.dashboard-editor-dark .dashboard-editor-chart-search-item-title {
+  color: #e2e8f0;
+}
+
+.dashboard-editor-dark .dashboard-editor-chart-search-item-meta {
+  color: #94a3b8;
+}
+
+.dashboard-editor-dark .dashboard-editor-chart-search-hint {
+  color: #64748b;
+}
+
+.dashboard-editor-chart-search-item:hover {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+/* ── React Grid 拖拽占位符 ── */
+.dashboard-editor-grid .react-grid-item.react-grid-placeholder {
+  background: rgba(99, 102, 241, 0.1);
+  border: 2px dashed rgba(99, 102, 241, 0.4);
+  border-radius: 12px;
+}
+
+/* ── 空状态 / 加载状态 ── */
+.dashboard-editor-dark .ant-empty-description {
+  color: #64748b;
+}
+
+/* ── Ant Divider ── */
+.dashboard-editor-dark .ant-divider {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Ant Space 内文字 ── */
+.dashboard-editor-dark .ant-typography {
+  color: #e2e8f0;
+}
+
+.dashboard-editor-dark .ant-typography.ant-typography-secondary {
+  color: #94a3b8;
+}
