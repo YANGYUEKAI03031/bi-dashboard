@@ -134,7 +134,7 @@
   background-color: var(--theme-accent-hover);
   border-color: var(--theme-accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.30);
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
 }
 
 .delete-btn {
@@ -147,7 +147,7 @@
   background-color: var(--theme-danger-hover);
   border-color: var(--theme-danger-hover);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(207, 45, 86, 0.30);
+  box-shadow: 0 2px 8px rgba(207, 45, 86, 0.3);
 }
 
 /* ── 搜索框 ── */
@@ -160,8 +160,9 @@
   border-radius: var(--radius-sm) !important;
   border: 1.5px solid var(--theme-border) !important;
   font-size: 14px !important;
-  transition: border-color var(--transition-fast),
-              box-shadow var(--transition-fast) !important;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast) !important;
 }
 
 .search-input:hover,

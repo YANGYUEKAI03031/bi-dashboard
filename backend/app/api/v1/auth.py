@@ -1,17 +1,27 @@
 # app/api/v1/auth.py
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.db.session import get_db
-from app.models.user import User
-from app.schemas.user import LoginRequest, ChangePasswordRequest
-from app.services.permission_service import PermissionService
 import logging
-from app.core.security import create_access_token, get_current_user_id, check_password, assign_password
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import assign_password, check_password, create_access_token, get_current_user_id
+from app.db.session import get_db
+from app.exceptions import (
+    AuthenticationException,
+    DatabaseException,
+    PermissionDeniedException,
+    ResourceNotFoundException,
+    ValidationException,
+)
+from app.models.user import User
+from app.schemas.user import ChangePasswordRequest, LoginRequest
+from app.services.permission_service import PermissionService
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
 
 def _is_user_enabled(state) -> bool:
     """
@@ -26,6 +36,7 @@ def _is_user_enabled(state) -> bool:
     except Exception:
         return str(state).strip() == "1"
 
+
 @router.post("/login")
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     username = request.username
@@ -39,19 +50,19 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     if not user:
         logger.warning("Login failed: user not found (username=%s)", username)
-        raise HTTPException(status_code=400, detail="用户名或密码错误")
+        raise ValidationException("username", "用户名或密码错误")
 
     logger.info("User found for login: username=%s, user_id=%s", user.accountname, user.userID)
 
     # state：1=启用，其他=禁用（兼容字符串/整数）
     if not _is_user_enabled(user.state):
         logger.warning("User account is disabled")
-        raise HTTPException(status_code=403, detail="账户已被禁用，无法登录")
+        raise PermissionDeniedException("登录（账户已禁用）")
 
     if not check_password(password, user):
         logger.warning("Login failed: password mismatch (username=%s)", username)
-        raise HTTPException(status_code=400, detail="用户名或密码错误")
-    
+        raise ValidationException("password", "用户名或密码错误")
+
     # 修正：使用用户ID而不是用户名创建token
     access_token = create_access_token(data={"sub": str(user.userID)})
 
@@ -69,9 +80,10 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             "username": user.accountname,
             "full_name": user.accountname,
             "role": user_role,
-            "is_admin": is_admin
-        }
+            "is_admin": is_admin,
+        },
     }
+
 
 # 添加获取当前用户信息的端点
 @router.get("/me")
@@ -82,23 +94,16 @@ async def get_current_user(current_user_id: int = Depends(get_current_user_id), 
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=404, detail="用户不存在")
+            raise ResourceNotFoundException("用户", current_user_id)
 
         # 账户已禁用则拒绝，前端会收到 403 并清除登录状态
         if not _is_user_enabled(user.state):
-            raise HTTPException(status_code=403, detail="账户已被禁用")
+            raise PermissionDeniedException("访问（账户已禁用）")
 
-        return {
-            "id": user.userID,
-            "username": user.accountname,
-            "full_name": user.accountname,
-            "email": None
-        }
-    except HTTPException:
-        raise
+        return {"id": user.userID, "username": user.accountname, "full_name": user.accountname, "email": None}
     except Exception as e:
         logger.error(f"获取用户信息失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="获取用户信息失败")
+        raise DatabaseException("获取用户信息失败", original_error=e)
 
 
 @router.put("/me/password")
@@ -109,17 +114,17 @@ async def change_password(
 ):
     """修改当前登录用户密码（仅登录后可用）"""
     if not body.old_password or not body.new_password:
-        raise HTTPException(status_code=400, detail="原密码和新密码不能为空")
+        raise ValidationException("password", "原密码和新密码不能为空")
     if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码长度至少 6 位")
+        raise ValidationException("new_password", "新密码长度至少 6 位")
     result = await db.execute(select(User).where(User.userID == current_user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise ResourceNotFoundException("用户", current_user_id)
     if not _is_user_enabled(user.state):
-        raise HTTPException(status_code=403, detail="账户已被禁用")
+        raise PermissionDeniedException("修改密码（账户已禁用）")
     if not check_password(body.old_password, user):
-        raise HTTPException(status_code=400, detail="原密码错误")
+        raise ValidationException("old_password", "原密码错误")
     assign_password(user, body.new_password)
     await db.commit()
     return {"message": "密码已修改"}

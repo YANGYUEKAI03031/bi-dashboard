@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch {
         if (i < retries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
     }
@@ -111,35 +111,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [refreshAuth]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    try {
-      const response = await AuthService.login({ username, password });
+  const login = useCallback(
+    async (username: string, password: string) => {
+      try {
+        const response = await AuthService.login({ username, password });
 
-      if (response.success && response.user) {
-        const { role, is_admin } = response.user;
-        setUser({
-          id: response.user.id,
-          username: response.user.username,
-          email: response.user.email,
-          full_name: response.user.full_name,
-        });
-        // 优先使用登录响应中的角色信息
-        if (role) {
-          setRole(role);
+        if (response.success && response.user) {
+          const { role, is_admin } = response.user;
+          setUser({
+            id: response.user.id,
+            username: response.user.username,
+            email: response.user.email,
+            full_name: response.user.full_name,
+          });
+          // 优先使用登录响应中的角色信息
+          if (role) {
+            setRole(role);
+          }
+          if (typeof is_admin === 'boolean') {
+            setIsAdmin(is_admin);
+          } else {
+            // 如果登录响应没有角色信息，调用 API 获取
+            await applyRole();
+          }
         }
-        if (typeof is_admin === 'boolean') {
-          setIsAdmin(is_admin);
-        } else {
-          // 如果登录响应没有角色信息，调用 API 获取
-          await applyRole();
-        }
+
+        return { success: response.success, message: response.message };
+      } catch {
+        return { success: false, message: '登录过程中发生错误' };
       }
-
-      return { success: response.success, message: response.message };
-    } catch {
-      return { success: false, message: '登录过程中发生错误' };
-    }
-  }, [applyRole]);
+    },
+    [applyRole],
+  );
 
   const logout = useCallback(async () => {
     try {

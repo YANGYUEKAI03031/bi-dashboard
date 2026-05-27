@@ -1,9 +1,11 @@
 # backend/app/db/session.py - 改进版本
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+import logging
+
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
+
 from app.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ AsyncSessionLocal = sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
 
 # 依赖注入：获取数据库会话
 async def get_db():

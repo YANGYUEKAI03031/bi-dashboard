@@ -3,16 +3,22 @@
  * Provides quick access to chart configuration modal
  */
 import React, { useState, useCallback, useMemo } from 'react';
+import { Button, Space, Typography, Alert, Tag, Card, Descriptions, Divider, message } from 'antd';
 import {
-  Button, Space, Typography, Alert, Tag,
-  Card, Descriptions, Divider, message,
-} from 'antd';
-import {
-  SettingOutlined, BarChartOutlined, LineChartOutlined,
-  PieChartOutlined, DotChartOutlined, AreaChartOutlined,
-  RadarChartOutlined, FundViewOutlined, ClusterOutlined,
-  FallOutlined, FilterOutlined, RiseOutlined,
-  InfoCircleOutlined, SyncOutlined,
+  SettingOutlined,
+  BarChartOutlined,
+  LineChartOutlined,
+  PieChartOutlined,
+  DotChartOutlined,
+  AreaChartOutlined,
+  RadarChartOutlined,
+  FundViewOutlined,
+  ClusterOutlined,
+  FallOutlined,
+  FilterOutlined,
+  RiseOutlined,
+  InfoCircleOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -71,7 +77,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
   const pipelineNode = node.data.pipelineNode as PipelineNode;
   const resolvedDsId = useMemo(
     () => resolvePreviewDataSourceId(pipelineNode, pipelineDataSourceId ?? undefined),
-    [pipelineNode, pipelineDataSourceId]
+    [pipelineNode, pipelineDataSourceId],
   );
 
   const nodeConfig = useMemo<ChartNodeConfigType | null>(() => {
@@ -176,7 +182,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
           pipelineDataSourceId: resolvedDsId,
           limit: 100,
         },
-        true
+        true,
       );
       setModalPreviewData(data);
       return data;
@@ -243,11 +249,7 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
         <Card size="small" bordered={false} style={{ background: '#f9f0ff' }}>
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             <div className="chart-type-badge">
-              <Tag
-                icon={chartIcon}
-                color="purple"
-                style={{ fontSize: 13, padding: '4px 12px' }}
-              >
+              <Tag icon={chartIcon} color="purple" style={{ fontSize: 13, padding: '4px 12px' }}>
                 {getChartTypeLabel(chartType)}
               </Tag>
             </div>
@@ -262,7 +264,9 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
                 <Descriptions.Item label="Y轴字段">
                   <Space wrap size={4}>
                     {nodeConfig.yFields.map((field, idx) => (
-                      <Tag key={idx} color="blue">{field}</Tag>
+                      <Tag key={idx} color="blue">
+                        {field}
+                      </Tag>
                     ))}
                   </Space>
                 </Descriptions.Item>
@@ -315,8 +319,8 @@ export const ChartNodeConfig: React.FC<ChartNodeConfigProps> = ({
           {upstreamNodes.length === 0
             ? '等待连接上游节点...'
             : upstreamNodes.length === 1
-            ? `数据来源：${(upstreamNodes[0].data.pipelineNode as PipelineNode)?.name || '上游节点'}`
-            : `数据来源：${upstreamNodes.length} 个上游节点`}
+              ? `数据来源：${(upstreamNodes[0].data.pipelineNode as PipelineNode)?.name || '上游节点'}`
+              : `数据来源：${upstreamNodes.length} 个上游节点`}
         </Text>
       </div>
 

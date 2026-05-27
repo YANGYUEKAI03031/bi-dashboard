@@ -7,21 +7,21 @@ const { Option } = Select;
 const { Panel } = Collapse;
 
 interface VisualizationSettings {
-  "graph.dimensions"?: string[];
-  "graph.metrics"?: string[];
-  "graph.x_axis.title"?: string;
-  "graph.y_axis.title"?: string;
-  "graph.colors"?: string[];
-  "graph.show_legend"?: boolean;
-  "graph.legend_position"?: string;
-  "graph.smooth_line"?: boolean; // 新增：平滑线条
-  "graph.area_style"?: boolean; // 新增：面积图样式
-  "graph.pie_radius"?: [string, string]; // 新增：饼图半径
-  "graph.scatter_size"?: number; // 新增：散点大小
-  "graph.bar_width"?: string; // 新增：柱状图宽度
-  "graph.rotate_labels"?: boolean; // 新增：旋转标签
-  "graph.show_grid"?: boolean; // 新增：显示网格
-  "graph.animation"?: boolean; // 新增：动画效果
+  'graph.dimensions'?: string[];
+  'graph.metrics'?: string[];
+  'graph.x_axis.title'?: string;
+  'graph.y_axis.title'?: string;
+  'graph.colors'?: string[];
+  'graph.show_legend'?: boolean;
+  'graph.legend_position'?: string;
+  'graph.smooth_line'?: boolean; // 新增：平滑线条
+  'graph.area_style'?: boolean; // 新增：面积图样式
+  'graph.pie_radius'?: [string, string]; // 新增：饼图半径
+  'graph.scatter_size'?: number; // 新增：散点大小
+  'graph.bar_width'?: string; // 新增：柱状图宽度
+  'graph.rotate_labels'?: boolean; // 新增：旋转标签
+  'graph.show_grid'?: boolean; // 新增：显示网格
+  'graph.animation'?: boolean; // 新增：动画效果
 }
 
 interface ChartConfigPanelProps {
@@ -35,29 +35,29 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
   initialSettings,
   availableFields = [],
   onSave,
-  onCancel
+  onCancel,
 }) => {
   const [form] = Form.useForm();
   const [settings] = useState<VisualizationSettings>(initialSettings);
 
   const handleSave = () => {
-    form.validateFields().then(values => {
+    form.validateFields().then((values) => {
       const newSettings: VisualizationSettings = {
-        "graph.dimensions": values.dimensions,
-        "graph.metrics": values.metrics,
-        "graph.x_axis.title": values.xAxisTitle,
-        "graph.y_axis.title": values.yAxisTitle,
-        "graph.colors": values.colors,
-        "graph.show_legend": values.showLegend,
-        "graph.legend_position": values.legendPosition,
-        "graph.smooth_line": values.smoothLine,
-        "graph.area_style": values.areaStyle,
-        "graph.pie_radius": values.pieRadius,
-        "graph.scatter_size": values.scatterSize,
-        "graph.bar_width": values.barWidth,
-        "graph.rotate_labels": values.rotateLabels,
-        "graph.show_grid": values.showGrid,
-        "graph.animation": values.animation
+        'graph.dimensions': values.dimensions,
+        'graph.metrics': values.metrics,
+        'graph.x_axis.title': values.xAxisTitle,
+        'graph.y_axis.title': values.yAxisTitle,
+        'graph.colors': values.colors,
+        'graph.show_legend': values.showLegend,
+        'graph.legend_position': values.legendPosition,
+        'graph.smooth_line': values.smoothLine,
+        'graph.area_style': values.areaStyle,
+        'graph.pie_radius': values.pieRadius,
+        'graph.scatter_size': values.scatterSize,
+        'graph.bar_width': values.barWidth,
+        'graph.rotate_labels': values.rotateLabels,
+        'graph.show_grid': values.showGrid,
+        'graph.animation': values.animation,
       };
       onSave(newSettings);
     });
@@ -69,37 +69,41 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
         form={form}
         layout="vertical"
         initialValues={{
-          dimensions: settings["graph.dimensions"],
-          metrics: settings["graph.metrics"],
-          xAxisTitle: settings["graph.x_axis.title"],
-          yAxisTitle: settings["graph.y_axis.title"],
-          colors: settings["graph.colors"],
-          showLegend: settings["graph.show_legend"] !== false,
-          legendPosition: settings["graph.legend_position"] || "right",
-          smoothLine: settings["graph.smooth_line"] || false,
-          areaStyle: settings["graph.area_style"] || false,
-          pieRadius: settings["graph.pie_radius"] || ['40%', '70%'],
-          scatterSize: settings["graph.scatter_size"] || 10,
-          barWidth: settings["graph.bar_width"] || '60%',
-          rotateLabels: settings["graph.rotate_labels"] || false,
-          showGrid: settings["graph.show_grid"] !== false,
-          animation: settings["graph.animation"] !== false
+          dimensions: settings['graph.dimensions'],
+          metrics: settings['graph.metrics'],
+          xAxisTitle: settings['graph.x_axis.title'],
+          yAxisTitle: settings['graph.y_axis.title'],
+          colors: settings['graph.colors'],
+          showLegend: settings['graph.show_legend'] !== false,
+          legendPosition: settings['graph.legend_position'] || 'right',
+          smoothLine: settings['graph.smooth_line'] || false,
+          areaStyle: settings['graph.area_style'] || false,
+          pieRadius: settings['graph.pie_radius'] || ['40%', '70%'],
+          scatterSize: settings['graph.scatter_size'] || 10,
+          barWidth: settings['graph.bar_width'] || '60%',
+          rotateLabels: settings['graph.rotate_labels'] || false,
+          showGrid: settings['graph.show_grid'] !== false,
+          animation: settings['graph.animation'] !== false,
         }}
       >
         <Collapse accordion>
           <Panel header="基础配置" key="1">
             <Form.Item label="维度字段" name="dimensions">
               <Select mode="multiple" placeholder="选择维度字段">
-                {availableFields.map(field => (
-                  <Option key={field} value={field}>{field}</Option>
+                {availableFields.map((field) => (
+                  <Option key={field} value={field}>
+                    {field}
+                  </Option>
                 ))}
               </Select>
             </Form.Item>
 
             <Form.Item label="度量字段" name="metrics">
               <Select mode="multiple" placeholder="选择度量字段">
-                {availableFields.map(field => (
-                  <Option key={field} value={field}>{field}</Option>
+                {availableFields.map((field) => (
+                  <Option key={field} value={field}>
+                    {field}
+                  </Option>
                 ))}
               </Select>
             </Form.Item>
@@ -202,7 +206,7 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
         </Collapse>
 
         <Divider />
-        
+
         <Space>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>
             保存配置

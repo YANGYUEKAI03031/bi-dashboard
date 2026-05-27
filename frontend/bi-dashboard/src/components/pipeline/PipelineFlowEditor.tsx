@@ -1,6 +1,4 @@
-import React, {
-  useState, useCallback, useRef, useMemo, useEffect, forwardRef, useImperativeHandle,
-} from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   ReactFlow,
   Background,
@@ -24,17 +22,31 @@ import { Button, Space, message, Dropdown, Modal, Table, Alert, Checkbox, Input 
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import {
-  PlusOutlined, SaveOutlined, CloseOutlined, DeleteOutlined,
-  ImportOutlined, BarChartOutlined, SwapOutlined, ColumnHeightOutlined,
-  ExportOutlined, DownOutlined,
-  DatabaseOutlined, ArrowRightOutlined, HolderOutlined,
+  PlusOutlined,
+  SaveOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  ImportOutlined,
+  BarChartOutlined,
+  SwapOutlined,
+  ColumnHeightOutlined,
+  ExportOutlined,
+  DownOutlined,
+  DatabaseOutlined,
+  ArrowRightOutlined,
+  HolderOutlined,
   PieChartOutlined,
 } from '@ant-design/icons';
 import './PipelineFlowEditor.css';
 import { PipelineNode, PipelineService } from '../../services/pipelineService';
 import {
-  GraphNode, GraphEdge, detectCycle, topologicalSort,
-  nodesToPipelineNodes, autoLayoutNodes, buildEdgesFromUpstream
+  GraphNode,
+  GraphEdge,
+  detectCycle,
+  topologicalSort,
+  nodesToPipelineNodes,
+  autoLayoutNodes,
+  buildEdgesFromUpstream,
 } from '../../utils/graphUtils';
 import { NodeDetailPanel } from './NodeDetailPanel';
 import { PipelineCanvasPreviewPanel } from './PipelineCanvasPreviewPanel';
@@ -75,18 +87,18 @@ function OutputDeleteConfirmInput({ outputNodes, onConfirm, onCancel }: OutputDe
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
 
   const handleInputChange = (nodeId: string, value: string) => {
-    setInputValues(prev => ({ ...prev, [nodeId]: value }));
+    setInputValues((prev) => ({ ...prev, [nodeId]: value }));
   };
 
   // 检查是否所有 OUTPUT 节点的输入都正确
-  const allConfirmed = outputNodes.every(n => {
+  const allConfirmed = outputNodes.every((n) => {
     if (!n.tableName) return true; // 没有配置表名的跳过验证
     return inputValues[n.id] === n.tableName;
   });
 
   const handleConfirm = () => {
     const confirmedTables = new Set<string>();
-    outputNodes.forEach(n => {
+    outputNodes.forEach((n) => {
       if (inputValues[n.id] === n.tableName) {
         confirmedTables.add(n.tableName);
       }
@@ -96,7 +108,7 @@ function OutputDeleteConfirmInput({ outputNodes, onConfirm, onCancel }: OutputDe
 
   return (
     <div>
-      {outputNodes.map(node => (
+      {outputNodes.map((node) => (
         <div key={node.id} style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
             {node.name}
@@ -106,7 +118,7 @@ function OutputDeleteConfirmInput({ outputNodes, onConfirm, onCancel }: OutputDe
             <Input
               placeholder={`请输入 "${node.tableName}" 确认删除`}
               value={inputValues[node.id] || ''}
-              onChange={e => handleInputChange(node.id, e.target.value)}
+              onChange={(e) => handleInputChange(node.id, e.target.value)}
               status={inputValues[node.id] && inputValues[node.id] !== node.tableName ? 'error' : undefined}
             />
           )}
@@ -139,11 +151,9 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
   const upstreamNames = useMemo(() => {
     if (!allNodes || !pipelineNode.upstream?.length) return [];
     return pipelineNode.upstream
-      .map(uid => {
-        const found = allNodes.find(n => n.id === uid);
-        return found
-          ? (found.data.pipelineNode as PipelineNode)?.name || uid
-          : uid;
+      .map((uid) => {
+        const found = allNodes.find((n) => n.id === uid);
+        return found ? (found.data.pipelineNode as PipelineNode)?.name || uid : uid;
       })
       .slice(0, 4);
   }, [allNodes, pipelineNode.upstream]);
@@ -152,7 +162,9 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
     'pipeline-node-card',
     selected ? 'selected' : '',
     validationError ? 'pipeline-node-card--error' : '',
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   // 合并节点使用上下布局的 handle
   const isMergeNode = pipelineNode.type === 'merge';
@@ -161,44 +173,27 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
     <>
       {/* 合并节点: target handle 在顶部 */}
       {isMergeNode ? (
-        <Handle
-          type="target"
-          position={Position.Top}
-          id="target"
-          className="react-flow__handle-top"
-        />
+        <Handle type="target" position={Position.Top} id="target" className="react-flow__handle-top" />
       ) : (
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="target"
-          className="react-flow__handle-left"
-        />
+        <Handle type="target" position={Position.Left} id="target" className="react-flow__handle-left" />
       )}
 
       <div className={cardClass}>
         {/* Header */}
         <div className="pipeline-node-card-header">
-          <div
-            className="pipeline-node-card-icon"
-            style={{ background: def.bgColor }}
-          >
+          <div className="pipeline-node-card-icon" style={{ background: def.bgColor }}>
             <span style={{ color: def.color, fontSize: 14, lineHeight: 1 }}>{def.icon}</span>
           </div>
           <span className="pipeline-node-card-name" title={pipelineNode.name}>
             {pipelineNode.name}
           </span>
-          <span
-            className="pipeline-node-card-type"
-            style={{ background: def.tagBg, color: def.tagColor }}
-          >
+          <span className="pipeline-node-card-type" style={{ background: def.tagBg, color: def.tagColor }}>
             {def.labelShort}
           </span>
         </div>
 
         {/* Body */}
         <div className="pipeline-node-card-body">
-
           {/* 输入 chips */}
           <div className="pipeline-node-section">输入</div>
           <div className="pipeline-node-card-upstreams">
@@ -210,9 +205,7 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
                 </span>
               ))
             ) : (
-              <span className="pipeline-chip pipeline-chip--placeholder">
-                无上游节点
-              </span>
+              <span className="pipeline-chip pipeline-chip--placeholder">无上游节点</span>
             )}
           </div>
 
@@ -228,19 +221,9 @@ function PipelineNodeCard({ data, selected }: PipelineNodeCardProps) {
 
       {/* 合并节点: source handle 在底部 */}
       {isMergeNode ? (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="source"
-          className="react-flow__handle-bottom"
-        />
+        <Handle type="source" position={Position.Bottom} id="source" className="react-flow__handle-bottom" />
       ) : (
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="source"
-          className="react-flow__handle-right"
-        />
+        <Handle type="source" position={Position.Right} id="source" className="react-flow__handle-right" />
       )}
     </>
   );
@@ -261,11 +244,7 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
   if (node.type === 'source') {
     const tableName = config.tableName as string | undefined;
     if (!tableName) return null;
-    return (
-      <div className="pipeline-node-card-summary">
-        {renderChip(tableName)}
-      </div>
-    );
+    return <div className="pipeline-node-card-summary">{renderChip(tableName)}</div>;
   }
 
   if (node.type === 'filter') {
@@ -273,9 +252,9 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     const logic = (config.logic as string) || 'AND';
     if (conditions.length === 0) return null;
     const preview = conditions
-      .filter(c => c.column)
+      .filter((c) => c.column)
       .slice(0, 2)
-      .map(c => `${c.column} ${c.operator} ${c.value || '…'}`)
+      .map((c) => `${c.column} ${c.operator} ${c.value || '…'}`)
       .join(` ${logic} `);
     return (
       <div className="pipeline-node-card-summary">
@@ -291,11 +270,7 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     const parts: string[] = [];
     if (groupBy.length > 0) parts.push(`${groupBy.length} 维分组`);
     if (aggs.length > 0) parts.push(`${aggs.length} 个聚合`);
-    return (
-      <div className="pipeline-node-card-summary">
-        {renderChip(parts.join(' · '))}
-      </div>
-    );
+    return <div className="pipeline-node-card-summary">{renderChip(parts.join(' · '))}</div>;
   }
 
   if (node.type === 'join') {
@@ -326,14 +301,14 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     return (
       <div className="pipeline-node-card-summary">
         {renderChip(`${cols.length} 列`)}
-        {cols.slice(0, 2).map(c => renderChip(c, undefined, true))}
+        {cols.slice(0, 2).map((c) => renderChip(c, undefined, true))}
         {cols.length > 2 && renderChip(`+${cols.length - 2}`, undefined, true)}
       </div>
     );
   }
 
   if (node.type === 'output') {
-    const target = (config.targetTable as string) || config.targetSchema as string;
+    const target = (config.targetTable as string) || (config.targetSchema as string);
     const mode = (config.writeMode as string) || 'create';
     const modeLabel = mode === 'create' ? '新建' : mode === 'replace' ? '覆盖' : '追加';
     return (
@@ -346,11 +321,7 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
 
   if (node.type === 'merge') {
     const ups = (config.upstream_ids as string[]) || [];
-    return (
-      <div className="pipeline-node-card-summary">
-        {renderChip(`${ups.length} 路合并`)}
-      </div>
-    );
+    return <div className="pipeline-node-card-summary">{renderChip(`${ups.length} 路合并`)}</div>;
   }
 
   if (node.type === 'chart') {
@@ -392,10 +363,13 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     return (
       <div className="pipeline-node-card-summary">
         {renderChip('转置')}
-        {indexCols.length > 0 && renderChip(indexCols[0], indexCols.length > 1 ? `+${indexCols.length - 1}` : '索引', true)}
+        {indexCols.length > 0 &&
+          renderChip(indexCols[0], indexCols.length > 1 ? `+${indexCols.length - 1}` : '索引', true)}
         {pivotCol && renderChip(pivotCol, '透视', true)}
-        {pivotVals.length > 0 && renderChip(pivotVals[0], pivotVals.length > 1 ? `+${pivotVals.length - 1}` : '值', true)}
-        {valueCols.length > 0 && renderChip(valueCols[0].column, valueCols.length > 1 ? `+${valueCols.length - 1}` : '列', true)}
+        {pivotVals.length > 0 &&
+          renderChip(pivotVals[0], pivotVals.length > 1 ? `+${pivotVals.length - 1}` : '值', true)}
+        {valueCols.length > 0 &&
+          renderChip(valueCols[0].column, valueCols.length > 1 ? `+${valueCols.length - 1}` : '列', true)}
       </div>
     );
   }
@@ -406,7 +380,8 @@ function NodeConfigSummary({ node }: { node: PipelineNode }) {
     return (
       <div className="pipeline-node-card-summary">
         {renderChip('去重')}
-        {dedupCols.length > 0 && renderChip(dedupCols[0], dedupCols.length > 1 ? `+${dedupCols.length - 1}` : undefined, true)}
+        {dedupCols.length > 0 &&
+          renderChip(dedupCols[0], dedupCols.length > 1 ? `+${dedupCols.length - 1}` : undefined, true)}
         {renderChip(keepMode === 'first' ? '留首' : '留末', undefined, true)}
       </div>
     );
@@ -679,12 +654,7 @@ interface PipelineListItem {
   sourceDataSourceId: number;
 }
 
-function ImportPipelineModal({
-  visible,
-  currentPipelineDsId,
-  onClose,
-  onImport,
-}: ImportPipelineModalProps) {
+function ImportPipelineModal({ visible, currentPipelineDsId, onClose, onImport }: ImportPipelineModalProps) {
   const [step, setStep] = useState<'select-pipeline' | 'select-nodes'>('select-pipeline');
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [pipelinesLoading, setPipelinesLoading] = useState(false);
@@ -699,15 +669,15 @@ function ImportPipelineModal({
     if (!visible) return;
     setPipelinesLoading(true);
     PipelineService.getPipelines(0, 200)
-      .then(res => {
+      .then((res) => {
         setPipelines(
-          res.items.map(p => ({
+          res.items.map((p) => ({
             id: p.id,
             name: p.name,
             description: p.description,
             nodeCount: p.nodes?.length ?? 0,
             sourceDataSourceId: p.source_data_source_id,
-          }))
+          })),
         );
       })
       .catch(() => message.error('加载管道列表失败'))
@@ -718,10 +688,9 @@ function ImportPipelineModal({
     setSelectedPipelineId(pipelineId);
     setNodesLoading(true);
     PipelineService.getPipeline(pipelineId)
-      .then(pipeline => {
+      .then((pipeline) => {
         setSelectedPipelineNodes(pipeline.nodes as SelectablePipelineNode[]);
-        const isMismatch = currentPipelineDsId != null &&
-          pipeline.source_data_source_id !== currentPipelineDsId;
+        const isMismatch = currentPipelineDsId != null && pipeline.source_data_source_id !== currentPipelineDsId;
         setDsMismatchWarning(isMismatch);
         setDsMismatchWarning(isMismatch);
       })
@@ -751,7 +720,7 @@ function ImportPipelineModal({
   };
 
   const handleImport = () => {
-    const toImport = selectedPipelineNodes.filter(n => {
+    const toImport = selectedPipelineNodes.filter((n) => {
       if (n.type === 'source') return includeSourceNodes;
       return selectedNodeIds.has(n.id);
     });
@@ -764,17 +733,19 @@ function ImportPipelineModal({
       type: 'pipelineNode',
       position: { x: (i % 3) * 300, y: Math.floor(i / 3) * 160 },
       data: {
-        pipelineNode: { ...n, upstream: n.upstream.filter(u =>
-          toImport.some(tn => tn.id === u) ||
-          (n.type === 'source' && includeSourceNodes)
-        )},
+        pipelineNode: {
+          ...n,
+          upstream: n.upstream.filter(
+            (u) => toImport.some((tn) => tn.id === u) || (n.type === 'source' && includeSourceNodes),
+          ),
+        },
       },
     }));
     const graphEdges: GraphEdge[] = [];
-    graphNodes.forEach(n => {
+    graphNodes.forEach((n) => {
       const pn = n.data.pipelineNode as Record<string, unknown>;
-      (pn.upstream as string[] || []).forEach((uId: string) => {
-        if (toImport.some(tn => tn.id === uId) || (pn.type === 'source' && includeSourceNodes)) {
+      ((pn.upstream as string[]) || []).forEach((uId: string) => {
+        if (toImport.some((tn) => tn.id === uId) || (pn.type === 'source' && includeSourceNodes)) {
           graphEdges.push({ id: `${uId}-${n.id}`, source: uId, target: n.id });
         }
       });
@@ -794,7 +765,10 @@ function ImportPipelineModal({
         <Button
           type="link"
           size="small"
-          onClick={() => { handlePipelineSelect(record.id); setStep('select-nodes'); }}
+          onClick={() => {
+            handlePipelineSelect(record.id);
+            setStep('select-nodes');
+          }}
         >
           选择
         </Button>
@@ -811,10 +785,11 @@ function ImportPipelineModal({
         record.type === 'source' ? null : (
           <Checkbox
             checked={selectedNodeIds.has(record.id)}
-            onChange={e => {
-              setSelectedNodeIds(prev => {
+            onChange={(e) => {
+              setSelectedNodeIds((prev) => {
                 const next = new Set(prev);
-                if (e.target.checked) next.add(record.id); else next.delete(record.id);
+                if (e.target.checked) next.add(record.id);
+                else next.delete(record.id);
                 return next;
               });
             }}
@@ -839,7 +814,7 @@ function ImportPipelineModal({
       title: '类型',
       dataIndex: 'type',
       width: 100,
-      render: type => {
+      render: (type) => {
         const def = getNodeTypeDef(type);
         return (
           <span
@@ -862,7 +837,11 @@ function ImportPipelineModal({
 
   return (
     <Modal
-      title={step === 'select-pipeline' ? '从管道导入节点' : `选择节点 — ${pipelines.find(p => p.id === selectedPipelineId)?.name ?? ''}`}
+      title={
+        step === 'select-pipeline'
+          ? '从管道导入节点'
+          : `选择节点 — ${pipelines.find((p) => p.id === selectedPipelineId)?.name ?? ''}`
+      }
       open={visible}
       onCancel={handleClose}
       width={600}
@@ -896,12 +875,12 @@ function ImportPipelineModal({
                     <span>「数据源 / 选表」类型节点导入后将使用当前数据源；其他节点类型（过滤、聚合等）不受影响。</span>
                     <Checkbox
                       checked={includeSourceNodes}
-                      onChange={e => {
+                      onChange={(e) => {
                         setIncludeSourceNodes(e.target.checked);
                         if (!e.target.checked) {
-                          setSelectedNodeIds(prev => {
+                          setSelectedNodeIds((prev) => {
                             const next = new Set(prev);
-                            selectedPipelineNodes.filter(n => n.type === 'source').forEach(n => next.delete(n.id));
+                            selectedPipelineNodes.filter((n) => n.type === 'source').forEach((n) => next.delete(n.id));
                             return next;
                           });
                         }
@@ -944,9 +923,7 @@ function ImportPipelineModal({
                 type="primary"
                 icon={<ImportOutlined />}
                 onClick={handleImport}
-                disabled={
-                  selectedNodeIds.size === 0 && !includeSourceNodes
-                }
+                disabled={selectedNodeIds.size === 0 && !includeSourceNodes}
               >
                 导入{' '}
                 {selectedNodeIds.size > 0 || includeSourceNodes
@@ -975,23 +952,23 @@ const defaultEdgeOptions = {
 /** 与工具栏「保存」相同：从 React Flow 状态导出 PipelineNode[] + 边 */
 function buildPipelineExport(
   flowNodes: Node[],
-  _flowEdges: Edge[]
+  _flowEdges: Edge[],
 ): { pipelineNodes: PipelineNode[]; graphEdges: GraphEdge[] } | null {
   if (flowNodes.length === 0) return null;
   const positions: Record<string, { x: number; y: number }> = {};
-  flowNodes.forEach((n: Node) => { positions[n.id] = n.position; });
+  flowNodes.forEach((n: Node) => {
+    positions[n.id] = n.position;
+  });
   const graphNodes = flowNodes as unknown as GraphNode[];
   // 直接从节点读取 upstream，不再从 edges 反推（避免残留边导致脏数据）
   const graphEdges = buildEdgesFromUpstream(graphNodes);
   const sortedIds = topologicalSort(graphNodes, graphEdges);
-  const sortedNodes = sortedIds
-    .map(id => graphNodes.find(n => n.id === id))
-    .filter(Boolean) as GraphNode[];
+  const sortedNodes = sortedIds.map((id) => graphNodes.find((n) => n.id === id)).filter(Boolean) as GraphNode[];
   const pipelineNodes = nodesToPipelineNodes(sortedNodes, positions);
   const withUpstream = pipelineNodes.map((pn, i) => {
     const nodeId = sortedIds[i];
-    const node = graphNodes.find(n => n.id === nodeId);
-    const upstream = (node?.data.pipelineNode as Record<string, unknown>)?.upstream as string[] || [];
+    const node = graphNodes.find((n) => n.id === nodeId);
+    const upstream = ((node?.data.pipelineNode as Record<string, unknown>)?.upstream as string[]) || [];
     return { ...pn, upstream };
   });
   return { pipelineNodes: withUpstream as PipelineNode[], graphEdges };
@@ -1004,14 +981,8 @@ interface FlowInnerProps extends PipelineFlowEditorProps {
 }
 
 const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function FlowInner(
-  {
-    initialNodes,
-    readOnly,
-    onSave,
-    onCancel,
-    pipelineDataSourceId,
-  },
-  ref
+  { initialNodes, readOnly, onSave, onCancel, pipelineDataSourceId },
+  ref,
 ) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -1037,14 +1008,14 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     if (graphNodes.length === 0) return;
     const upstreamEdges = buildEdgesFromUpstream(graphNodes);
     setEdges(upstreamEdges);
-    setPreviewRefreshTick(t => t + 1);
+    setPreviewRefreshTick((t) => t + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes]);
 
   // Inject allNodes into each node's data so cards can resolve upstream names
   // Also add custom className for special node types (e.g., merge nodes with top/bottom handles)
   const enrichedNodes = useMemo(() => {
-    return (nodes as unknown as GraphNode[]).map(n => {
+    return (nodes as unknown as GraphNode[]).map((n) => {
       const pn = n.data?.pipelineNode as PipelineNode | undefined;
       const def = getNodeTypeDef(pn?.type || '');
       return {
@@ -1056,14 +1027,11 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   }, [nodes]);
 
   const selectedNode = useMemo(
-    () => (nodes as unknown as GraphNode[]).find(n => n.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId]
+    () => (nodes as unknown as GraphNode[]).find((n) => n.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId],
   );
 
-  const selectedCount = useMemo(
-    () => (nodes as unknown as GraphNode[]).filter(n => n.selected).length,
-    [nodes]
-  );
+  const selectedCount = useMemo(() => (nodes as unknown as GraphNode[]).filter((n) => n.selected).length, [nodes]);
 
   const handleConnect = useCallback(
     (params: Connection) => {
@@ -1074,7 +1042,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       }
 
       // 预先计算连线后的 upstream，用于循环检测（与实际 edges 计算方式一致）
-      const testNodes: GraphNode[] = (nodes as unknown as GraphNode[]).map(n => {
+      const testNodes: GraphNode[] = (nodes as unknown as GraphNode[]).map((n) => {
         if (n.id === params.target) {
           const pn = n.data.pipelineNode as Record<string, unknown>;
           const upstream = (pn.upstream as string[]) || [];
@@ -1100,32 +1068,38 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       const syncedEdges = testEdges;
       setNodes(syncedNodes);
       setEdges(syncedEdges);
-      setPreviewRefreshTick(t => t + 1);
+      setPreviewRefreshTick((t) => t + 1);
     },
-    [nodes, setNodes, setEdges]
+    [nodes, setNodes, setEdges],
   );
 
   /** 单击：选中节点并在画布底部加载数据预览；不打开右侧配置 */
-  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNodeId(node.id);
-    if (!readOnly) setPanelOpen(false);
-    // 选中节点时同步 edges，保证预览拿到完整图结构（handleConnect 后、
-    // 拖线后等场景 edges 可能还未与 upstream 完全对齐）
-    const graphNodes = nodes as unknown as GraphNode[];
-    if (graphNodes.length > 0) {
-      const upstreamEdges = buildEdgesFromUpstream(graphNodes);
-      setEdges(upstreamEdges);
-    }
-    setPreviewRefreshTick(t => t + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, readOnly]);
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      setSelectedNodeId(node.id);
+      if (!readOnly) setPanelOpen(false);
+      // 选中节点时同步 edges，保证预览拿到完整图结构（handleConnect 后、
+      // 拖线后等场景 edges 可能还未与 upstream 完全对齐）
+      const graphNodes = nodes as unknown as GraphNode[];
+      if (graphNodes.length > 0) {
+        const upstreamEdges = buildEdgesFromUpstream(graphNodes);
+        setEdges(upstreamEdges);
+      }
+      setPreviewRefreshTick((t) => t + 1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [nodes, readOnly],
+  );
 
   /** 双击：打开右侧配置面板 */
-  const handleNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
-    if (readOnly) return;
-    setSelectedNodeId(node.id);
-    setPanelOpen(true);
-  }, [readOnly]);
+  const handleNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      if (readOnly) return;
+      setSelectedNodeId(node.id);
+      setPanelOpen(true);
+    },
+    [readOnly],
+  );
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeId(null);
@@ -1137,19 +1111,16 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       const upstreamEdges = buildEdgesFromUpstream(graphNodes);
       setEdges(upstreamEdges);
     }
-    setPreviewRefreshTick(t => t + 1);
+    setPreviewRefreshTick((t) => t + 1);
   }, [nodes, setEdges]);
 
   /** 找出所有下游节点（直接和间接依赖被删除节点的节点） */
-  const getDownstreamNodes = (
-    allNodes: GraphNode[],
-    deleted: Set<string>
-  ): Set<string> => {
+  const getDownstreamNodes = (allNodes: GraphNode[], deleted: Set<string>): Set<string> => {
     const downstream = new Set<string>();
     const visited = new Set<string>();
     const findDownstream = (nodeId: string) => {
       for (const n of allNodes) {
-        const upstream = (n.data.pipelineNode as Record<string, unknown>)?.upstream as string[] || [];
+        const upstream = ((n.data.pipelineNode as Record<string, unknown>)?.upstream as string[]) || [];
         if (upstream.includes(nodeId) && !deleted.has(n.id) && !visited.has(n.id)) {
           visited.add(n.id);
           downstream.add(n.id);
@@ -1157,7 +1128,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
         }
       }
     };
-    deleted.forEach(id => findDownstream(id));
+    deleted.forEach((id) => findDownstream(id));
     return downstream;
   };
 
@@ -1169,92 +1140,91 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     pendingDeleteIds: string[];
   }>({ visible: false, outputNodes: [], pendingDeleteIds: [] });
 
-  const applyNodeDelete = useCallback((
-    toDelete: string[],
-    currentNodes: Node[],
-    confirmed: boolean = false
-  ) => {
-    if (toDelete.length === 0) return;
-    const deletedSet = new Set(toDelete);
-    const graphNodes = currentNodes as unknown as GraphNode[];
+  const applyNodeDelete = useCallback(
+    (toDelete: string[], currentNodes: Node[], confirmed: boolean = false) => {
+      if (toDelete.length === 0) return;
+      const deletedSet = new Set(toDelete);
+      const graphNodes = currentNodes as unknown as GraphNode[];
 
-    // 检查是否有 OUTPUT 节点
-    const outputNodesToDelete = graphNodes
-      .filter(n => deletedSet.has(n.id))
-      .filter(n => {
-        const pn = n.data.pipelineNode as Record<string, unknown>;
-        return pn?.type === 'output';
-      })
-      .map(n => {
-        const pn = n.data.pipelineNode as Record<string, unknown>;
-        const config = (pn?.config || {}) as Record<string, unknown>;
-        return {
-          id: n.id,
-          name: (pn?.name as string) || '未命名输出节点',
-          tableName: (config?.targetTable as string) || '',
-        };
-      });
-
-    // 如果有待删除的 OUTPUT 节点且未确认，显示确认弹窗
-    if (outputNodesToDelete.length > 0 && !confirmed) {
-      setOutputDeleteConfirm({
-        visible: true,
-        outputNodes: outputNodesToDelete,
-        pendingDeleteIds: toDelete,
-      });
-      return;
-    }
-
-    // 找出所有下游节点
-    const downstreamSet = getDownstreamNodes(graphNodes, deletedSet);
-
-    const cleanedNodes = graphNodes
-      .filter(n => !deletedSet.has(n.id))
-      .map(n => {
-        const pn = n.data.pipelineNode as Record<string, unknown>;
-
-        // 下游节点清空 upstream，保持灵活性
-        if (downstreamSet.has(n.id)) {
+      // 检查是否有 OUTPUT 节点
+      const outputNodesToDelete = graphNodes
+        .filter((n) => deletedSet.has(n.id))
+        .filter((n) => {
+          const pn = n.data.pipelineNode as Record<string, unknown>;
+          return pn?.type === 'output';
+        })
+        .map((n) => {
+          const pn = n.data.pipelineNode as Record<string, unknown>;
+          const config = (pn?.config || {}) as Record<string, unknown>;
           return {
-            ...n,
-            data: {
-              ...n.data,
-              pipelineNode: { ...pn, upstream: [] },
-            },
-          } as unknown as Node;
-        }
-        return n;
-      });
+            id: n.id,
+            name: (pn?.name as string) || '未命名输出节点',
+            tableName: (config?.targetTable as string) || '',
+          };
+        });
 
-    const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
-    setNodes(cleanedNodes);
-    setEdges(syncedEdges);
-    setFlowKey(k => k + 1); // 强制刷新 ReactFlow
-    setPreviewRefreshTick(t => t + 1);
+      // 如果有待删除的 OUTPUT 节点且未确认，显示确认弹窗
+      if (outputNodesToDelete.length > 0 && !confirmed) {
+        setOutputDeleteConfirm({
+          visible: true,
+          outputNodes: outputNodesToDelete,
+          pendingDeleteIds: toDelete,
+        });
+        return;
+      }
 
-    if (selectedNodeId && toDelete.includes(selectedNodeId)) {
-      setPanelOpen(false);
-      setSelectedNodeId(null);
-    }
-    message.success(`已删除 ${toDelete.length} 个节点`);
-  }, [setNodes, setEdges, selectedNodeId]);
+      // 找出所有下游节点
+      const downstreamSet = getDownstreamNodes(graphNodes, deletedSet);
+
+      const cleanedNodes = graphNodes
+        .filter((n) => !deletedSet.has(n.id))
+        .map((n) => {
+          const pn = n.data.pipelineNode as Record<string, unknown>;
+
+          // 下游节点清空 upstream，保持灵活性
+          if (downstreamSet.has(n.id)) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                pipelineNode: { ...pn, upstream: [] },
+              },
+            } as unknown as Node;
+          }
+          return n;
+        });
+
+      const syncedEdges = buildEdgesFromUpstream(cleanedNodes as unknown as GraphNode[]);
+      setNodes(cleanedNodes);
+      setEdges(syncedEdges);
+      setFlowKey((k) => k + 1); // 强制刷新 ReactFlow
+      setPreviewRefreshTick((t) => t + 1);
+
+      if (selectedNodeId && toDelete.includes(selectedNodeId)) {
+        setPanelOpen(false);
+        setSelectedNodeId(null);
+      }
+      message.success(`已删除 ${toDelete.length} 个节点`);
+    },
+    [setNodes, setEdges, selectedNodeId],
+  );
 
   // 监听 Delete/Backspace 键实现自定义删除
   useEffect(() => {
     if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      console.log('[Delete键] key=', e.key, 'target=', (e.target as HTMLElement).tagName);
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-          console.log('[Delete键] 忽略：输入框内');
           return;
         }
-        const selectedNodes = (nodes as unknown as GraphNode[]).filter(n => n.selected);
-        console.log('[Delete键] 选中节点数:', selectedNodes.length);
+        const selectedNodes = (nodes as unknown as GraphNode[]).filter((n) => n.selected);
         if (selectedNodes.length > 0) {
           e.preventDefault();
-          applyNodeDelete(selectedNodes.map(n => n.id), nodes);
+          applyNodeDelete(
+            selectedNodes.map((n) => n.id),
+            nodes,
+          );
         }
       }
     };
@@ -1263,9 +1233,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
   }, [nodes, readOnly, applyNodeDelete]);
 
   const handleNodesDelete = useCallback(() => {
-    const toDelete = (nodes as unknown as GraphNode[])
-      .filter(n => n.selected)
-      .map(n => n.id);
+    const toDelete = (nodes as unknown as GraphNode[]).filter((n) => n.selected).map((n) => n.id);
     if (toDelete.length === 0) {
       message.warning('请先选中要删除的节点');
       return;
@@ -1273,91 +1241,94 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
     applyNodeDelete(toDelete, nodes);
   }, [nodes, applyNodeDelete]);
 
-  const handlePanelNodeUpdate = useCallback((updatedNode: GraphNode) => {
-    setNodes(prev => prev.map(n =>
-      n.id === updatedNode.id
-        ? { ...n, data: { ...updatedNode.data } }
-        : n
-    ));
-    setPreviewRefreshTick(t => t + 1);
-  }, [setNodes]);
+  const handlePanelNodeUpdate = useCallback(
+    (updatedNode: GraphNode) => {
+      setNodes((prev) => prev.map((n) => (n.id === updatedNode.id ? { ...n, data: { ...updatedNode.data } } : n)));
+      setPreviewRefreshTick((t) => t + 1);
+    },
+    [setNodes],
+  );
 
-  const handlePanelNodeDelete = useCallback((nodeId: string) => {
-    applyNodeDelete([nodeId], nodes);
-    setPanelOpen(false);
-    setSelectedNodeId(null);
-  }, [nodes, applyNodeDelete]);
+  const handlePanelNodeDelete = useCallback(
+    (nodeId: string) => {
+      applyNodeDelete([nodeId], nodes);
+      setPanelOpen(false);
+      setSelectedNodeId(null);
+    },
+    [nodes, applyNodeDelete],
+  );
 
   const handleImportFromPipeline = useCallback(
     (importedNodes: GraphNode[], importedEdges: GraphEdge[]) => {
-      const maxX = Math.max(...(nodes as unknown as GraphNode[]).map(n => n.position.x), 0);
-      const maxY = Math.max(...(nodes as unknown as GraphNode[]).map(n => n.position.y), 0);
+      const maxX = Math.max(...(nodes as unknown as GraphNode[]).map((n) => n.position.x), 0);
+      const maxY = Math.max(...(nodes as unknown as GraphNode[]).map((n) => n.position.y), 0);
       const offsetX = maxX + 120;
       const offsetY = Math.max(maxY - 100, 0);
 
-      const remapped = importedNodes.map(n => ({
+      const remapped = importedNodes.map((n) => ({
         ...n,
         position: { x: n.position.x + offsetX, y: n.position.y + offsetY },
       }));
 
       const mergedNodes = [...(nodes as unknown as GraphNode[]), ...remapped] as unknown as Node[];
-      const allEdges: Edge[] = [
-        ...(edges as unknown as GraphEdge[]),
-        ...importedEdges,
-      ] as Edge[];
+      const allEdges: Edge[] = [...(edges as unknown as GraphEdge[]), ...importedEdges] as Edge[];
 
-      const layouted = autoLayoutNodes(
-        mergedNodes as unknown as GraphNode[],
-        allEdges as unknown as GraphEdge[]
-      );
+      const layouted = autoLayoutNodes(mergedNodes as unknown as GraphNode[], allEdges as unknown as GraphEdge[]);
 
       setNodes(layouted as unknown as Node[]);
       setEdges(allEdges);
-      setPreviewRefreshTick(t => t + 1);
+      setPreviewRefreshTick((t) => t + 1);
       setTimeout(() => fitView({ padding: 0.2 }), 50);
       message.success(`已导入 ${importedNodes.length} 个节点`);
     },
-    [nodes, edges, setNodes, setEdges, fitView]
+    [nodes, edges, setNodes, setEdges, fitView],
   );
 
-  const addNode = useCallback((type: string) => {
-    const def = getNodeTypeDef(type);
-    const newId = generateId();
-    const newNode: Node = {
-      id: newId,
-      type: 'pipelineNode',
-      position: { x: 100 + nextIdRef.current * 50, y: 100 + nextIdRef.current * 60 },
-      data: {
-        pipelineNode: {
-          id: newId,
-          name: `新建${def.label}节点`,
-          type,
-          config: {},
-          order: nextIdRef.current,
-          upstream: [],
+  const addNode = useCallback(
+    (type: string) => {
+      const def = getNodeTypeDef(type);
+      const newId = generateId();
+      const newNode: Node = {
+        id: newId,
+        type: 'pipelineNode',
+        position: { x: 100 + nextIdRef.current * 50, y: 100 + nextIdRef.current * 60 },
+        data: {
+          pipelineNode: {
+            id: newId,
+            name: `新建${def.label}节点`,
+            type,
+            config: {},
+            order: nextIdRef.current,
+            upstream: [],
+          },
         },
-      },
-    };
-    nextIdRef.current += 1;
-    setNodes(prev => [...prev, newNode]);
-    setSelectedNodeId(newId);
-    setPanelOpen(true);
-  }, [setNodes]);
+      };
+      nextIdRef.current += 1;
+      setNodes((prev) => [...prev, newNode]);
+      setSelectedNodeId(newId);
+      setPanelOpen(true);
+    },
+    [setNodes],
+  );
 
   const handleAutoLayout = useCallback(() => {
     const layouted = autoLayoutNodes(nodes as unknown as GraphNode[], edges as unknown as GraphEdge[]);
     setNodes(layouted as unknown as Node[]);
-    setPreviewRefreshTick(t => t + 1);
+    setPreviewRefreshTick((t) => t + 1);
     setTimeout(() => fitView({ padding: 0.2 }), 50);
   }, [nodes, edges, setNodes, fitView]);
 
-  useImperativeHandle(ref, () => ({
-    getPipelineSnapshot: () => {
-      const built = buildPipelineExport(nodes as Node[], edges);
-      if (!built) return null;
-      return { nodes: built.pipelineNodes, edges: built.graphEdges };
-    },
-  }), [nodes, edges]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getPipelineSnapshot: () => {
+        const built = buildPipelineExport(nodes as Node[], edges);
+        if (!built) return null;
+        return { nodes: built.pipelineNodes, edges: built.graphEdges };
+      },
+    }),
+    [nodes, edges],
+  );
 
   const handleSave = useCallback(() => {
     const built = buildPipelineExport(nodes as Node[], edges);
@@ -1373,9 +1344,7 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
       {/* Read-only bar (tiny, no main actions) */}
       {readOnly && (
         <div className="pipeline-readonly-bar">
-          <span style={{ fontSize: 13, color: '#6b7280' }}>
-            管道编辑器（只读）
-          </span>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>管道编辑器（只读）</span>
         </div>
       )}
 
@@ -1384,60 +1353,60 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
         <div className="pipeline-flow-column">
           <div className="pipeline-flow-main">
             <ReactFlow
-            key={flowKey}
-            nodes={enrichedNodes}
-            edges={edges}
-            onNodesChange={readOnly ? undefined : onNodesChange}
-            onEdgesChange={readOnly ? undefined : onEdgesChange}
-            onConnect={readOnly ? undefined : handleConnect}
-            nodeTypes={nodeTypes}
-            edgeTypes={undefined}
-            defaultEdgeOptions={defaultEdgeOptions}
-            fitView
-            deleteKeyCode={null} // 禁用 React Flow 内置删除，使用自定义删除逻辑
-            onNodeClick={handleNodeClick}
-            onNodeDoubleClick={handleNodeDoubleClick}
-            onPaneClick={handlePaneClick}
-            zoomOnDoubleClick={false}
-            connectionLineStyle={{ stroke: 'var(--pipeline-conn-color)', strokeWidth: 1.5 }}
-          >
-            {/* SVG defs: arrow marker */}
-            <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-              <defs>
-                <marker
-                  id={ARROW_MARKER_ID}
-                  viewBox="0 0 12 12"
-                  refX={10}
-                  refY={6}
-                  markerWidth={10}
-                  markerHeight={10}
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 12 6 L 0 12 z" fill="#94a3b8" />
-                </marker>
-              </defs>
-            </svg>
+              key={flowKey}
+              nodes={enrichedNodes}
+              edges={edges}
+              onNodesChange={readOnly ? undefined : onNodesChange}
+              onEdgesChange={readOnly ? undefined : onEdgesChange}
+              onConnect={readOnly ? undefined : handleConnect}
+              nodeTypes={nodeTypes}
+              edgeTypes={undefined}
+              defaultEdgeOptions={defaultEdgeOptions}
+              fitView
+              deleteKeyCode={null} // 禁用 React Flow 内置删除，使用自定义删除逻辑
+              onNodeClick={handleNodeClick}
+              onNodeDoubleClick={handleNodeDoubleClick}
+              onPaneClick={handlePaneClick}
+              zoomOnDoubleClick={false}
+              connectionLineStyle={{ stroke: 'var(--pipeline-conn-color)', strokeWidth: 1.5 }}
+            >
+              {/* SVG defs: arrow marker */}
+              <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+                <defs>
+                  <marker
+                    id={ARROW_MARKER_ID}
+                    viewBox="0 0 12 12"
+                    refX={10}
+                    refY={6}
+                    markerWidth={10}
+                    markerHeight={10}
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 12 6 L 0 12 z" fill="#94a3b8" />
+                  </marker>
+                </defs>
+              </svg>
 
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d0d5dd" />
-            <Controls showInteractive={false} />
-            <MiniMap
-              nodeColor={n => {
-                const pn = n.data?.pipelineNode as PipelineNode | undefined;
-                return getNodeTypeDef(pn?.type || '').color || '#6366F1';
-              }}
-              maskColor="rgba(79,70,229,0.08)"
-            />
-            <BottomPillToolbar
-              readOnly={readOnly}
-              selectedCount={selectedCount}
-              onAutoLayout={handleAutoLayout}
-              onSave={handleSave}
-              onCancel={onCancel}
-              onDeleteSelected={handleNodesDelete}
-              onImport={() => setImportModalVisible(true)}
-              onAddNode={addNode}
-            />
-          </ReactFlow>
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d0d5dd" />
+              <Controls showInteractive={false} />
+              <MiniMap
+                nodeColor={(n) => {
+                  const pn = n.data?.pipelineNode as PipelineNode | undefined;
+                  return getNodeTypeDef(pn?.type || '').color || '#6366F1';
+                }}
+                maskColor="rgba(79,70,229,0.08)"
+              />
+              <BottomPillToolbar
+                readOnly={readOnly}
+                selectedCount={selectedCount}
+                onAutoLayout={handleAutoLayout}
+                onSave={handleSave}
+                onCancel={onCancel}
+                onDeleteSelected={handleNodesDelete}
+                onImport={() => setImportModalVisible(true)}
+                onAddNode={addNode}
+              />
+            </ReactFlow>
           </div>
 
           <PipelineCanvasPreviewPanel
@@ -1466,60 +1435,72 @@ const FlowInner = forwardRef<PipelineFlowEditorHandle, FlowInnerProps>(function 
                 const upstreamEdges = buildEdgesFromUpstream(graphNodes);
                 setEdges(upstreamEdges);
               }
-              setPreviewRefreshTick(t => t + 1);
+              setPreviewRefreshTick((t) => t + 1);
             }}
             open={panelOpen}
             readOnly={readOnly}
           />
         )}
-        </div>
+      </div>
 
-        {/* OUTPUT 节点删除确认弹窗 */}
-        <Modal
-          title={<span style={{ color: '#ff4d4f' }}>⚠️ 删除输出节点警告</span>}
-          open={outputDeleteConfirm.visible}
-          onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
-          footer={null}
-          width={500}
-          destroyOnClose
-        >
-          <Alert
-            type="warning"
-            showIcon
-            message="即将删除以下输出节点，关联的表格数据将被删除！"
-            style={{ marginBottom: 16 }}
-          />
-          <div style={{ marginBottom: 16 }}>
-            {outputDeleteConfirm.outputNodes.map(node => (
-              <div key={node.id} style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7e6', borderRadius: 4, border: '1px solid #ffe58f' }}>
-                <div style={{ fontWeight: 500 }}>{node.name}</div>
-                <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                  目标表：<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 3 }}>{node.tableName || '(未指定)'}</code>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 500, marginBottom: 8 }}>请输入每个目标表的表名进行确认：</div>
-            <OutputDeleteConfirmInput
-              outputNodes={outputDeleteConfirm.outputNodes}
-              onConfirm={(confirmedTables) => {
-                // 验证所有 OUTPUT 节点都已确认
-                const allConfirmed = outputDeleteConfirm.outputNodes.every(
-                  n => !n.tableName || confirmedTables.has(n.tableName)
-                );
-                if (!allConfirmed) {
-                  message.error('请输入正确的表名进行确认');
-                  return;
-                }
-                setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] });
-                // 执行删除
-                applyNodeDelete(outputDeleteConfirm.pendingDeleteIds, nodes, true);
+      {/* OUTPUT 节点删除确认弹窗 */}
+      <Modal
+        title={<span style={{ color: '#ff4d4f' }}>⚠️ 删除输出节点警告</span>}
+        open={outputDeleteConfirm.visible}
+        onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
+        footer={null}
+        width={500}
+        destroyOnClose
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="即将删除以下输出节点，关联的表格数据将被删除！"
+          style={{ marginBottom: 16 }}
+        />
+        <div style={{ marginBottom: 16 }}>
+          {outputDeleteConfirm.outputNodes.map((node) => (
+            <div
+              key={node.id}
+              style={{
+                marginBottom: 12,
+                padding: '8px 12px',
+                background: '#fff7e6',
+                borderRadius: 4,
+                border: '1px solid #ffe58f',
               }}
-              onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
-            />
-          </div>
-        </Modal>
+            >
+              <div style={{ fontWeight: 500 }}>{node.name}</div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                目标表：
+                <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 3 }}>
+                  {node.tableName || '(未指定)'}
+                </code>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 500, marginBottom: 8 }}>请输入每个目标表的表名进行确认：</div>
+          <OutputDeleteConfirmInput
+            outputNodes={outputDeleteConfirm.outputNodes}
+            onConfirm={(confirmedTables) => {
+              // 验证所有 OUTPUT 节点都已确认
+              const allConfirmed = outputDeleteConfirm.outputNodes.every(
+                (n) => !n.tableName || confirmedTables.has(n.tableName),
+              );
+              if (!allConfirmed) {
+                message.error('请输入正确的表名进行确认');
+                return;
+              }
+              setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] });
+              // 执行删除
+              applyNodeDelete(outputDeleteConfirm.pendingDeleteIds, nodes, true);
+            }}
+            onCancel={() => setOutputDeleteConfirm({ visible: false, outputNodes: [], pendingDeleteIds: [] })}
+          />
+        </div>
+      </Modal>
 
       {/* Import nodes modal */}
       {!readOnly && (
@@ -1556,5 +1537,5 @@ export const PipelineFlowEditor = forwardRef<PipelineFlowEditorHandle, PipelineF
         <FlowInner ref={ref} {...props} initialNodes={graphNodes} />
       </ReactFlowProvider>
     );
-  }
+  },
 );

@@ -73,10 +73,7 @@ export class ChartService {
     }
   }
 
-  static async updateChart(
-    chartId: number,
-    updateData: Partial<ChartCreateRequest>,
-  ): Promise<ChartResponse> {
+  static async updateChart(chartId: number, updateData: Partial<ChartCreateRequest>): Promise<ChartResponse> {
     try {
       return await ApiClient.put<ChartResponse>(`/visualization/charts/${chartId}`, updateData);
     } catch (error) {
@@ -98,15 +95,9 @@ export class ChartService {
     }
   }
 
-  static async executeChartQuery(
-    chartId: number,
-    filterParams?: Record<string, any>,
-  ): Promise<any[]> {
+  static async executeChartQuery(chartId: number, filterParams?: Record<string, any>): Promise<any[]> {
     try {
-      const data = await ApiClient.post<{ data: any[] }>(
-        `/visualization/charts/${chartId}/query`,
-        filterParams || {}
-      );
+      const data = await ApiClient.post<{ data: any[] }>(`/visualization/charts/${chartId}/query`, filterParams || {});
       return data.data;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -118,17 +109,14 @@ export class ChartService {
 
   /** 批量查询多个图表数据（一次请求获取所有图表） */
   static async executeBatchChartQuery(
-    requests: { chartId: number; filterParams?: Record<string, any> }[]
+    requests: { chartId: number; filterParams?: Record<string, any> }[],
   ): Promise<{ chartId: number; data: any[]; error?: string }[]> {
     try {
-      const payload = requests.map(r => ({
+      const payload = requests.map((r) => ({
         chart_id: r.chartId,
         filter_params: r.filterParams || {},
       }));
-      const result = await ApiClient.post<{ results: any[] }>(
-        '/visualization/charts/batch-query',
-        payload
-      );
+      const result = await ApiClient.post<{ results: any[] }>('/visualization/charts/batch-query', payload);
       // 转换为 {chartId, data, error} 格式
       return (result.results || []).map((r: any) => ({
         chartId: r.chart_id,
@@ -165,9 +153,7 @@ export class ChartService {
         params.append('filter_conditions', JSON.stringify(filterConditions));
       }
 
-      const data = await ApiClient.get<{ options: string[] }>(
-        `/visualization/charts/filter-options?${params}`
-      );
+      const data = await ApiClient.get<{ options: string[] }>(`/visualization/charts/filter-options?${params}`);
       return data.options || [];
     } catch (error) {
       if (error instanceof ApiError) {
@@ -195,7 +181,7 @@ export class ChartService {
       }
 
       return await ApiClient.get<FilterOptionsFromChartResult>(
-        `/visualization/charts/filter-options-from-chart/${chartId}?${params}`
+        `/visualization/charts/filter-options-from-chart/${chartId}?${params}`,
       );
     } catch (error) {
       if (error instanceof ApiError) {

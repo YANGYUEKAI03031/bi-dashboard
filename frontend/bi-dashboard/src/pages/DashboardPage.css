@@ -131,8 +131,9 @@
 .draggable-chart-item {
   margin-bottom: var(--space-md);
   cursor: grab;
-  transition: transform var(--transition-spring),
-              box-shadow var(--transition-spring);
+  transition:
+    transform var(--transition-spring),
+    box-shadow var(--transition-spring);
   border-radius: var(--radius-md);
 }
 
@@ -186,9 +187,10 @@
   background: linear-gradient(145deg, #ffffff, var(--surface-200));
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  transition: transform var(--transition-spring),
-              box-shadow var(--transition-spring),
-              border-color var(--transition-fast);
+  transition:
+    transform var(--transition-spring),
+    box-shadow var(--transition-spring),
+    border-color var(--transition-fast);
   border: 1px solid var(--theme-border);
   overflow: hidden;
 }
@@ -201,14 +203,20 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, var(--theme-primary), var(--theme-warning), var(--theme-success), var(--theme-danger));
+  background: linear-gradient(
+    90deg,
+    var(--theme-primary),
+    var(--theme-warning),
+    var(--theme-success),
+    var(--theme-danger)
+  );
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .dashboard-card-wrapper:hover {
   box-shadow: var(--shadow-lg);
   transform: translateY(-4px) scale(1.02);
-  border-color: rgba(74, 144, 226, 0.20);
+  border-color: rgba(74, 144, 226, 0.2);
 }
 
 .dashboard-card-wrapper.dragging {
@@ -228,9 +236,10 @@
   border-radius: var(--radius-sm);
   padding: var(--space-xs);
   box-shadow: var(--shadow-sm);
-  transition: background var(--transition-fast),
-              box-shadow var(--transition-spring),
-              transform var(--transition-spring);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-spring),
+    transform var(--transition-spring);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--theme-border);
@@ -263,14 +272,25 @@
     linear-gradient(45deg, transparent 75%, var(--surface-300) 75%),
     linear-gradient(-45deg, transparent 75%, var(--surface-300) 75%),
     linear-gradient(135deg, var(--surface-100) 0%, var(--theme-background) 100%);
-  background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, 100% 100%;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px, 0 0;
+  background-size:
+    20px 20px,
+    20px 20px,
+    20px 20px,
+    20px 20px,
+    100% 100%;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0px,
+    0 0;
   animation: placeholder-pulse 2s infinite;
   border-radius: var(--radius-md);
-  border: 2px dashed rgba(74, 144, 226, 0.30);
-  transition: background-color var(--transition-fast),
-              border-color var(--transition-fast),
-              transform var(--transition-fast);
+  border: 2px dashed rgba(74, 144, 226, 0.3);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .grid-placeholder:hover {
@@ -280,9 +300,30 @@
 }
 
 @keyframes placeholder-pulse {
-  0%   { opacity: 0.7; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
-  50%  { opacity: 1;   background-position: 10px 10px, 10px 20px, 20px 0px, 0px 10px; }
-  100% { opacity: 0.7; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
+  0% {
+    opacity: 0.7;
+    background-position:
+      0 0,
+      0 10px,
+      10px -10px,
+      -10px 0px;
+  }
+  50% {
+    opacity: 1;
+    background-position:
+      10px 10px,
+      10px 20px,
+      20px 0px,
+      0px 10px;
+  }
+  100% {
+    opacity: 0.7;
+    background-position:
+      0 0,
+      0 10px,
+      10px -10px,
+      -10px 0px;
+  }
 }
 
 /* ── 响应式 ── */

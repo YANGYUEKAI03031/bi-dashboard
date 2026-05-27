@@ -7,23 +7,26 @@
 - 点击节点预览数据（临时表快照）
 - 零污染存储（MySQL TEMPORARY TABLE）
 """
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Boolean, BigInteger
+
+from sqlalchemy import JSON, BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+
 from app.core.time_utils import utc_now
+from app.db.base import Base
 
 # 节点结构存于 DataPipeline.nodes（JSON），类型见 app.schemas.pipeline.PipelineNodeCreate
 
 
 class DataPipeline(Base):
     """数据管道配置"""
+
     __tablename__ = "data_pipelines"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     source_data_source_id = Column(Integer, ForeignKey("databases.id"), nullable=False)
-    
+
     # 节点配置 (JSON 格式)
     # 格式: [
     #   {
@@ -42,20 +45,20 @@ class DataPipeline(Base):
     #   }
     # ]
     nodes = Column(JSON, nullable=True, default=list)
-    
+
     # 全局变量配置（可选）
     variables = Column(JSON, nullable=True, default=dict)
-    
+
     # 执行配置
     config = Column(JSON, nullable=True, default=dict)
-    
+
     # 状态
     is_active = Column(Boolean, default=True)
-    
+
     # 权限
     created_by = Column(Integer, ForeignKey("useraccount.userID"), nullable=False)
     is_public = Column(Boolean, default=False)
-    
+
     # 时间戳
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
@@ -66,6 +69,7 @@ class DataPipeline(Base):
 
 class PipelineExecution(Base):
     """管道执行记录"""
+
     __tablename__ = "pipeline_executions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -122,6 +126,7 @@ class PipelineExecution(Base):
 
 class PipelineWatermark(Base):
     """管道节点水位线 - 用于增量更新"""
+
     __tablename__ = "pipeline_watermarks"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -140,6 +145,7 @@ class PipelineWatermark(Base):
 
 class PipelineDependency(Base):
     """管道依赖关系"""
+
     __tablename__ = "pipeline_dependencies"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -158,23 +164,24 @@ class PipelineDependency(Base):
 
 class PipelineTrigger(Base):
     """管道触发器配置 - 用于数据变更自动触发"""
+
     __tablename__ = "pipeline_triggers"
 
     id = Column(Integer, primary_key=True, index=True)
     pipeline_id = Column(Integer, ForeignKey("data_pipelines.id"), nullable=False, unique=True)
 
     # 监控目标
-    source_table = Column(String(255), nullable=False)           # 监控的源表名
-    watermark_field = Column(String(128), nullable=False)        # 高水位字段（updated_at / id）
+    source_table = Column(String(255), nullable=False)  # 监控的源表名
+    watermark_field = Column(String(128), nullable=False)  # 高水位字段（updated_at / id）
 
     # 调度策略
-    poll_interval_seconds = Column(Integer, default=300)           # 轮询间隔（默认 5 分钟）
+    poll_interval_seconds = Column(Integer, default=300)  # 轮询间隔（默认 5 分钟）
 
     # 状态
     enabled = Column(Boolean, default=True)
     last_check_at = Column(DateTime, nullable=True)
-    last_watermark_value = Column(String(255), nullable=True)     # 存储上次 MAX(updated_at)
-    last_row_count = Column(BigInteger, nullable=True)            # 存储上次行数（用于检测删除）
+    last_watermark_value = Column(String(255), nullable=True)  # 存储上次 MAX(updated_at)
+    last_row_count = Column(BigInteger, nullable=True)  # 存储上次行数（用于检测删除）
 
     # 时间戳
     created_at = Column(DateTime, default=utc_now)

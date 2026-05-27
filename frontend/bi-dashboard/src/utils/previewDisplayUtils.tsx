@@ -71,7 +71,11 @@ export function formatPreviewCellValue(value: unknown, resolvedType: string): Re
   }
   if (value === true || value === false) {
     const b = value;
-    return <Tag color={b ? 'green' : 'red'} style={{ fontSize: 11 }}>{b.toString()}</Tag>;
+    return (
+      <Tag color={b ? 'green' : 'red'} style={{ fontSize: 11 }}>
+        {b.toString()}
+      </Tag>
+    );
   }
   const t = resolvedType.toLowerCase();
   if (t === 'int' || t === 'bigint' || t === 'decimal' || t === 'float' || t === 'double') {

@@ -123,13 +123,10 @@ function getValidationError(config: ChartNodeConfigType): string | null {
 }
 
 /** 根据列格式转换单行数据 */
-function transformRowByFormats(
-  row: Record<string, unknown>,
-  formats: Record<string, string>
-): Record<string, unknown> {
+function transformRowByFormats(row: Record<string, unknown>, formats: Record<string, string>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
 
-  Object.keys(result).forEach(key => {
+  Object.keys(result).forEach((key) => {
     const format = formats[key];
     if (!format || format === 'auto') return;
 
@@ -228,10 +225,10 @@ export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
     if (!previewData || !previewData.rows.length) {
       return [];
     }
-    
+
     // 应用列格式化转换
     const formats = columnFormats || {};
-    return previewData.rows.map(row => transformRowByFormats(row, formats));
+    return previewData.rows.map((row) => transformRowByFormats(row, formats));
   }, [previewData, columnFormats]);
 
   // Build chart config
@@ -355,9 +352,7 @@ export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
   }
 
   // Chart title
-  const chartTitle = `${getChartTypeLabel(config.chartType)}${
-    config.xAxisTitle ? ` - ${config.xAxisTitle}` : ''
-  }${
+  const chartTitle = `${getChartTypeLabel(config.chartType)}${config.xAxisTitle ? ` - ${config.xAxisTitle}` : ''}${
     config.yAxisTitle ? ` / ${config.yAxisTitle}` : ''
   }`;
 
@@ -383,11 +378,7 @@ export const ChartNodePreview: React.FC<ChartNodePreviewProps> = ({
       </div>
 
       <div className="chart-preview-body" style={{ height: height - 40 }}>
-        <ChartFactory
-          data={chartData}
-          config={chartConfig}
-          style={{ height: '100%', width: '100%' }}
-        />
+        <ChartFactory data={chartData} config={chartConfig} style={{ height: '100%', width: '100%' }} />
       </div>
     </div>
   );

@@ -6,21 +6,13 @@
  * - 单元格：下拉框选择该上游的列对应到哪个输出列
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  Divider, Tag, Typography,
-  Alert, Card, Spin, Radio,
-  Select, Input, Button,
-  Table,
-} from 'antd';
+import { Divider, Tag, Typography, Alert, Card, Spin, Radio, Select, Input, Button, Table } from 'antd';
 import { ColumnHeightOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
 import { useNodePreview } from '../../../hooks/useNodePreview';
 import { resolvePreviewDataSourceId } from '../../../utils/pipelineDataSourceUtils';
-import {
-  buildMergePersistedSql,
-  type UnionColumnPlanRow,
-} from '../../../utils/pipelineMergeSql';
+import { buildMergePersistedSql, type UnionColumnPlanRow } from '../../../utils/pipelineMergeSql';
 
 const { Text } = Typography;
 
@@ -81,19 +73,13 @@ function useUpstreamPreviews(upstreamNodes: GraphNode[], pipelineDataSourceId: n
 
   useEffect(() => {
     upstreamNodes.slice(0, MAX_PREVIEWS).forEach((upNode, idx) => {
-      const ds = resolvePreviewDataSourceId(
-        upNode.data.pipelineNode as PipelineNode,
-        pipelineDataSourceId ?? null
-      );
+      const ds = resolvePreviewDataSourceId(upNode.data.pipelineNode as PipelineNode, pipelineDataSourceId ?? null);
       if (!upNode || !ds) return;
       hooks[idx].clearPreview();
-      hooks[idx].loadPreview(
-        { node: upNode, allNodes, pipelineDataSourceId: ds, limit: 30 },
-        true
-      );
+      hooks[idx].loadPreview({ node: upNode, allNodes, pipelineDataSourceId: ds, limit: 30 }, true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upstreamNodes.map(n => n.id).join(','), pipelineDataSourceId]);
+  }, [upstreamNodes.map((n) => n.id).join(','), pipelineDataSourceId]);
 
   return hooks;
 }
@@ -112,7 +98,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
   const mergeType: ConcatMergeType = savedMergeType === 'union' ? 'union' : 'union_all';
 
   const [currentMergeType, setCurrentMergeType] = useState<ConcatMergeType>(
-    mergeType === 'union' ? 'union' : 'union_all'
+    mergeType === 'union' ? 'union' : 'union_all',
   );
 
   useEffect(() => {
@@ -120,20 +106,18 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
   }, [savedMergeType, node.id]);
 
   const upstream = (pipelineNode.upstream as string[]) || [];
-  const upstreamNodes = upstream
-    .map(id => allNodes.find(n => n.id === id))
-    .filter(Boolean) as GraphNode[];
+  const upstreamNodes = upstream.map((id) => allNodes.find((n) => n.id === id)).filter(Boolean) as GraphNode[];
 
   const previewHooks = useUpstreamPreviews(upstreamNodes, pipelineDataSourceId ?? null, allNodes);
 
   // colMatrix[upstreamIdx] = column names of that upstream
   const colMatrix = useMemo(
     () => upstreamNodes.map((_, idx) => previewHooks[idx]?.previewData?.columns ?? []),
-    [upstreamNodes, previewHooks]
+    [upstreamNodes, previewHooks],
   );
 
   // max column count across all upstreams
-  const maxColCount = useMemo(() => Math.max(0, ...colMatrix.map(c => c.length)), [colMatrix]);
+  const maxColCount = useMemo(() => Math.max(0, ...colMatrix.map((c) => c.length)), [colMatrix]);
 
   // output column names from plan
   const outputColumns = useMemo(() => {
@@ -141,16 +125,14 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       ? (config.unionColumnPlan as UnionColumnPlanRow[])
       : [];
     if (savedPlan.length > 0) {
-      return savedPlan.map(row => row.out);
+      return savedPlan.map((row) => row.out);
     }
     // Default: col_1, col_2, ...
     return Array.from({ length: maxColCount }, (_, i) => `col_${i + 1}`);
   }, [config.unionColumnPlan, maxColCount]);
 
-  const allPreviewsDone = upstreamNodes.every(
-    (_, idx) => !previewHooks[idx]?.previewLoading
-  );
-  const hasColumnInfo = colMatrix.some(c => c.length > 0);
+  const allPreviewsDone = upstreamNodes.every((_, idx) => !previewHooks[idx]?.previewLoading);
+  const hasColumnInfo = colMatrix.some((c) => c.length > 0);
 
   // 当前 plan（从 node.config 读取）
   const savedPlan: UnionColumnPlanRow[] = Array.isArray(config.unionColumnPlan)
@@ -166,10 +148,10 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       return Array.from({ length: outputRowCount }, (_, i) => ({
         id: newRowId(),
         out: `col_${i + 1}`,
-        cols: colMatrix.map(cols => (cols[i] != null ? cols[i] : '')),
+        cols: colMatrix.map((cols) => (cols[i] != null ? cols[i] : '')),
       }));
     },
-    [colMatrix]
+    [colMatrix],
   );
 
   /**
@@ -180,15 +162,21 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       const n = upstreamNodes.length;
       if (n === 0) return [];
       let dirty = false;
-      const next = plan.map(row => {
+      const next = plan.map((row) => {
         const cols = [...(row.cols || [])];
-        while (cols.length < n) { cols.push(''); dirty = true; }
-        if (cols.length > n) { cols.length = n; dirty = true; }
+        while (cols.length < n) {
+          cols.push('');
+          dirty = true;
+        }
+        if (cols.length > n) {
+          cols.length = n;
+          dirty = true;
+        }
         return { ...row, cols };
       });
       return dirty ? next : plan;
     },
-    [upstreamNodes.length]
+    [upstreamNodes.length],
   );
 
   const persistMerge = useCallback(
@@ -199,7 +187,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       const sql = buildMergePersistedSql(
         mt === 'union' ? 'union' : 'union_all',
         upstreamNodes.length,
-        plan.length > 0 ? plan : undefined
+        plan.length > 0 ? plan : undefined,
       );
       // 同时更新顶层 merge_type（后端执行时读取）和 config.merge_type（持久化配置）
       node.data = {
@@ -218,7 +206,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       setCurrentMergeType(mt);
       onChange();
     },
-    [readOnly, node, upstreamNodes.length, onChange]
+    [readOnly, node, upstreamNodes.length, onChange],
   );
 
   // ── 初始化 plan：上游列就绪后，若无 plan 或列数变化，按最多列的上游生成默认映射 ──
@@ -259,15 +247,15 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
   }, [upstreamNodes.length, readOnly, node.id]);
 
   const handleMergeTypeChange = (val: ConcatMergeType) => {
-    const plan = ((node.data.pipelineNode as PipelineNode).config?.unionColumnPlan ||
-      []) as UnionColumnPlanRow[];
+    const plan = ((node.data.pipelineNode as PipelineNode).config?.unionColumnPlan || []) as UnionColumnPlanRow[];
     persistMerge(plan, val);
   };
 
   const planRows: UnionColumnPlanRow[] = savedPlan;
 
   // 从 plan 中获取当前输出列名
-  const getOutputColumnName = (outIndex: number): string => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  const getOutputColumnName = (outIndex: number): string => {
+    // eslint-disable-line @typescript-eslint/no-unused-vars
     if (planRows.length > 0 && planRows[outIndex]) {
       return planRows[outIndex].out;
     }
@@ -278,7 +266,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
   const updateOut = (index: number, out: string) => {
     persistMerge(
       planRows.map((r, i) => (i === index ? { ...r, out } : r)),
-      currentMergeType
+      currentMergeType,
     );
   };
 
@@ -289,31 +277,34 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
     const cols = [...(row.cols || [])];
     while (cols.length < upstreamNodes.length) cols.push('');
     cols[upIdx] = col;
-    persistMerge(planRows.map((r, i) => (i === rowIndex ? { ...r, cols } : r)), currentMergeType);
+    persistMerge(
+      planRows.map((r, i) => (i === rowIndex ? { ...r, cols } : r)),
+      currentMergeType,
+    );
   };
 
   const addOutputColumn = () => {
     const n = upstreamNodes.length;
     persistMerge(
-      [
-        ...planRows,
-        { id: newRowId(), out: `col_${planRows.length + 1}`, cols: Array(n).fill('') },
-      ],
-      currentMergeType
+      [...planRows, { id: newRowId(), out: `col_${planRows.length + 1}`, cols: Array(n).fill('') }],
+      currentMergeType,
     );
   };
 
   const removeOutputColumn = (index: number) => {
-    persistMerge(planRows.filter((_, i) => i !== index), currentMergeType);
+    persistMerge(
+      planRows.filter((_, i) => i !== index),
+      currentMergeType,
+    );
   };
 
-  const loadingCount = previewHooks.filter(h => h.previewLoading).length;
-  const anyError = previewHooks.some(h => h.previewError);
+  const loadingCount = previewHooks.filter((h) => h.previewLoading).length;
+  const anyError = previewHooks.some((h) => h.previewError);
 
   const displaySql = buildMergePersistedSql(
     currentMergeType === 'union' ? 'union' : 'union_all',
     upstreamNodes.length,
-    planRows.length > 0 ? planRows : undefined
+    planRows.length > 0 ? planRows : undefined,
   );
 
   // ── Table 列定义 ──
@@ -342,12 +333,14 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
     // 动态生成输出列
     ...outputColumns.map((outCol, outIdx) => ({
       title: readOnly ? (
-        <Text strong style={{ fontSize: 12 }}>{outCol}</Text>
+        <Text strong style={{ fontSize: 12 }}>
+          {outCol}
+        </Text>
       ) : (
         <Input
           size="small"
           value={outCol}
-          onChange={e => updateOut(outIdx, e.target.value)}
+          onChange={(e) => updateOut(outIdx, e.target.value)}
           placeholder="列名"
           style={{ fontWeight: 600, fontSize: 12 }}
         />
@@ -358,11 +351,15 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       render: (_: unknown, __: unknown, rowIdx: number) => {
         // 第一行是"输出列"标题行，显示说明文字
         if (rowIdx === 0) {
-          return <Text type="secondary" style={{ fontSize: 11 }}>选择该上游的列</Text>;
+          return (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              选择该上游的列
+            </Text>
+          );
         }
         const upIdx = rowIdx - 1;
         const hook = previewHooks[upIdx];
-        const opts = (hook?.previewData?.columns || []).map(c => ({ value: c, label: c }));
+        const opts = (hook?.previewData?.columns || []).map((c) => ({ value: c, label: c }));
         // 从 plan 中获取当前选择
         const currentVal = planRows[outIdx]?.cols?.[upIdx] ?? '';
         return readOnly ? (
@@ -377,7 +374,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
             placeholder="NULL"
             value={currentVal || undefined}
             options={opts}
-            onChange={v => updateCell(outIdx, upIdx, v ?? '')}
+            onChange={(v) => updateCell(outIdx, upIdx, v ?? '')}
           />
         );
       },
@@ -442,11 +439,11 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
 
       <Radio.Group
         value={currentMergeType}
-        onChange={e => handleMergeTypeChange(e.target.value as ConcatMergeType)}
+        onChange={(e) => handleMergeTypeChange(e.target.value as ConcatMergeType)}
         disabled={readOnly}
         style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
       >
-        {CONCAT_MERGE_OPTIONS.map(opt => (
+        {CONCAT_MERGE_OPTIONS.map((opt) => (
           <Card
             key={opt.value}
             size="small"
@@ -471,7 +468,9 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       <Divider style={{ margin: '12px 0' }} />
 
       <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Text strong style={{ fontSize: 13 }}>上游数据预览</Text>
+        <Text strong style={{ fontSize: 13 }}>
+          上游数据预览
+        </Text>
         {loadingCount > 0 && <Spin size="small" />}
         <Text type="secondary" style={{ fontSize: 11 }}>
           {upstreamNodes.length} 个上游 · {loadingCount > 0 ? '加载中…' : '已就绪'}
@@ -483,7 +482,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
           type="warning"
           showIcon
           message="部分上游数据加载失败"
-          description={previewHooks.find(h => h.previewError)?.previewError}
+          description={previewHooks.find((h) => h.previewError)?.previewError}
           style={{ marginBottom: 8, fontSize: 11 }}
         />
       )}
@@ -503,9 +502,7 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
                 <span style={{ fontSize: 12 }}>
                   <Tag style={{ marginRight: 4 }}>{idx + 1}</Tag>
                   {label}
-                  <span style={{ color: '#999', marginLeft: 6, fontSize: 11 }}>
-                    {cols.length} 列
-                  </span>
+                  <span style={{ color: '#999', marginLeft: 6, fontSize: 11 }}>{cols.length} 列</span>
                 </span>
               }
             >
@@ -514,10 +511,12 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
                   <Spin size="small" />
                 </div>
               ) : cols.length === 0 ? (
-                <Text type="secondary" style={{ fontSize: 11 }}>未获取到列信息</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  未获取到列信息
+                </Text>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                  {cols.map(col => (
+                  {cols.map((col) => (
                     <Tag key={col} style={{ fontSize: 11, margin: 0 }}>
                       {col}
                     </Tag>
@@ -532,7 +531,9 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       <Divider style={{ margin: '12px 0' }} />
 
       <div style={{ marginBottom: 8 }}>
-        <Text strong style={{ fontSize: 13 }}>列映射（纵向拼接）</Text>
+        <Text strong style={{ fontSize: 13 }}>
+          列映射（纵向拼接）
+        </Text>
         <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
           每列选择对应上游的字段，上下对齐
         </Text>
@@ -555,19 +556,16 @@ export const MergeNodeConfig: React.FC<MergeNodeConfigProps> = ({
       />
 
       {!readOnly && (
-        <Button
-          type="dashed"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={addOutputColumn}
-        >
+        <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={addOutputColumn}>
           添加输出列
         </Button>
       )}
 
       <Divider style={{ margin: '12px 0 8px' }} />
 
-      <Text type="secondary" style={{ fontSize: 11 }}>生成的查询：</Text>
+      <Text type="secondary" style={{ fontSize: 11 }}>
+        生成的查询：
+      </Text>
       <pre
         style={{
           marginTop: 4,

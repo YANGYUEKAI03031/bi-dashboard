@@ -7,9 +7,10 @@ Pipeline 类型推断模块
 - 预览数据列类型推断
 - Pipeline 节点类型规范映射
 """
-from typing import Any, List
-from datetime import datetime, date
+
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 
 def preview_value_to_column_type(v: Any) -> str:
@@ -33,13 +34,13 @@ def preview_value_to_column_type(v: Any) -> str:
     return "string"
 
 
-def infer_preview_column_types(rows_raw: List[Any], num_cols: int) -> List[str]:
+def infer_preview_column_types(rows_raw: list[Any], num_cols: int) -> list[str]:
     """用前若干行非空单元格推断每列类型；无行或全空时退化为 string。"""
     if num_cols <= 0:
         return []
     if not rows_raw:
         return ["string"] * num_cols
-    col_types: List[str] = []
+    col_types: list[str] = []
     for i in range(num_cols):
         picked: Any = None
         for row in rows_raw[:50]:

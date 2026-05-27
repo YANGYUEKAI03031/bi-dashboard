@@ -2,7 +2,7 @@
 import { ApiClient, ApiError } from './apiClient';
 
 interface DataSource {
-  id: string;   // 对应后端 Database.id（字符串形式）
+  id: string; // 对应后端 Database.id（字符串形式）
   name: string;
   type: string; // mysql / ...
 }

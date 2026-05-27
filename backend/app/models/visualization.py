@@ -1,32 +1,35 @@
 # backend/app/models/visualization.py
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime, ForeignKey, Boolean
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
-from app.db.base import Base
+
 from app.core.time_utils import utc_now
+from app.db.base import Base
+
 
 class VisualizationCard(Base):
     """图表实体 - 对应现有数据库表结构"""
+
     __tablename__ = "visualization_cards"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    
+
     # 图表类型
     chart_type = Column(String(50), nullable=False)
-    
+
     # 新添加的字段
     dataset_query = Column(JSON)  # 包含SQL查询、数据源、参数等
     visualization_settings = Column(JSON)  # 颜色、轴设置、标题、交互等配置
-    
+
     # 现有字段（需要处理默认值问题）
     config = Column(JSON, default=lambda: {})  # 添加默认值
     query_sql = Column(Text)  # 可能需要默认值
-    
+
     # 适配现有表结构的字段名
     data_source_id = Column(Integer, ForeignKey("databases.id"), nullable=False)  # 原来的 database_id
     created_by = Column(Integer, ForeignKey("useraccount.userID"), nullable=False)  # 原来的 creator_id
-    
+
     # 其他字段
     table_name = Column(String(255), nullable=True)  # 新增：存储实际查询的表名
     is_public = Column(Boolean, default=False)
@@ -35,7 +38,7 @@ class VisualizationCard(Base):
     cache_enabled = Column(Boolean, default=True)
     cache_duration = Column(Integer, default=3600)  # 缓存时长（秒）
     last_cached_at = Column(DateTime, nullable=True)
-    
+
     # 时间戳
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
@@ -50,10 +53,12 @@ class VisualizationCard(Base):
     creator = relationship("User", back_populates="created_visualizations")
     pipeline = relationship("DataPipeline", foreign_keys=[pipeline_id])
 
+
 class Database(Base):
     """数据库连接配置模型"""
+
     __tablename__ = "databases"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     engine = Column(String(50), nullable=False)
@@ -63,17 +68,17 @@ class Database(Base):
     password = Column(String(512), nullable=False)  # 512可容纳Fernet加密密文
     database_name = Column(String(100), nullable=False)
     description = Column(Text)
-    
+
     # 连接状态
     is_active = Column(Boolean, default=True)
     last_connected = Column(DateTime)
-    
+
     # 时间戳
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    
+
     # 关系
     visualization_cards = relationship("VisualizationCard", back_populates="database")
-    
+
     def __repr__(self):
         return f"<Database(id={self.id}, name='{self.name}', engine='{self.engine}')>"

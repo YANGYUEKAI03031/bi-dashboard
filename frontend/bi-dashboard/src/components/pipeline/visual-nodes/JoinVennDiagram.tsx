@@ -91,8 +91,22 @@ export const JoinVennDiagram: React.FC<JoinVennDiagramProps> = ({
         {/* 仅 inner：透镜双边框（左弧 + 右弧） */}
         {I && !L && !rightLit && (
           <>
-            <circle cx={CX1} cy={CY} r={RAD} clipPath="url(#join-venn-clip-inner)" pointerEvents="none" {...ringStrong(COLORS.inner)} />
-            <circle cx={CX2} cy={CY} r={RAD} clipPath="url(#join-venn-clip-c1-full)" pointerEvents="none" {...ringStrong(COLORS.inner)} />
+            <circle
+              cx={CX1}
+              cy={CY}
+              r={RAD}
+              clipPath="url(#join-venn-clip-inner)"
+              pointerEvents="none"
+              {...ringStrong(COLORS.inner)}
+            />
+            <circle
+              cx={CX2}
+              cy={CY}
+              r={RAD}
+              clipPath="url(#join-venn-clip-c1-full)"
+              pointerEvents="none"
+              {...ringStrong(COLORS.inner)}
+            />
           </>
         )}
 
@@ -140,12 +154,28 @@ export const JoinVennDiagram: React.FC<JoinVennDiagramProps> = ({
 
         {/* 仅左月牙（无交集）：不画整圆 */}
         {!I && L && (
-          <circle cx={CX1} cy={CY} r={RAD} fill="none" mask="url(#join-venn-mask-left)" pointerEvents="none" {...ringStrong(COLORS.left)} />
+          <circle
+            cx={CX1}
+            cy={CY}
+            r={RAD}
+            fill="none"
+            mask="url(#join-venn-mask-left)"
+            pointerEvents="none"
+            {...ringStrong(COLORS.left)}
+          />
         )}
 
         {/* 仅右月牙（无交集）：不画整圆 */}
         {!I && rightLit && (
-          <circle cx={CX2} cy={CY} r={RAD} fill="none" mask="url(#join-venn-mask-right)" pointerEvents="none" {...ringStrong(COLORS.right)} />
+          <circle
+            cx={CX2}
+            cy={CY}
+            r={RAD}
+            fill="none"
+            mask="url(#join-venn-mask-right)"
+            pointerEvents="none"
+            {...ringStrong(COLORS.right)}
+          />
         )}
 
         {/* 点击层（不变） */}

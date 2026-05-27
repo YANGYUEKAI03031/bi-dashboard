@@ -32,12 +32,7 @@ export function installResizeObserverNoiseSuppression(): void {
 
   const onRejection = (e: PromiseRejectionEvent): void => {
     const r = e.reason;
-    const msg =
-      typeof r === 'string'
-        ? r
-        : r instanceof Error
-          ? r.message
-          : '';
+    const msg = typeof r === 'string' ? r : r instanceof Error ? r.message : '';
     if (isResizeObserverNoise(msg)) {
       e.stopImmediatePropagation();
       e.preventDefault();
@@ -48,12 +43,7 @@ export function installResizeObserverNoiseSuppression(): void {
   const orig = console.error.bind(console);
   console.error = (...args: unknown[]) => {
     const first = args[0];
-    const text =
-      typeof first === 'string'
-        ? first
-        : first instanceof Error
-          ? first.message
-          : '';
+    const text = typeof first === 'string' ? first : first instanceof Error ? first.message : '';
     if (isResizeObserverNoise(text)) return;
     orig(...args);
   };
@@ -64,24 +54,12 @@ export function installResizeObserverNoiseSuppression(): void {
     source?: string,
     lineno?: number,
     colno?: number,
-    error?: Error
+    error?: Error,
   ): boolean => {
-    const msg =
-      typeof message === 'string'
-        ? message
-        : error?.message || '';
+    const msg = typeof message === 'string' ? message : error?.message || '';
     if (isResizeObserverNoise(msg)) return true;
     if (prevOnError) {
-      return Boolean(
-        (prevOnError as typeof window.onerror).call(
-          window,
-          message,
-          source,
-          lineno,
-          colno,
-          error
-        )
-      );
+      return Boolean((prevOnError as typeof window.onerror).call(window, message, source, lineno, colno, error));
     }
     return false;
   };

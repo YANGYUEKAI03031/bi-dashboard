@@ -1,20 +1,18 @@
 # backend/app/services/pipeline_service.py
 """数据管道 (Pipeline) 服务层"""
-import json
+
 import logging
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
-from sqlalchemy import select, update, delete, func, and_
+from typing import Any
+
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.time_utils import utc_now
-
 from app.models.pipeline import DataPipeline, PipelineExecution
 from app.models.visualization import Database
 from app.services.pipeline.temp_table_manager import TempTableManager
-from app.services.pipeline.engine import PipelineEngine
-from app.core.security import get_current_user_id
+from app.services.pipeline.validator import validate_and_quote_table_name
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +53,12 @@ class PipelineService:
         self,
         name: str,
         source_data_source_id: int,
-        nodes: List[Dict[str, Any]],
+        nodes: list[dict[str, Any]],
         user_id: int,
-        description: Optional[str] = None,
-        variables: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
-        is_public: bool = False
+        description: str | None = None,
+        variables: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
+        is_public: bool = False,
     ) -> DataPipeline:
         """创建新管道"""
         try:
@@ -75,7 +73,7 @@ class PipelineService:
                 config=config or {},
                 is_active=True,
                 created_by=user_id,
-                is_public=is_public
+                is_public=is_public,
             )
 
             self.db.add(pipeline)
@@ -90,7 +88,7 @@ class PipelineService:
             logger.error(f"创建管道失败: {e}")
             raise Exception(f"创建管道失败: {str(e)}")
 
-    async def get_pipeline(self, pipeline_id: int) -> Optional[DataPipeline]:
+    async def get_pipeline(self, pipeline_id: int) -> DataPipeline | None:
         """获取管道详情"""
         try:
             stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
@@ -101,20 +99,14 @@ class PipelineService:
             raise Exception(f"获取管道失败: {str(e)}")
 
     async def get_user_pipelines(
-        self,
-        user_id: int,
-        skip: int = 0,
-        limit: int = 100,
-        include_public: bool = True
-    ) -> Tuple[List[DataPipeline], int]:
+        self, user_id: int, skip: int = 0, limit: int = 100, include_public: bool = True
+    ) -> tuple[list[DataPipeline], int]:
         """获取用户可访问的管道列表"""
         try:
             # 构建查询条件
             conditions = []
             if include_public:
-                conditions.append(
-                    (DataPipeline.created_by == user_id) | (DataPipeline.is_public == True)
-                )
+                conditions.append((DataPipeline.created_by == user_id) | (DataPipeline.is_public == True))
             else:
                 conditions.append(DataPipeline.created_by == user_id)
 
@@ -141,12 +133,7 @@ class PipelineService:
             logger.error(f"获取管道列表失败: {e}")
             raise Exception(f"获取管道列表失败: {str(e)}")
 
-    async def update_pipeline(
-        self,
-        pipeline_id: int,
-        user_id: int,
-        **update_fields
-    ) -> Optional[DataPipeline]:
+    async def update_pipeline(self, pipeline_id: int, user_id: int, **update_fields) -> DataPipeline | None:
         """更新管道"""
         try:
             pipeline = await self.get_pipeline(pipeline_id)
@@ -159,50 +146,52 @@ class PipelineService:
 
             # 更新字段
             allowed_fields = {
-                'name', 'description', 'nodes', 'variables',
-                'config', 'is_active', 'is_public', 'source_data_source_id',
+                "name",
+                "description",
+                "nodes",
+                "variables",
+                "config",
+                "is_active",
+                "is_public",
+                "source_data_source_id",
             }
             update_data = {}
 
             for key, value in update_fields.items():
                 if key in allowed_fields and value is not None:
-                    if key == 'nodes' and isinstance(value, list):
-                        update_data[key] = value
-                    elif key != 'nodes':
+                    if key == "nodes" and isinstance(value, list) or key != "nodes":
                         update_data[key] = value
 
             if update_data:
                 # 检测被删除的 chart 节点和 output 节点
                 deleted_chart_nodes = []
                 deleted_output_nodes = []  # {node_id: target_table_name}
-                if 'nodes' in update_fields:
-                    old_nodes = getattr(pipeline, 'nodes', []) or []
+                if "nodes" in update_fields:
+                    old_nodes = getattr(pipeline, "nodes", []) or []
                     if isinstance(old_nodes, str):
                         import json
+
                         try:
                             old_nodes = json.loads(old_nodes)
                         except json.JSONDecodeError:
                             old_nodes = []
-                    old_chart_ids = {n.get('id') for n in old_nodes if n.get('type') == 'chart'}
-                    new_chart_ids = {n.get('id') for n in update_fields['nodes'] if n.get('type') == 'chart'}
+                    old_chart_ids = {n.get("id") for n in old_nodes if n.get("type") == "chart"}
+                    new_chart_ids = {n.get("id") for n in update_fields["nodes"] if n.get("type") == "chart"}
                     deleted_chart_nodes = list(old_chart_ids - new_chart_ids)
 
                     # 检测被删除的 output 节点及其目标表
                     old_output_nodes = {
-                        n.get('id'): n.get('config', {}).get('targetTable', '')
-                        for n in old_nodes if n.get('type') == 'output'
+                        n.get("id"): n.get("config", {}).get("targetTable", "")
+                        for n in old_nodes
+                        if n.get("type") == "output"
                     }
-                    new_output_ids = {n.get('id') for n in update_fields['nodes'] if n.get('type') == 'output'}
+                    new_output_ids = {n.get("id") for n in update_fields["nodes"] if n.get("type") == "output"}
                     for node_id, target_table in old_output_nodes.items():
                         if node_id not in new_output_ids and target_table:
-                            deleted_output_nodes.append({'node_id': node_id, 'target_table': target_table})
+                            deleted_output_nodes.append({"node_id": node_id, "target_table": target_table})
 
-                update_data['updated_at'] = utc_now()
-                stmt = (
-                    update(DataPipeline)
-                    .where(DataPipeline.id == pipeline_id)
-                    .values(**update_data)
-                )
+                update_data["updated_at"] = utc_now()
+                stmt = update(DataPipeline).where(DataPipeline.id == pipeline_id).values(**update_data)
                 await self.db.execute(stmt)
                 await self.db.commit()
                 await self.db.refresh(pipeline)
@@ -211,6 +200,7 @@ class PipelineService:
                 if deleted_chart_nodes:
                     try:
                         from app.services.chart_service import ChartService
+
                         chart_service = ChartService(self.db)
                         for node_id in deleted_chart_nodes:
                             await chart_service.archive_chart_by_node(pipeline_id, node_id)
@@ -223,7 +213,9 @@ class PipelineService:
                     logger.info(f"=== 检测到 {len(deleted_output_nodes)} 个 OUTPUT 节点被删除 ===")
                     try:
                         from sqlalchemy import text
+
                         from app.services.chart_service import _get_db_engine
+
                         source_ds_id = pipeline.source_data_source_id
                         if source_ds_id:
                             db_model = await self.db.get(Database, source_ds_id)
@@ -231,30 +223,45 @@ class PipelineService:
                                 engine = await _get_db_engine(db_model)
                                 async with engine.connect() as conn:
                                     for item in deleted_output_nodes:
-                                        target_table = item['target_table']
-                                        node_id = item['node_id']
-                                        logger.info(f"准备删除 OUTPUT 节点目标表: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}")
+                                        target_table = item["target_table"]
+                                        node_id = item["node_id"]
+                                        logger.info(
+                                            f"准备删除 OUTPUT 节点目标表: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}"
+                                        )
                                         try:
-                                            check_res = await conn.execute(text(
-                                                "SELECT COUNT(*) FROM information_schema.TABLES "
-                                                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl"
-                                            ), {"tbl": target_table})
+                                            check_res = await conn.execute(
+                                                text(
+                                                    "SELECT COUNT(*) FROM information_schema.TABLES "
+                                                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl"
+                                                ),
+                                                {"tbl": target_table},
+                                            )
                                             if check_res.fetchone()[0] > 0:
-                                                await conn.execute(text(f"DROP TABLE IF EXISTS `{target_table}`"))
-                                                await conn.commit()
-                                                logger.info(f"✅ 删除 OUTPUT 节点时清理目标表成功: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}")
+                                                quoted = validate_and_quote_table_name(target_table)
+                                                if quoted:
+                                                    await conn.execute(text(f"DROP TABLE IF EXISTS {quoted}"))
+                                                    await conn.commit()
+                                                    logger.info(
+                                                        f"✅ 删除 OUTPUT 节点时清理目标表成功: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}"
+                                                    )
+                                                else:
+                                                    logger.warning(f"⚠️ OUTPUT 节点目标表名不合法: table={target_table}")
                                             else:
                                                 logger.warning(f"⚠️ OUTPUT 节点目标表不存在: table={target_table}")
                                         except Exception as drop_err:
-                                            logger.error(f"❌ 删除 OUTPUT 节点时清理目标表失败: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}, error={drop_err}")
+                                            logger.error(
+                                                f"❌ 删除 OUTPUT 节点时清理目标表失败: pipeline_id={pipeline_id}, node_id={node_id}, table={target_table}, error={drop_err}"
+                                            )
                             else:
-                                logger.warning(f"⚠️ 数据源不存在，无法清理 OUTPUT 节点目标表: source_data_source_id={source_ds_id}")
+                                logger.warning(
+                                    f"⚠️ 数据源不存在，无法清理 OUTPUT 节点目标表: source_data_source_id={source_ds_id}"
+                                )
                         else:
-                            logger.warning(f"⚠️ 管道没有配置数据源，无法清理 OUTPUT 节点目标表")
+                            logger.warning("⚠️ 管道没有配置数据源，无法清理 OUTPUT 节点目标表")
                     except Exception as drop_err:
                         logger.error(f"❌ 删除 OUTPUT 节点时清理目标表失败: {drop_err}")
                 else:
-                    logger.info(f"=== 没有检测到被删除的 OUTPUT 节点 ===")
+                    logger.info("=== 没有检测到被删除的 OUTPUT 节点 ===")
 
             logger.info(f"更新管道成功: {pipeline.name} (ID: {pipeline.id})")
             return pipeline
@@ -279,9 +286,7 @@ class PipelineService:
 
             # 软删除
             stmt = (
-                update(DataPipeline)
-                .where(DataPipeline.id == pipeline_id)
-                .values(is_active=False, updated_at=utc_now())
+                update(DataPipeline).where(DataPipeline.id == pipeline_id).values(is_active=False, updated_at=utc_now())
             )
             await self.db.execute(stmt)
             await self.db.commit()
@@ -289,6 +294,7 @@ class PipelineService:
             # 归档该 pipeline 所有关联的图表
             try:
                 from app.services.chart_service import ChartService
+
                 chart_service = ChartService(self.db)
                 archived_count = await chart_service.archive_charts_by_pipeline(pipeline_id)
                 logger.info(f"删除管道时归档图表: pipeline_id={pipeline_id}, archived_count={archived_count}")
@@ -307,19 +313,11 @@ class PipelineService:
 
     # ==================== Execution 管理 ====================
 
-    async def create_execution(
-        self,
-        pipeline_id: int,
-        config: Optional[Dict[str, Any]] = None
-    ) -> PipelineExecution:
+    async def create_execution(self, pipeline_id: int, config: dict[str, Any] | None = None) -> PipelineExecution:
         """创建执行记录"""
         try:
             execution = PipelineExecution(
-                pipeline_id=pipeline_id,
-                status="pending",
-                config=config or {},
-                retention_minutes=60,
-                logs=[]
+                pipeline_id=pipeline_id, status="pending", config=config or {}, retention_minutes=60, logs=[]
             )
 
             self.db.add(execution)
@@ -333,7 +331,7 @@ class PipelineService:
             logger.error(f"创建执行记录失败: {e}")
             raise Exception(f"创建执行记录失败: {str(e)}")
 
-    async def get_execution(self, execution_id: int) -> Optional[PipelineExecution]:
+    async def get_execution(self, execution_id: int) -> PipelineExecution | None:
         """获取执行记录"""
         try:
             stmt = select(PipelineExecution).where(PipelineExecution.id == execution_id)
@@ -344,17 +342,12 @@ class PipelineService:
             raise Exception(f"获取执行记录失败: {str(e)}")
 
     async def get_pipeline_executions(
-        self,
-        pipeline_id: int,
-        skip: int = 0,
-        limit: int = 20
-    ) -> Tuple[List[PipelineExecution], int]:
+        self, pipeline_id: int, skip: int = 0, limit: int = 20
+    ) -> tuple[list[PipelineExecution], int]:
         """获取管道的执行历史"""
         try:
             # 获取总数
-            count_stmt = select(func.count(PipelineExecution.id)).where(
-                PipelineExecution.pipeline_id == pipeline_id
-            )
+            count_stmt = select(func.count(PipelineExecution.id)).where(PipelineExecution.pipeline_id == pipeline_id)
             count_result = await self.db.execute(count_stmt)
             total = count_result.scalar() or 0
 
@@ -375,7 +368,7 @@ class PipelineService:
             logger.error(f"获取执行历史失败: {e}")
             raise Exception(f"获取执行历史失败: {str(e)}")
 
-    async def get_latest_execution(self, pipeline_id: int) -> Optional[PipelineExecution]:
+    async def get_latest_execution(self, pipeline_id: int) -> PipelineExecution | None:
         """获取管道最新的执行记录"""
         try:
             stmt = (
@@ -403,10 +396,9 @@ class PipelineService:
 
             execution.status = "cancelled"
             execution.completed_at = utc_now()
-            execution.logs = (execution.logs or []) + [{
-                "time": utc_now().isoformat(),
-                "message": f"执行被用户 {user_id} 取消"
-            }]
+            execution.logs = (execution.logs or []) + [
+                {"time": utc_now().isoformat(), "message": f"执行被用户 {user_id} 取消"}
+            ]
 
             await self.db.commit()
             return True
@@ -422,10 +414,7 @@ class PipelineService:
             # 查找过期的执行记录
             now = utc_now()
             stmt = select(PipelineExecution).where(
-                and_(
-                    PipelineExecution.expires_at < now,
-                    PipelineExecution.status == "completed"
-                )
+                and_(PipelineExecution.expires_at < now, PipelineExecution.status == "completed")
             )
             result = await self.db.execute(stmt)
             expired = list(result.scalars().all())
@@ -446,12 +435,8 @@ class PipelineService:
     # ==================== 预览和查询 ====================
 
     async def get_step_preview(
-        self,
-        execution_id: int,
-        step_id: str,
-        limit: int = 100,
-        offset: int = 0
-    ) -> Dict[str, Any]:
+        self, execution_id: int, step_id: str, limit: int = 100, offset: int = 0
+    ) -> dict[str, Any]:
         """获取步骤预览数据"""
         try:
             execution = await self.get_execution(execution_id)
@@ -507,11 +492,7 @@ class PipelineService:
             logger.error(f"获取步骤预览失败: {e}")
             raise Exception(f"获取步骤预览失败: {str(e)}")
 
-    async def get_step_schema(
-        self,
-        execution_id: int,
-        step_id: str
-    ) -> Dict[str, Any]:
+    async def get_step_schema(self, execution_id: int, step_id: str) -> dict[str, Any]:
         """获取步骤字段模式"""
         try:
             execution = await self.get_execution(execution_id)
@@ -536,10 +517,7 @@ class PipelineService:
                     temp_manager = TempTableManager(conn, execution_id)
                     schema = await temp_manager.get_step_schema(step_id)
 
-                    return {
-                        "step_id": step_id,
-                        "schema": schema
-                    }
+                    return {"step_id": step_id, "schema": schema}
 
             finally:
                 await engine.dispose()
@@ -550,7 +528,7 @@ class PipelineService:
             logger.error(f"获取步骤模式失败: {e}")
             raise Exception(f"获取步骤模式失败: {str(e)}")
 
-    async def get_all_steps_info(self, execution_id: int) -> List[Dict[str, Any]]:
+    async def get_all_steps_info(self, execution_id: int) -> list[dict[str, Any]]:
         """获取所有步骤的摘要信息"""
         try:
             execution = await self.get_execution(execution_id)
@@ -621,48 +599,40 @@ class PipelineService:
 
         return engine
 
-    async def get_pipeline_stats(self, pipeline_id: int) -> Dict[str, Any]:
+    async def get_pipeline_stats(self, pipeline_id: int) -> dict[str, Any]:
         """获取管道统计信息"""
         try:
             # 获取执行统计
-            count_stmt = select(func.count(PipelineExecution.id)).where(
-                PipelineExecution.pipeline_id == pipeline_id
-            )
+            count_stmt = select(func.count(PipelineExecution.id)).where(PipelineExecution.pipeline_id == pipeline_id)
             total_result = await self.db.execute(count_stmt)
             total = total_result.scalar() or 0
 
             success_stmt = select(func.count(PipelineExecution.id)).where(
-                and_(
-                    PipelineExecution.pipeline_id == pipeline_id,
-                    PipelineExecution.status == "completed"
-                )
+                and_(PipelineExecution.pipeline_id == pipeline_id, PipelineExecution.status == "completed")
             )
             success_result = await self.db.execute(success_stmt)
             successful = success_result.scalar() or 0
 
             failed_stmt = select(func.count(PipelineExecution.id)).where(
-                and_(
-                    PipelineExecution.pipeline_id == pipeline_id,
-                    PipelineExecution.status == "failed"
-                )
+                and_(PipelineExecution.pipeline_id == pipeline_id, PipelineExecution.status == "failed")
             )
             failed_result = await self.db.execute(failed_stmt)
             failed = failed_result.scalar() or 0
 
             # 平均执行时间
             avg_stmt = select(func.avg(PipelineExecution.execution_time_ms)).where(
-                and_(
-                    PipelineExecution.pipeline_id == pipeline_id,
-                    PipelineExecution.status == "completed"
-                )
+                and_(PipelineExecution.pipeline_id == pipeline_id, PipelineExecution.status == "completed")
             )
             avg_result = await self.db.execute(avg_stmt)
             avg_time = avg_result.scalar()
 
             # 最后执行时间
-            last_stmt = select(PipelineExecution.started_at).where(
-                PipelineExecution.pipeline_id == pipeline_id
-            ).order_by(PipelineExecution.started_at.desc()).limit(1)
+            last_stmt = (
+                select(PipelineExecution.started_at)
+                .where(PipelineExecution.pipeline_id == pipeline_id)
+                .order_by(PipelineExecution.started_at.desc())
+                .limit(1)
+            )
             last_result = await self.db.execute(last_stmt)
             last_exec = last_result.scalar_one_or_none()
 
@@ -672,7 +642,7 @@ class PipelineService:
                 "successful_executions": successful,
                 "failed_executions": failed,
                 "avg_execution_time_ms": float(avg_time) if avg_time else None,
-                "last_execution": last_exec
+                "last_execution": last_exec,
             }
 
         except SQLAlchemyError as e:

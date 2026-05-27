@@ -5,7 +5,7 @@ import type { PipelineNode } from '../services/pipelineService';
  */
 export function resolvePreviewDataSourceId(
   pipelineNode: PipelineNode | undefined,
-  pipelineDataSourceId?: number | null
+  pipelineDataSourceId?: number | null,
 ): number | undefined {
   if (!pipelineNode) return pipelineDataSourceId ?? undefined;
   if (pipelineNode.type === 'source') {
@@ -37,7 +37,7 @@ export function getFirstSourceDataSourceId(nodes: PipelineNode[]): number | null
  */
 export function hydrateSourceNodesWithPipelineDataSource(
   nodes: PipelineNode[],
-  pipelineSourceId: number
+  pipelineSourceId: number,
 ): PipelineNode[] {
   return nodes.map((n) => {
     if (n.type !== 'source') return n;

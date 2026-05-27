@@ -1,11 +1,12 @@
 # backend/app/core/security.py
 import logging
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import timedelta
+
 import bcrypt
-from jose import JWTError, jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+
 from app.core.config import settings
 from app.core.time_utils import utc_now
 
@@ -46,14 +47,14 @@ def assign_password(user, plain_password: str) -> None:
     user.password_hash = get_password_hash(plain_password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """
     创建访问令牌
-    
+
     Args:
         data: 要编码的数据
         expires_delta: 过期时间增量
-        
+
     Returns:
         JWT token字符串
     """
@@ -62,18 +63,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = utc_now() + expires_delta
     else:
         expire = utc_now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
+
 def verify_token(token: str):
     """
     验证令牌
-    
+
     Args:
         token: JWT token字符串
-        
+
     Returns:
         解码后的数据或None
     """
@@ -82,6 +84,8 @@ def verify_token(token: str):
         return payload
     except JWTError:
         return None
+
+
 def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
     """从JWT token中获取用户ID"""
     credentials_exception = HTTPException(
@@ -89,7 +93,7 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         detail="无法验证凭据",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")

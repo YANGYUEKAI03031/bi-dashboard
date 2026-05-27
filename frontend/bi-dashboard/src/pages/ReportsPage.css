@@ -111,7 +111,10 @@
   color: #94a3b8;
   font-size: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -128,16 +131,16 @@
 }
 
 .dashboard-nav-tag.active {
-  color: #6366F1;
+  color: #6366f1;
   font-weight: 500;
-  border-bottom-color: #6366F1;
+  border-bottom-color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
 .dashboard-nav-tag.active:disabled {
   opacity: 1;
   cursor: default;
-  color: #6366F1;
+  color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
@@ -203,7 +206,9 @@
   color: #94a3b8;
   font-size: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
   margin: 0;
   font-family: inherit;
   line-height: 22px;
@@ -211,7 +216,7 @@
 }
 
 .dashboard-nav-add-tag:hover {
-  color: #6366F1;
+  color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
@@ -229,7 +234,9 @@
   color: #64748b;
   font-size: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
   margin: 0;
   font-family: inherit;
   flex-shrink: 0;
@@ -237,7 +244,7 @@
 }
 
 .dashboard-nav-add-icon-btn:hover {
-  color: #6366F1;
+  color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
@@ -334,12 +341,18 @@
   border-radius: 12px !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
 }
 
 .reports-dashboard-view .ant-card:hover {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
   transform: translateY(-2px);
 }
 
@@ -368,7 +381,9 @@
   border-radius: 12px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 /* ── 筛选器芯片 ── */

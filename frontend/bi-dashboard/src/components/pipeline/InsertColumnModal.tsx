@@ -46,13 +46,7 @@ interface ExpressionEditorProps {
   placeholder?: string;
 }
 
-const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
-  value,
-  onChange,
-  columns,
-  rows = 4,
-  placeholder,
-}) => {
+const ExpressionEditor: React.FC<ExpressionEditorProps> = ({ value, onChange, columns, rows = 4, placeholder }) => {
   const [isFocused, setIsFocused] = useState(false);
 
   // 渲染高亮文本
@@ -69,7 +63,7 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
       return <span>{value}</span>;
     }
 
-    const escapedColumns = columns.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const escapedColumns = columns.map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     if (escapedColumns.length === 0) {
       return <span>{value}</span>;
     }
@@ -184,7 +178,15 @@ export interface InsertedColumnConfig {
   config: Record<string, unknown>;
 }
 
-export type InsertedColumnMethod = 'calculation' | 'split' | 'function' | 'lookup' | 'rank' | 'category' | 'bin' | 'cumulative';
+export type InsertedColumnMethod =
+  | 'calculation'
+  | 'split'
+  | 'function'
+  | 'lookup'
+  | 'rank'
+  | 'category'
+  | 'bin'
+  | 'cumulative';
 
 export interface InsertColumnModalProps {
   visible: boolean;
@@ -322,9 +324,8 @@ const SplitForm: React.FC<SplitFormProps> = ({
     split_type: String(cfg.split_type ?? 'delimiter'),
     delimiter: String(cfg.delimiter ?? ','),
     regex: String(cfg.regex ?? ''),
-    position: typeof cfg.position === 'number' && !Number.isNaN(cfg.position)
-      ? cfg.position
-      : Number(cfg.position) || 1,
+    position:
+      typeof cfg.position === 'number' && !Number.isNaN(cfg.position) ? cfg.position : Number(cfg.position) || 1,
   });
 
   const [values, setValues] = useState(() => parseSplitState(initialConfig ?? {}));
@@ -417,7 +418,8 @@ const CUMULATIVE_SUM_TEMPLATE = {
   label: '累计求和',
   snippet: 'SUM() OVER (PARTITION BY  ORDER BY  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
   description: '对字段按分区和排序进行累计求和',
-  example: 'SUM(销售额) OVER (PARTITION BY 地区 ORDER BY 月份 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n结果示例：地区=华北，月份=1月，累计=1000；2月，累计=2800；3月，累计=4500',
+  example:
+    'SUM(销售额) OVER (PARTITION BY 地区 ORDER BY 月份 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n结果示例：地区=华北，月份=1月，累计=1000；2月，累计=2800；3月，累计=4500',
 };
 
 // 函数表达式快捷模板
@@ -471,9 +473,7 @@ const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange, in
     setExpression((prev) => prev + ` ${col} `);
   };
 
-  const activeTemplateInfo = activeTemplate
-    ? FUNCTION_TEMPLATES.find((t) => t.label === activeTemplate)
-    : null;
+  const activeTemplateInfo = activeTemplate ? FUNCTION_TEMPLATES.find((t) => t.label === activeTemplate) : null;
   const isCumulative = activeTemplateInfo && 'isCumulative' in activeTemplateInfo && activeTemplateInfo.isCumulative;
 
   return (
@@ -501,10 +501,12 @@ const FunctionForm: React.FC<FunctionFormProps> = ({ columns, onValuesChange, in
               <>
                 <div style={{ fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', lineHeight: 1.6 }}>
                   <div style={{ marginBottom: 4 }}>
-                    <strong>说明：</strong>{String(activeTemplateInfo.description)}
+                    <strong>说明：</strong>
+                    {String(activeTemplateInfo.description)}
                   </div>
                   <div style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>
-                    <strong>使用示例：</strong>{CUMULATIVE_SUM_TEMPLATE.example}
+                    <strong>使用示例：</strong>
+                    {CUMULATIVE_SUM_TEMPLATE.example}
                   </div>
                 </div>
               </>
@@ -666,31 +668,17 @@ const LookupForm: React.FC<LookupFormProps> = ({
                 title: '',
                 width: '20%',
                 render: (_, record) => (
-                  <Button
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeItem(record.index)}
-                  />
+                  <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeItem(record.index)} />
                 ),
               },
             ]}
           />
-          <Button
-            type="dashed"
-            onClick={addItem}
-            icon={<PlusOutlined />}
-            style={{ marginTop: 8, width: '100%' }}
-          >
+          <Button type="dashed" onClick={addItem} icon={<PlusOutlined />} style={{ marginTop: 8, width: '100%' }}>
             添加映射
           </Button>
         </Form.Item>
         <Form.Item label="默认值 (未匹配时)">
-          <Input
-            value={defaultValue}
-            onChange={(e) => setDefaultValue(e.target.value)}
-            placeholder="留空则保持原值"
-          />
+          <Input value={defaultValue} onChange={(e) => setDefaultValue(e.target.value)} placeholder="留空则保持原值" />
         </Form.Item>
       </Form>
     </div>
@@ -776,17 +764,13 @@ const RankForm: React.FC<RankFormProps> = ({ columns, onValuesChange, initialCon
               style={{ width: '60%' }}
               options={columns.map((c) => ({ label: c, value: c }))}
               value={values.order_by.column || undefined}
-              onChange={(v) =>
-                setValues((prev) => ({ ...prev, order_by: { ...prev.order_by, column: v } }))
-              }
+              onChange={(v) => setValues((prev) => ({ ...prev, order_by: { ...prev.order_by, column: v } }))}
               placeholder="选择排序字段"
             />
             <Select
               style={{ width: '40%' }}
               value={values.order_by.direction}
-              onChange={(v) =>
-                setValues((prev) => ({ ...prev, order_by: { ...prev.order_by, direction: v } }))
-              }
+              onChange={(v) => setValues((prev) => ({ ...prev, order_by: { ...prev.order_by, direction: v } }))}
               options={[
                 { label: '降序 (大在前)', value: 'desc' },
                 { label: '升序 (小在前)', value: 'asc' },
@@ -962,31 +946,17 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
                 title: '',
                 width: '15%',
                 render: (_, record) => (
-                  <Button
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeRange(record.index)}
-                  />
+                  <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeRange(record.index)} />
                 ),
               },
             ]}
           />
-          <Button
-            type="dashed"
-            onClick={addRange}
-            icon={<PlusOutlined />}
-            style={{ marginTop: 8, width: '100%' }}
-          >
+          <Button type="dashed" onClick={addRange} icon={<PlusOutlined />} style={{ marginTop: 8, width: '100%' }}>
             添加区间
           </Button>
         </Form.Item>
         <Form.Item label="默认值 (未匹配时)">
-          <Input
-            value={defaultLabel}
-            onChange={(e) => setDefaultLabel(e.target.value)}
-            placeholder="默认标签"
-          />
+          <Input value={defaultLabel} onChange={(e) => setDefaultLabel(e.target.value)} placeholder="默认标签" />
         </Form.Item>
       </Form>
     </div>
@@ -1006,12 +976,13 @@ function parseBinState(cfg: Record<string, unknown>) {
   const bt = String(cfg.bin_type ?? 'fixed');
   const bin_type = bt === 'custom' ? 'custom' : 'fixed';
   const bin_size =
-    typeof cfg.bin_size === 'number' && !Number.isNaN(cfg.bin_size)
-      ? cfg.bin_size
-      : Number(cfg.bin_size) || 10;
+    typeof cfg.bin_size === 'number' && !Number.isNaN(cfg.bin_size) ? cfg.bin_size : Number(cfg.bin_size) || 10;
   const cb = cfg.custom_bins;
   const custom_bins = Array.isArray(cb)
-    ? cb.map((n) => Number(n)).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b)
+    ? cb
+        .map((n) => Number(n))
+        .filter((n) => !Number.isNaN(n))
+        .sort((a, b) => a - b)
     : [];
   return { bin_type, bin_size, custom_bins };
 }
@@ -1101,7 +1072,10 @@ const BinForm: React.FC<BinFormProps> = ({
                 onChange={(v) =>
                   setValues((prev) => ({
                     ...prev,
-                    custom_bins: v.map(Number).filter((n) => !isNaN(n)).sort((a, b) => a - b),
+                    custom_bins: v
+                      .map(Number)
+                      .filter((n) => !isNaN(n))
+                      .sort((a, b) => a - b),
                   }))
                 }
                 placeholder="输入边界值，如: 0, 1000, 5000, 10000"
@@ -1337,17 +1311,23 @@ export const InsertColumnModal: React.FC<InsertColumnModalProps> = ({
       footer={
         isEdit && onDelete && editConfig?.id ? (
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Button danger onClick={() => { onDelete(editConfig.id!); onCancel(); }}>
+            <Button
+              danger
+              onClick={() => {
+                onDelete(editConfig.id!);
+                onCancel();
+              }}
+            >
               删除此列
             </Button>
             <Space>
               <Button onClick={onCancel}>取消</Button>
-              <Button type="primary" onClick={handleConfirm}>保存修改</Button>
+              <Button type="primary" onClick={handleConfirm}>
+                保存修改
+              </Button>
             </Space>
           </div>
-        ) : (
-          undefined
-        )
+        ) : undefined
       }
     >
       <Form form={form} layout="vertical">

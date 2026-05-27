@@ -28,10 +28,11 @@
   display: flex;
   flex-direction: column;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.12);
-  transition: width var(--transition-spring),
-              flex-basis var(--transition-spring),
-              background-color var(--transition-slow),
-              box-shadow var(--transition-slow);
+  transition:
+    width var(--transition-spring),
+    flex-basis var(--transition-spring),
+    background-color var(--transition-slow),
+    box-shadow var(--transition-slow);
   overflow: hidden;
   position: relative;
 }
@@ -46,9 +47,10 @@
 .logo {
   padding: 24px 20px;
   border-bottom: 1px solid var(--theme-sidebar-border);
-  transition: border-color var(--transition-slow),
-              opacity var(--transition-slow),
-              transform var(--transition-slow);
+  transition:
+    border-color var(--transition-slow),
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
   white-space: nowrap;
   overflow: hidden;
   display: flex;
@@ -86,8 +88,9 @@
 .nav-menu {
   flex: 1;
   padding: 20px 0;
-  transition: opacity var(--transition-slow),
-              transform var(--transition-slow);
+  transition:
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -115,11 +118,15 @@
   transition: all var(--transition-slow);
   font-size: 14px;
   font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   justify-content: flex-start;
 }
 
 .nav-item-bottom {
   margin-top: auto;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .sidebar.collapsed .nav-item {
@@ -129,7 +136,7 @@
 }
 
 .nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.10);
+  background-color: rgba(255, 255, 255, 0.1);
   color: var(--theme-sidebar-text);
   text-decoration: none;
 }
@@ -160,8 +167,12 @@
 
 .nav-text {
   white-space: nowrap;
-  transition: opacity var(--transition-slow),
-              width var(--transition-slow);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition:
+    opacity var(--transition-slow),
+    width var(--transition-slow);
 }
 
 .sidebar.collapsed .nav-text {
@@ -172,9 +183,10 @@
 .sidebar-footer {
   padding: 20px;
   border-top: 1px solid var(--theme-sidebar-border);
-  transition: border-color var(--transition-slow),
-              opacity var(--transition-slow),
-              transform var(--transition-slow);
+  transition:
+    border-color var(--transition-slow),
+    opacity var(--transition-slow),
+    transform var(--transition-slow);
 }
 
 .sidebar.collapsed .sidebar-footer {
@@ -263,7 +275,7 @@
 /* ── 退出按钮 ── */
 .logout-btn {
   width: 100%;
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--theme-sidebar-border);
   color: var(--theme-sidebar-text-secondary);
   padding: 10px;
@@ -277,7 +289,7 @@
 }
 
 .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.2);
   color: var(--theme-sidebar-text);
 }
 
@@ -297,30 +309,9 @@
   background-color: var(--theme-background);
 }
 
-/* ── 顶部栏 ── */
-.top-bar {
-  height: 64px;
-  background: var(--theme-card-background);
-  border-bottom: 1px solid var(--theme-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  box-shadow: var(--shadow-sm);
-  transition: background-color var(--transition-slow),
-              border-color var(--transition-slow);
-}
-
-.top-bar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
 /* ── 侧边栏切换按钮 ── */
 .sidebar-toggle {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--theme-sidebar-border);
   border-radius: var(--radius-xs);
   width: 36px;
@@ -357,41 +348,6 @@
 .sidebar.collapsed .sidebar-toggle {
   width: 36px;
   margin: 0;
-}
-
-/* ── 页面标题 ── */
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--theme-top-bar-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color var(--transition-slow);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* ── 用户操作区 ── */
-.user-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.notification-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--theme-text-tertiary);
-  padding: 8px;
-  border-radius: 50%;
-  transition: all var(--transition-slow);
-}
-
-.notification-btn:hover {
-  background-color: var(--surface-300);
-  color: var(--theme-text-primary);
 }
 
 /* ── 主题切换器 ── */
@@ -546,7 +502,7 @@
   margin-left: 20px;
   margin-top: 4px;
   padding-left: 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.10);
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .sidebar.collapsed .nav-submenu {
@@ -898,15 +854,6 @@
 
 /* 极小屏幕 */
 @media (max-width: 576px) {
-  .top-bar {
-    padding: 0 16px;
-    height: 56px;
-  }
-
-  .page-title {
-    font-size: 16px;
-  }
-
   .content-wrapper {
     padding: 12px;
   }

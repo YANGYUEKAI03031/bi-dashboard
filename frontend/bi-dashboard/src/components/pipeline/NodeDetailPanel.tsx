@@ -3,14 +3,8 @@
  * 双击节点打开；单击仅更新底部预览。
  */
 import React, { useState, useCallback } from 'react';
-import {
-  Form, Input, Select, Button, Space, Divider,
-  Tag, Empty, Typography, Alert, message, Tooltip,
-} from 'antd';
-import {
-  CloseOutlined, DeleteOutlined,
-  InfoCircleOutlined,
-} from '@ant-design/icons';
+import { Form, Input, Select, Button, Space, Divider, Tag, Empty, Typography, Alert, message, Tooltip } from 'antd';
+import { CloseOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../utils/graphUtils';
 import { PipelineNode } from '../../services/pipelineService';
 import { getNodeTypeDef, getEditorSelectableNodeTypeDefs } from '../../utils/nodeTypeRegistry';
@@ -41,7 +35,7 @@ interface NodeDetailPanelProps {
 function getUpstreamNodes(node: GraphNode, allNodes: GraphNode[]): GraphNode[] {
   const upstream = (node.data.pipelineNode as Record<string, unknown>)?.upstream as string[] | undefined;
   if (!upstream) return [];
-  return upstream.map(id => allNodes.find(n => n.id === id)).filter(Boolean) as GraphNode[];
+  return upstream.map((id) => allNodes.find((n) => n.id === id)).filter(Boolean) as GraphNode[];
 }
 
 export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -102,10 +96,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   if (!selectedNode) {
     return (
       <div className="node-detail-panel node-detail-panel--empty">
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="双击画布中的节点打开配置"
-        />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="双击画布中的节点打开配置" />
       </div>
     );
   }
@@ -114,11 +105,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     <div className="node-detail-panel">
       <div className="node-detail-panel-header">
         <div className="node-detail-panel-header-title">
-          {nodeDef && (
-            <span style={{ color: nodeDef.color, fontSize: 18 }}>
-              {nodeDef.icon}
-            </span>
-          )}
+          {nodeDef && <span style={{ color: nodeDef.color, fontSize: 18 }}>{nodeDef.icon}</span>}
           <Text strong style={{ fontSize: 14 }}>
             {pipelineNode?.name || '未命名节点'}
           </Text>
@@ -172,11 +159,9 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               className="node-detail-panel-alert"
               message={
                 <div className="node-detail-panel-alert-inner">
-                  <Text style={{ fontSize: 12 }}>
-                    上游节点（{upstreams.length}个）：
-                  </Text>
+                  <Text style={{ fontSize: 12 }}>上游节点（{upstreams.length}个）：</Text>
                   <div className="node-detail-panel-upstream-tags">
-                    {upstreams.map(up => {
+                    {upstreams.map((up) => {
                       const upPn = up.data.pipelineNode as PipelineNode;
                       const upDef = getNodeTypeDef(upPn.type);
                       return (
@@ -199,21 +184,14 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             size="small"
             className="node-detail-form"
           >
-            <Form.Item
-              name="name"
-              label="节点名称"
-              rules={[{ required: true, message: '请输入节点名称' }]}
-            >
+            <Form.Item name="name" label="节点名称" rules={[{ required: true, message: '请输入节点名称' }]}>
               <Input placeholder="给节点起个名字" />
             </Form.Item>
 
             {!readOnly && (
-              <Form.Item
-                name="type"
-                label="节点类型"
-              >
+              <Form.Item name="type" label="节点类型">
                 <Select size="small">
-                  {getEditorSelectableNodeTypeDefs(pipelineNode?.type).map(def => (
+                  {getEditorSelectableNodeTypeDefs(pipelineNode?.type).map((def) => (
                     <Select.Option key={def.type} value={def.type}>
                       {def.icon} {def.label}
                     </Select.Option>

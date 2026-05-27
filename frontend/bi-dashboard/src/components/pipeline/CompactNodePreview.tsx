@@ -65,7 +65,7 @@ export const CompactNodePreview: React.FC<CompactNodePreviewProps> = ({
     <div>
       {/* Column chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 4 }}>
-        {displayCols.map(col => {
+        {displayCols.map((col) => {
           const typeInfo = getDataTypeInfo(col.type || 'unknown');
           return (
             <Tag
@@ -94,24 +94,29 @@ export const CompactNodePreview: React.FC<CompactNodePreviewProps> = ({
 
       {/* Row preview */}
       {displayRows.length > 0 ? (
-        <div style={{
-          fontFamily: 'monospace',
-          fontSize: 10,
-          color: '#595959',
-          background: '#fafafa',
-          borderRadius: 4,
-          padding: '3px 6px',
-          maxHeight: 56,
-          overflow: 'hidden',
-        }}>
+        <div
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 10,
+            color: '#595959',
+            background: '#fafafa',
+            borderRadius: 4,
+            padding: '3px 6px',
+            maxHeight: 56,
+            overflow: 'hidden',
+          }}
+        >
           {displayRows.map((row, i) => (
-            <div key={i} style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              lineHeight: '16px',
-            }}>
-              {displayCols.map(col => (
+            <div
+              key={i}
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                lineHeight: '16px',
+              }}
+            >
+              {displayCols.map((col) => (
                 <span key={col.name}>
                   {formatValue(row[col.name])}
                   {col !== displayCols[displayCols.length - 1] && ' | '}
@@ -121,7 +126,9 @@ export const CompactNodePreview: React.FC<CompactNodePreviewProps> = ({
           ))}
         </div>
       ) : (
-        <Text type="secondary" style={{ fontSize: 10 }}>无数据</Text>
+        <Text type="secondary" style={{ fontSize: 10 }}>
+          无数据
+        </Text>
       )}
 
       {/* Row count */}

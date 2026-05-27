@@ -80,7 +80,7 @@
 }
 
 .reports-sidebar-item.active .reports-sidebar-item-icon {
-  color: #6366F1;
+  color: #6366f1;
 }
 
 .reports-sidebar-item-text {
@@ -109,7 +109,7 @@
 
 .reports-sidebar-item.active .reports-sidebar-item-count {
   background: rgba(99, 102, 241, 0.15);
-  color: #6366F1;
+  color: #6366f1;
 }
 
 .reports-sidebar-footer {
@@ -125,7 +125,7 @@
   justify-content: center;
   gap: 4px;
   padding: 8px 12px;
-  background: #6366F1;
+  background: #6366f1;
   color: #ffffff;
   border: none;
   border-radius: 8px;

@@ -42,8 +42,7 @@ const CONNECTOR_LAYER_W = SPINE_LINE_X + 14;
 
 /** 嵌套分组框：边框与阴影用浅蓝，避免主色 #1677ff 过艳 */
 const NESTED_GROUP_BORDER = '#c5d9f0';
-const NESTED_GROUP_SHADOW =
-  '0 2px 8px rgba(90, 130, 180, 0.08), 0 1px 2px rgba(90, 130, 180, 0.05)';
+const NESTED_GROUP_SHADOW = '0 2px 8px rgba(90, 130, 180, 0.08), 0 1px 2px rgba(90, 130, 180, 0.05)';
 
 /** 根分组外框（略浅于纯灰边） */
 const ROOT_GROUP_BORDER = '#e3e6eb';
@@ -124,12 +123,7 @@ const GroupConnectorSvg: React.FC<{
         overflow: 'visible',
       }}
     >
-      <svg
-        width={CONNECTOR_LAYER_W}
-        height={h}
-        style={{ display: 'block', overflow: 'visible' }}
-        aria-hidden
-      >
+      <svg width={CONNECTOR_LAYER_W} height={h} style={{ display: 'block', overflow: 'visible' }} aria-hidden>
         {/* 相邻条件：单段二次贝塞尔，左凸平滑圆弧（无中间拐点）；颜色随且/或 */}
         {n >= 2
           ? Array.from({ length: n - 1 }, (_, k) => {
@@ -138,10 +132,7 @@ const GroupConnectorSvg: React.FC<{
               const dy = y1 - y0;
               const op = betweenOps[k] ?? 'and';
               const stroke = strokeForOp(op);
-              const bulge = Math.min(
-                SPINE_BULGE_MAX,
-                Math.max(SPINE_BULGE_MIN, Math.abs(dy) * 0.26 + 5),
-              );
+              const bulge = Math.min(SPINE_BULGE_MAX, Math.max(SPINE_BULGE_MIN, Math.abs(dy) * 0.26 + 5));
               // 控制点向左鼓出
               const midX = LINE_X - bulge;
               const midY = (y0 + y1) / 2;
@@ -163,9 +154,7 @@ const GroupConnectorSvg: React.FC<{
             })
           : null}
         {/* 仅一条条件时无竖弧，仍保留与行对齐的端点圆点 */}
-        {n === 1 && ys[0] !== undefined ? (
-          <circle cx={LINE_X} cy={ys[0]} r={3.5} fill="#1677ff" />
-        ) : null}
+        {n === 1 && ys[0] !== undefined ? <circle cx={LINE_X} cy={ys[0]} r={3.5} fill="#1677ff" /> : null}
       </svg>
       {n >= 2
         ? Array.from({ length: n - 1 }, (_, k) => {
@@ -175,10 +164,7 @@ const GroupConnectorSvg: React.FC<{
             const dy = y1 - y0;
             const midY = (y0 + y1) / 2;
             const bg = strokeForOp(op);
-            const bulge = Math.min(
-              SPINE_BULGE_MAX,
-              Math.max(SPINE_BULGE_MIN, Math.abs(dy) * 0.26 + 5),
-            );
+            const bulge = Math.min(SPINE_BULGE_MAX, Math.max(SPINE_BULGE_MIN, Math.abs(dy) * 0.26 + 5));
             const midX = LINE_X - bulge;
             const badgeX = (LINE_X + midX) / 2;
             return (
@@ -270,7 +256,7 @@ const RuleRow: React.FC<{
     const rule = child; // TypeScript now knows this is a MetricFilterRuleNode
     const field = rule.field;
     const op = rule.op;
-    const fk = field ? fieldTypes[field] ?? 'string' : 'string';
+    const fk = field ? (fieldTypes[field] ?? 'string') : 'string';
     if (fk === 'date' && !isDateMetricFilterOp(op)) {
       onChange(
         updateMetricExprNode(root, childId, (n) =>
@@ -281,9 +267,7 @@ const RuleRow: React.FC<{
     }
     if (fk !== 'date' && field && isDateMetricFilterOp(op)) {
       onChange(
-        updateMetricExprNode(root, childId, (n) =>
-          n.type === 'rule' ? { ...n, op: 'eq', value: n.value } : n,
-        ),
+        updateMetricExprNode(root, childId, (n) => (n.type === 'rule' ? { ...n, op: 'eq', value: n.value } : n)),
       );
     }
     // 用 id/field/op 表征规则语义，避免 child 引用抖动
@@ -292,9 +276,7 @@ const RuleRow: React.FC<{
 
   if (!childExists) return null;
 
-  const fieldKind: MetricFieldKind = child.field
-    ? fieldTypes[child.field] ?? 'string'
-    : 'string';
+  const fieldKind: MetricFieldKind = child.field ? (fieldTypes[child.field] ?? 'string') : 'string';
   const isDateField = fieldKind === 'date';
   const opOptions = isDateField ? METRIC_FILTER_DATE_OP_OPTIONS : METRIC_FILTER_OP_OPTIONS;
   const opSelectWidth = isDateField ? 148 : 122;
@@ -359,11 +341,7 @@ const RuleRow: React.FC<{
           value={rangeVal}
           onChange={(dates) => {
             if (!dates || !dates[0] || !dates[1]) {
-              onChange(
-                updateMetricExprNode(root, childId, (n) =>
-                  n.type === 'rule' ? { ...n, value: '' } : n,
-                ),
-              );
+              onChange(updateMetricExprNode(root, childId, (n) => (n.type === 'rule' ? { ...n, value: '' } : n)));
             } else {
               onChange(
                 updateMetricExprNode(root, childId, (n) =>
@@ -413,9 +391,7 @@ const RuleRow: React.FC<{
           disabled={disabled}
           onChange={(e) =>
             onChange(
-              updateMetricExprNode(root, childId, (n) =>
-                n.type === 'rule' ? { ...n, value: e.target.value } : n,
-              ),
+              updateMetricExprNode(root, childId, (n) => (n.type === 'rule' ? { ...n, value: e.target.value } : n)),
             )
           }
         />
@@ -459,9 +435,7 @@ const RuleRow: React.FC<{
           disabled={disabled || availableFields.length === 0}
           onChange={(v) => {
             const nextField = v || '';
-            const nextKind: MetricFieldKind = nextField
-              ? fieldTypes[nextField] ?? 'string'
-              : 'string';
+            const nextKind: MetricFieldKind = nextField ? (fieldTypes[nextField] ?? 'string') : 'string';
             onChange(
               updateMetricExprNode(root, childId, (n) => {
                 if (n.type !== 'rule') return n;
@@ -696,9 +670,7 @@ const GroupBlock: React.FC<{
                 rowElMap={rowElMap}
                 betweenOps={betweenOps}
                 disabled={disabled}
-                onToggleBetween={(gap) =>
-                  onChange(toggleMetricGroupBetweenOp(root, node.id, gap))
-                }
+                onToggleBetween={(gap) => onChange(toggleMetricGroupBetweenOp(root, node.id, gap))}
               />
             </div>
 
@@ -760,14 +732,7 @@ const GroupBlock: React.FC<{
                       title="在此条件下方添加同级条件"
                       aria-label="在此条件下方添加同级条件"
                       onClick={() =>
-                        onChange(
-                          insertMetricExprChildAfter(
-                            root,
-                            node.id,
-                            child.id,
-                            emptyMetricFilterRuleNode(),
-                          ),
-                        )
+                        onChange(insertMetricExprChildAfter(root, node.id, child.id, emptyMetricFilterRuleNode()))
                       }
                       style={{
                         color: '#1677ff',

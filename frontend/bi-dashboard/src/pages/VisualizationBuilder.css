@@ -17,8 +17,9 @@
   background-color: var(--surface-200);
   border-radius: var(--radius-md);
   border: 2px dashed rgba(74, 144, 226, 0.35);
-  transition: background-color var(--transition-fast),
-              border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .realtime-preview-container:hover {

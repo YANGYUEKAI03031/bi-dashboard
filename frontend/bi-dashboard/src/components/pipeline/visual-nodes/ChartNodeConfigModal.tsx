@@ -3,16 +3,20 @@
  * Reuses core logic from VisualizationBuilder for chart configuration
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Modal, Form, Select, Switch, Input, Radio, Space, Divider, Typography, Alert, Tooltip, Empty } from 'antd';
 import {
-  Modal, Form, Select, Switch, Input,
-  Radio, Space, Divider, Typography, Alert,
-  Tooltip, Empty,
-} from 'antd';
-import {
-  BarChartOutlined, LineChartOutlined, PieChartOutlined,
-  DotChartOutlined, AreaChartOutlined, RadarChartOutlined,
-  FundViewOutlined, ClusterOutlined, FallOutlined,
-  FilterOutlined, RiseOutlined, InfoCircleOutlined,
+  BarChartOutlined,
+  LineChartOutlined,
+  PieChartOutlined,
+  DotChartOutlined,
+  AreaChartOutlined,
+  RadarChartOutlined,
+  FundViewOutlined,
+  ClusterOutlined,
+  FallOutlined,
+  FilterOutlined,
+  RiseOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { ChartFactory, ChartConfig } from '../../charts/ChartFactory';
 import {
@@ -45,13 +49,10 @@ interface ChartNodeConfigModalProps {
 }
 
 /** 根据列格式转换单行数据 */
-function transformRowByFormats(
-  row: Record<string, unknown>,
-  formats: Record<string, string>
-): Record<string, unknown> {
+function transformRowByFormats(row: Record<string, unknown>, formats: Record<string, string>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
 
-  Object.keys(result).forEach(key => {
+  Object.keys(result).forEach((key) => {
     const format = formats[key];
     if (!format || format === 'auto') return;
 
@@ -167,7 +168,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: false,
         title: '饼图',
         description: '需要1个分类字段和1个数值字段',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'scatter':
       return {
@@ -178,7 +179,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: false,
         title: '散点图',
         description: '需要2个数值字段作为X和Y坐标',
-        defaultXGroupBy: false
+        defaultXGroupBy: false,
       };
     case 'radar':
       return {
@@ -189,7 +190,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: true,
         title: '雷达图',
         description: '需要多个数值字段作为维度',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'boxplot':
       return {
@@ -200,7 +201,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: true,
         title: '箱线图',
         description: '需要数值字段用于箱体计算',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'bar_line':
       return {
@@ -211,7 +212,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: true,
         title: '柱线组合图',
         description: '分组柱状 + 折线 + 双Y轴；默认最后2个指标为折线，可在下方指定',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'funnel':
       return {
@@ -222,7 +223,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: false,
         title: '漏斗图',
         description: '需要1个阶段字段和1个数值字段',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'waterfall':
       return {
@@ -233,7 +234,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: false,
         title: '瀑布图',
         description: '需要1个阶段字段和1个增量数值字段',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'stacked_bar':
       return {
@@ -244,7 +245,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: true,
         title: '堆积柱形图',
         description: '需要1个分类字段和多个数值字段进行堆积',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
     case 'metric':
       return {
@@ -254,8 +255,9 @@ const getChartFieldConfig = (chartType: string) => {
         showColorField: false,
         showMultipleY: false,
         title: '指标卡',
-        description: '图表构建器 · 指标图：选择数值列与聚合方式。下方「数据筛选」仅作用于本指标的计算结果，可嵌套组内「且 / 或」；与仪表盘筛选器无关，保存后仍不随全局筛选变化。',
-        defaultXGroupBy: false
+        description:
+          '图表构建器 · 指标图：选择数值列与聚合方式。下方「数据筛选」仅作用于本指标的计算结果，可嵌套组内「且 / 或」；与仪表盘筛选器无关，保存后仍不随全局筛选变化。',
+        defaultXGroupBy: false,
       };
     default:
       return {
@@ -266,7 +268,7 @@ const getChartFieldConfig = (chartType: string) => {
         showMultipleY: true,
         title: '柱状图/折线图',
         description: '需要1个分类字段和1个或多个数值字段',
-        defaultXGroupBy: true
+        defaultXGroupBy: true,
       };
   }
 };
@@ -320,7 +322,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       prev: ChartNodeConfigType,
       rows: Record<string, unknown>[],
       columns: string[],
-      renamedToOriginal: Record<string, string> = {}
+      renamedToOriginal: Record<string, string> = {},
     ): ChartNodeConfigType => {
       if (prev.xField || (prev.yFields && prev.yFields.length > 0)) return prev;
       if (!rows.length || !columns.length) return prev;
@@ -338,10 +340,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       if (prev.chartType === 'metric') {
         const numericFirst = columns.find((col) => {
           const v = getSampleValue(col);
-          return (
-            typeof v === 'number' ||
-            (typeof v === 'string' && isNumericString(v))
-          );
+          return typeof v === 'number' || (typeof v === 'string' && isNumericString(v));
         });
         const y0 = numericFirst || columns[0];
         return {
@@ -386,10 +385,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       let suitableYFields = columns
         .filter((field) => {
           const sampleValue = getSampleValue(field);
-          return (
-            typeof sampleValue === 'number' ||
-            (typeof sampleValue === 'string' && isNumericString(sampleValue))
-          );
+          return typeof sampleValue === 'number' || (typeof sampleValue === 'string' && isNumericString(sampleValue));
         })
         .filter((field) => field !== xField);
 
@@ -410,7 +406,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         yAxisTitle: defaultYFields.length > 1 ? '汇总' : defaultYFields[0] || 'Y轴',
       };
     },
-    []
+    [],
   );
 
   const isNumericString = (val: unknown): boolean => {
@@ -455,25 +451,26 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
           ? upstreamPreviewData.columns
           : Object.keys(rows[0] || {});
     // 应用列重命名映射
-    const columns = rawColumns.map(col => getRenamedField(col));
+    const columns = rawColumns.map((col) => getRenamedField(col));
 
     // 字段类型推断使用原始列名（因为 rows 的 key 是原始列名）
-    const rawColsForTypes = upstreamPreviewData.allColumns?.length > 0
-      ? upstreamPreviewData.allColumns
-      : upstreamPreviewData.columns?.length > 0
-        ? upstreamPreviewData.columns
-        : Object.keys(rows[0] || {});
+    const rawColsForTypes =
+      upstreamPreviewData.allColumns?.length > 0
+        ? upstreamPreviewData.allColumns
+        : upstreamPreviewData.columns?.length > 0
+          ? upstreamPreviewData.columns
+          : Object.keys(rows[0] || {});
     setFieldTypes(inferMetricFieldTypesFromSampleRows(rows, rawColsForTypes));
 
     // 应用列格式转换
     const formats = config.previewColumnFormats || {};
-    const formatted = rows.map(row => transformRowByFormats(row, formats));
+    const formatted = rows.map((row) => transformRowByFormats(row, formats));
 
     // 如果有列重命名，需要创建包含重命名后列名的图表数据
     // 因为 config.xField/yFields 使用的是重命名后的列名
     let chartData = formatted;
     if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
-      chartData = formatted.map(row => {
+      chartData = formatted.map((row) => {
         const newRow: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(row)) {
           const renamedKey = getRenamedField(key);
@@ -515,12 +512,12 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
   useEffect(() => {
     if (!open || !upstreamPreviewData?.rows?.length) return;
     const formats = config.previewColumnFormats || {};
-    const formatted = upstreamPreviewData.rows.map(row => transformRowByFormats(row, formats));
+    const formatted = upstreamPreviewData.rows.map((row) => transformRowByFormats(row, formats));
 
     // 如果有列重命名，需要创建包含重命名后列名的图表数据
     let chartData = formatted;
     if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
-      chartData = formatted.map(row => {
+      chartData = formatted.map((row) => {
         const newRow: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(row)) {
           const renamedKey = getRenamedField(key);
@@ -539,19 +536,17 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     if (!open || !nodeConfig) return;
     const externalFormats = nodeConfig.previewColumnFormats;
     if (externalFormats !== config.previewColumnFormats) {
-      setConfig(prev => ({
+      setConfig((prev) => ({
         ...prev,
         previewColumnFormats: externalFormats,
       }));
       // 同时更新格式化后的图表数据（应用列重命名）
       if (upstreamPreviewData?.rows?.length) {
-        const formatted = upstreamPreviewData.rows.map(row =>
-          transformRowByFormats(row, externalFormats || {})
-        );
+        const formatted = upstreamPreviewData.rows.map((row) => transformRowByFormats(row, externalFormats || {}));
 
         let chartData = formatted;
         if (renamedToOriginal && Object.keys(renamedToOriginal).length > 0) {
-          chartData = formatted.map(row => {
+          chartData = formatted.map((row) => {
             const newRow: Record<string, unknown> = {};
             for (const [key, value] of Object.entries(row)) {
               const renamedKey = getRenamedField(key);
@@ -576,9 +571,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
       newConfig.xAxisTitle = changedValues.xField;
     }
     if (changedValues.yFields !== undefined) {
-      newConfig.yAxisTitle = changedValues.yFields.length > 1
-        ? '汇总'
-        : changedValues.yFields[0] || 'Y轴';
+      newConfig.yAxisTitle = changedValues.yFields.length > 1 ? '汇总' : changedValues.yFields[0] || 'Y轴';
     }
 
     setConfig(newConfig);
@@ -589,9 +582,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
     const newConfig = {
       ...config,
       chartType,
-      xGroupByEnabled: chartType === 'metric' || chartType === 'scatter'
-        ? false
-        : config.xGroupByEnabled,
+      xGroupByEnabled: chartType === 'metric' || chartType === 'scatter' ? false : config.xGroupByEnabled,
     };
     setConfig(newConfig);
   };
@@ -719,7 +710,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
         {/* Chart Type Selection */}
         <Form.Item label="图表类型" required>
           <div className="chart-type-grid">
-            {CHART_TYPES_WITH_ICONS.map(ct => (
+            {CHART_TYPES_WITH_ICONS.map((ct) => (
               <Tooltip key={ct.value} title={ct.label}>
                 <div
                   className={`chart-type-item ${config.chartType === ct.value ? 'selected' : ''}`}
@@ -741,11 +732,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
             字段映射
           </Text>
 
-          <Form
-            form={form}
-            layout="vertical"
-            onValuesChange={handleFormChange}
-          >
+          <Form form={form} layout="vertical" onValuesChange={handleFormChange}>
             {/* X Axis Field */}
             {fieldMappingConfig.xFieldRequired ? (
               <Form.Item
@@ -781,11 +768,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
                       </Text>
                     </span>
                   }
-                  extra={
-                    availableFields.length === 0
-                      ? '暂无可用字段'
-                      : fieldMappingConfig.description
-                  }
+                  extra={availableFields.length === 0 ? '暂无可用字段' : fieldMappingConfig.description}
                 >
                   <Select
                     mode="multiple"
@@ -803,11 +786,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item
                 name="yFields"
                 label="数值字段 (Y轴)"
-                extra={
-                  availableFields.length === 0
-                    ? '暂无可用字段'
-                    : fieldMappingConfig.description
-                }
+                extra={availableFields.length === 0 ? '暂无可用字段' : fieldMappingConfig.description}
               >
                 <Select
                   allowClear
@@ -821,19 +800,12 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
             )}
 
             {/* Aggregation Method */}
-            <Form.Item
-              name="yAggMethod"
-              label="Y轴聚合方式"
-            >
+            <Form.Item name="yAggMethod" label="Y轴聚合方式">
               <Radio.Group options={AGG_METHOD_OPTIONS} />
             </Form.Item>
 
             {/* X Group By Toggle */}
-            <Form.Item
-              name="xGroupByEnabled"
-              label="按 X 轴聚合 (GROUP BY)"
-              valuePropName="checked"
-            >
+            <Form.Item name="xGroupByEnabled" label="按 X 轴聚合 (GROUP BY)" valuePropName="checked">
               <Switch disabled={readOnly} />
             </Form.Item>
           </Form>
@@ -853,7 +825,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item label="X轴标题" style={{ flex: 1 }}>
                 <Input
                   value={config.xAxisTitle}
-                  onChange={e => setConfig(prev => ({ ...prev, xAxisTitle: e.target.value }))}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, xAxisTitle: e.target.value }))}
                   placeholder={config.xField || 'X轴'}
                   disabled={readOnly}
                 />
@@ -861,7 +833,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item label="Y轴标题" style={{ flex: 1 }}>
                 <Input
                   value={config.yAxisTitle}
-                  onChange={e => setConfig(prev => ({ ...prev, yAxisTitle: e.target.value }))}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, yAxisTitle: e.target.value }))}
                   placeholder={config.yFields[0] || 'Y轴'}
                   disabled={readOnly}
                 />
@@ -873,7 +845,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item label="排序依据" style={{ flex: 1 }}>
                 <Select
                   value={config.sortBy}
-                  onChange={val => setConfig(prev => ({ ...prev, sortBy: val }))}
+                  onChange={(val) => setConfig((prev) => ({ ...prev, sortBy: val }))}
                   options={SORT_OPTIONS}
                   disabled={readOnly}
                 />
@@ -881,7 +853,7 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item label="排序方向" style={{ flex: 1 }}>
                 <Select
                   value={config.sortOrder}
-                  onChange={val => setConfig(prev => ({ ...prev, sortOrder: val }))}
+                  onChange={(val) => setConfig((prev) => ({ ...prev, sortOrder: val }))}
                   options={ORDER_OPTIONS}
                   disabled={readOnly}
                 />
@@ -893,14 +865,14 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
               <Form.Item label="显示图例" valuePropName="checked">
                 <Switch
                   checked={config.showLegend}
-                  onChange={val => setConfig(prev => ({ ...prev, showLegend: val }))}
+                  onChange={(val) => setConfig((prev) => ({ ...prev, showLegend: val }))}
                   disabled={readOnly}
                 />
               </Form.Item>
               <Form.Item label="显示提示" valuePropName="checked">
                 <Switch
                   checked={config.showTooltip}
-                  onChange={val => setConfig(prev => ({ ...prev, showTooltip: val }))}
+                  onChange={(val) => setConfig((prev) => ({ ...prev, showTooltip: val }))}
                   disabled={readOnly}
                 />
               </Form.Item>
@@ -914,9 +886,9 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
                   allowClear
                   showSearch
                   placeholder="选择折线指标"
-                  options={config.yFields.map(f => ({ label: f, value: f }))}
+                  options={config.yFields.map((f) => ({ label: f, value: f }))}
                   value={config.lineYFields}
-                  onChange={val => setConfig(prev => ({ ...prev, lineYFields: val }))}
+                  onChange={(val) => setConfig((prev) => ({ ...prev, lineYFields: val }))}
                   disabled={readOnly}
                 />
               </Form.Item>
@@ -931,17 +903,9 @@ export const ChartNodeConfigModal: React.FC<ChartNodeConfigModalProps> = ({
           </Text>
 
           {!upstreamPreviewData || upstreamPreviewData.rows.length === 0 ? (
-            <Empty
-              description="暂无上游数据，请先配置上游节点"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
+            <Empty description="暂无上游数据，请先配置上游节点" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           ) : !isConfigValid() ? (
-            <Alert
-              type="warning"
-              message={getValidationMessage()}
-              showIcon
-              icon={<InfoCircleOutlined />}
-            />
+            <Alert type="warning" message={getValidationMessage()} showIcon icon={<InfoCircleOutlined />} />
           ) : (
             <div className="chart-preview-container">
               <ChartFactory

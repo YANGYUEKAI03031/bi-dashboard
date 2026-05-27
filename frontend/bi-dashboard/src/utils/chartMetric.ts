@@ -127,9 +127,7 @@ export type MetricFilterExprNode =
     };
 
 /** 与 children 对齐的组内运算符数组，长度 = max(0, n-1) */
-export function getNormalizedBetweenOps(
-  group: Extract<MetricFilterExprNode, { type: 'group' }>,
-): ('and' | 'or')[] {
+export function getNormalizedBetweenOps(group: Extract<MetricFilterExprNode, { type: 'group' }>): ('and' | 'or')[] {
   const n = group.children.length;
   const need = Math.max(0, n - 1);
   if (need === 0) return [];
@@ -301,15 +299,11 @@ function parseExprNode(raw: unknown): MetricFilterExprNode | null {
     };
   }
   if (t === 'group' && Array.isArray(o.children)) {
-    const children = (o.children as unknown[])
-      .map(parseExprNode)
-      .filter((c): c is MetricFilterExprNode => c != null);
+    const children = (o.children as unknown[]).map(parseExprNode).filter((c): c is MetricFilterExprNode => c != null);
     if (children.length === 0) return null;
     let betweenOps: ('and' | 'or')[] | undefined;
     if (Array.isArray(o.betweenOps)) {
-      betweenOps = (o.betweenOps as unknown[]).map((x) =>
-        String(x).toLowerCase() === 'or' ? 'or' : 'and',
-      );
+      betweenOps = (o.betweenOps as unknown[]).map((x) => (String(x).toLowerCase() === 'or' ? 'or' : 'and'));
     }
     return {
       type: 'group',
@@ -438,17 +432,10 @@ function removeMetricExprNodeRec(
   const prevChildren = node.children;
   let children: MetricFilterExprNode[] = prevChildren
     .filter((c) => c.id !== targetId)
-    .map((c) =>
-      c.type === 'group' ? removeMetricExprNodeRec(c, targetId, false) : c,
-    )
+    .map((c) => (c.type === 'group' ? removeMetricExprNodeRec(c, targetId, false) : c))
     .filter((c) => (c.type === 'group' ? c.children.length > 0 : true));
 
-  let betweenOps = adjustBetweenOpsAfterChildrenChange(
-    prevChildren,
-    children,
-    node.betweenOps,
-    node.logic,
-  );
+  let betweenOps = adjustBetweenOpsAfterChildrenChange(prevChildren, children, node.betweenOps, node.logic);
 
   if (children.length === 0) {
     if (isDocumentRoot) {
@@ -492,9 +479,7 @@ export function wrapRuleInNewSubgroup(
   }
   return {
     ...root,
-    children: root.children.map((c) =>
-      c.type === 'group' ? wrapRuleInNewSubgroup(c, parentGroupId, ruleId) : c,
-    ),
+    children: root.children.map((c) => (c.type === 'group' ? wrapRuleInNewSubgroup(c, parentGroupId, ruleId) : c)),
   };
 }
 
@@ -508,9 +493,7 @@ export function addRuleToMetricExprGroup(root: MetricFilterExprNode, groupId: st
   }
   return {
     ...root,
-    children: root.children.map((c) =>
-      c.type === 'group' ? addRuleToMetricExprGroup(c, groupId) : c,
-    ),
+    children: root.children.map((c) => (c.type === 'group' ? addRuleToMetricExprGroup(c, groupId) : c)),
   };
 }
 
@@ -531,9 +514,7 @@ export function addSubgroupToMetricExprGroup(root: MetricFilterExprNode, groupId
   }
   return {
     ...root,
-    children: root.children.map((c) =>
-      c.type === 'group' ? addSubgroupToMetricExprGroup(c, groupId) : c,
-    ),
+    children: root.children.map((c) => (c.type === 'group' ? addSubgroupToMetricExprGroup(c, groupId) : c)),
   };
 }
 
@@ -736,7 +717,10 @@ export function metricRowMatchesRule(row: Record<string, unknown>, rule: MetricF
         return ts > b;
       }
       case 'date_between': {
-        const parts = expected.split(/[|,]/).map((x) => x.trim()).filter(Boolean);
+        const parts = expected
+          .split(/[|,]/)
+          .map((x) => x.trim())
+          .filter(Boolean);
         if (parts.length < 2) return false;
         const lo = parseDayBoundaryMs(parts[0], false);
         const hi = parseDayBoundaryMs(parts[1], true);
@@ -813,9 +797,7 @@ export function applyMetricFilters<T extends Record<string, unknown>>(
 export function computeMetricValue(rows: any[], valueField: string, agg: string): number | null {
   if (!valueField || !Array.isArray(rows) || rows.length === 0) return null;
 
-  const nums = rows
-    .map((r) => parseNumericCell((r as any)[valueField]))
-    .filter((n): n is number => n !== null);
+  const nums = rows.map((r) => parseNumericCell((r as any)[valueField])).filter((n): n is number => n !== null);
 
   switch ((agg || 'sum').toLowerCase()) {
     case 'count':

@@ -1,6 +1,6 @@
 # app/core/config.py
+
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_PASSWORD: Optional[str] = None
+    REDIS_PASSWORD: str | None = None
 
     @property
     def DATABASE_URL(self) -> str:
@@ -42,10 +42,7 @@ class Settings(BaseSettings):
     @property
     def REDIS_URL(self) -> str:
         if self.REDIS_PASSWORD:
-            return (
-                f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:"
-                f"{self.REDIS_PORT}/{self.REDIS_DB}"
-            )
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # Security settings
@@ -87,12 +84,17 @@ settings = Settings()
 # 启动时强制检查 SECRET_KEY，未配置则退出
 if not settings.SECRET_KEY:
     import sys
+
     print("FATAL: SECRET_KEY 未配置，请在 .env 中设置 SECRET_KEY=<随机字符串>", file=sys.stderr)
-    print("  生成方式: python -c \"import secrets; print(secrets.token_urlsafe(32))\"", file=sys.stderr)
+    print('  生成方式: python -c "import secrets; print(secrets.token_urlsafe(32))"', file=sys.stderr)
     sys.exit(1)
 
 # ENCRYPTION_KEY 未配置时发出警告（暂不强制退出，支持渐进式迁移明文密码）
 if not settings.ENCRYPTION_KEY:
     import sys
+
     print("WARNING: ENCRYPTION_KEY 未配置，数据源密码将以明文存储。", file=sys.stderr)
-    print("  设置方式: 在 .env 中添加 ENCRYPTION_KEY=$(python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\")", file=sys.stderr)
+    print(
+        '  设置方式: 在 .env 中添加 ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")',
+        file=sys.stderr,
+    )

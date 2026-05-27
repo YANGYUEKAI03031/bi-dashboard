@@ -13,26 +13,28 @@
 - 使用 MySQL TEMPORARY TABLE，会话级自动清理，零污染
 - 支持两种存储模式：JSON（预览兼容）和列式（性能优先）
 """
+
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncConnection
+from typing import Any
+
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 logger = logging.getLogger(__name__)
 
 # MySQL 类型推断：Python 类型 -> MySQL 类型
-_TYPE_MAP: Dict[str, str] = {
-    "bool":       "TINYINT(1)",
-    "int":        "BIGINT",
-    "float":      "DOUBLE",
-    "str":        "TEXT",
-    "datetime":   "DATETIME(3)",
-    "date":       "DATE",
-    "list":       "JSON",
-    "dict":       "JSON",
+_TYPE_MAP: dict[str, str] = {
+    "bool": "TINYINT(1)",
+    "int": "BIGINT",
+    "float": "DOUBLE",
+    "str": "TEXT",
+    "datetime": "DATETIME(3)",
+    "date": "DATE",
+    "list": "JSON",
+    "dict": "JSON",
 }
 
 
@@ -49,7 +51,7 @@ def _validate_step_id(step_id: str) -> str:
     验证并返回安全的 step_id。
     只允许字母、数字、下划线。
     """
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', step_id):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", step_id):
         raise ValueError(f"Invalid step_id: {step_id}")
     return step_id
 
@@ -60,9 +62,9 @@ def _validate_identifier(identifier: str) -> str:
     支持字母、数字、下划线、中文等 Unicode 字符。
     """
     if not identifier:
-        raise ValueError(f"Invalid SQL identifier: empty")
+        raise ValueError("Invalid SQL identifier: empty")
     # 支持 Unicode 字母（包括中文）+ 数字 + 下划线
-    if not re.match(r'^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$', identifier, re.UNICODE):
+    if not re.match(r"^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$", identifier, re.UNICODE):
         raise ValueError(f"Invalid SQL identifier: {identifier}")
     return identifier
 
@@ -85,16 +87,16 @@ def _serialize_value(value: Any) -> str:
 
 
 # 格式 -> (MySQL 类型, CAST 表达式模板)
-_FORMAT_TYPE_MAP: Dict[str, Tuple[str, str]] = {
-    "date":      ("DATE",           "CAST(`{col}` AS DATE)"),
-    "datetime":  ("DATETIME(3)",    "CAST(`{col}` AS DATETIME(3))"),
-    "number":    ("DECIMAL(20,4)",  "CAST(`{col}` AS DECIMAL(20,4))"),
-    "percent":   ("DECIMAL(20,4)",  "(`{col}` * 100)"),
-    "string":    ("TEXT",           "CAST(`{col}` AS CHAR)"),
+_FORMAT_TYPE_MAP: dict[str, tuple[str, str]] = {
+    "date": ("DATE", "CAST(`{col}` AS DATE)"),
+    "datetime": ("DATETIME(3)", "CAST(`{col}` AS DATETIME(3))"),
+    "number": ("DECIMAL(20,4)", "CAST(`{col}` AS DECIMAL(20,4))"),
+    "percent": ("DECIMAL(20,4)", "(`{col}` * 100)"),
+    "string": ("TEXT", "CAST(`{col}` AS CHAR)"),
 }
 
 
-def _build_cast_expression(col: str, format: str) -> Tuple[str, str]:
+def _build_cast_expression(col: str, format: str) -> tuple[str, str]:
     """
     根据格式生成 CAST 表达式和 MySQL 列类型。
 
@@ -136,7 +138,7 @@ class TempTableManager:
         self._json_table_name = f"tmp_pipeline_{exec_id}_json"
         self._json_created = False
         # 列式表：step_id -> (table_name, columns)，持久表跨连接可访问
-        self._struct_tables: Dict[str, Tuple[str, List[str]]] = {}
+        self._struct_tables: dict[str, tuple[str, list[str]]] = {}
 
     def _safe_table_name(self, name: str) -> str:
         """
@@ -146,7 +148,7 @@ class TempTableManager:
         if not name:
             raise ValueError("表名不能为空")
         # 白名单: 只允许项目约定前缀的表名
-        safe_pattern = r'^(tmp_pipeline_\d+_\d+|tmp_pipeline_\d+_json|pipeline_json_\d+)$'
+        safe_pattern = r"^(tmp_pipeline_\d+_\d+|tmp_pipeline_\d+_json|pipeline_json_\d+)$"
         if not re.match(safe_pattern, name):
             raise ValueError(f"非法表名: {name}")
         # 用反引号包裹，内部转义反引号
@@ -163,13 +165,16 @@ class TempTableManager:
         持久表命名：tmp_pipeline_{exec_id}_<idx>，扫描 information_schema.tables 还原映射。
         """
         try:
-            result = await self.connection.execute(text("""
+            result = await self.connection.execute(
+                text("""
                 SELECT table_name
                 FROM information_schema.tables
                 WHERE table_schema = DATABASE()
                 AND table_name LIKE :pattern
                 AND table_name NOT LIKE :json_pattern
-            """), {"pattern": f"tmp_pipeline_{self.exec_id}_%", "json_pattern": f"%_json"})
+            """),
+                {"pattern": f"tmp_pipeline_{self.exec_id}_%", "json_pattern": "%_json"},
+            )
             rows = result.fetchall()
             for row in rows:
                 tbl = row[0]
@@ -180,13 +185,16 @@ class TempTableManager:
                 else:
                     continue
                 # 读取列名
-                col_result = await self.connection.execute(text("""
+                col_result = await self.connection.execute(
+                    text("""
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_schema = DATABASE()
                     AND table_name = :tbl
                     ORDER BY ordinal_position
-                """), {"tbl": tbl})
+                """),
+                    {"tbl": tbl},
+                )
                 cols = [r[0] for r in col_result.fetchall()]
                 if cols:
                     self._struct_tables[step_id] = (tbl, cols)
@@ -223,12 +231,7 @@ class TempTableManager:
             logger.error(f"创建 JSON 临时表失败: {e}")
             raise
 
-    async def insert_step_data(
-        self,
-        step_id: str,
-        data: List[Dict[str, Any]],
-        batch_size: int = 1000
-    ) -> int:
+    async def insert_step_data(self, step_id: str, data: list[dict[str, Any]], batch_size: int = 1000) -> int:
         """
         将 step 结果写入 JSON 临时表（兼容旧调用，用于预览数据）
 
@@ -254,7 +257,7 @@ class TempTableManager:
         row_index = 0
 
         for i in range(0, len(data), batch_size):
-            batch = data[i:i + batch_size]
+            batch = data[i : i + batch_size]
             values_list = []
 
             for row in batch:
@@ -293,12 +296,7 @@ class TempTableManager:
         logger.info(f"步骤 {safe_step_id} 写入 {total_inserted} 行数据到 JSON 临时表")
         return total_inserted
 
-    async def query_step_preview(
-        self,
-        step_id: str,
-        limit: int = 100,
-        offset: int = 0
-    ) -> Dict[str, Any]:
+    async def query_step_preview(self, step_id: str, limit: int = 100, offset: int = 0) -> dict[str, Any]:
         """
         查询指定 step 的数据用于预览（优先从列式表读，无则回退 JSON 表）
 
@@ -316,9 +314,7 @@ class TempTableManager:
             try:
                 # 查总数
                 safe_tbl = self._safe_table_name(tbl_name)
-                count_res = await self.connection.execute(
-                    text(f"SELECT COUNT(*) FROM {safe_tbl}")
-                )
+                count_res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {safe_tbl}"))
                 total = count_res.fetchone()[0]
 
                 if total == 0:
@@ -328,7 +324,7 @@ class TempTableManager:
                 safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
                 data_res = await self.connection.execute(
                     text(f"SELECT {safe_cols} FROM {safe_tbl} LIMIT :limit OFFSET :offset"),
-                    {"limit": limit, "offset": offset}
+                    {"limit": limit, "offset": offset},
                 )
                 rows = data_res.fetchall()
                 parsed = [dict(zip(columns, r)) for r in rows]
@@ -343,17 +339,20 @@ class TempTableManager:
                     "columns": columns,
                     "rows": parsed,
                     "total": total,
-                    "has_more": (offset + limit) < total
+                    "has_more": (offset + limit) < total,
                 }
             except Exception as e:
                 logger.warning(f"列式表预览失败，回退 JSON 表: {e}")
 
         # 回退 JSON 持久表（直接查 DB，不依赖 _json_created flag）
         try:
-            json_exists = await self.connection.execute(text("""
+            json_exists = await self.connection.execute(
+                text("""
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name = :tname
-            """), {"tname": self._json_table_name})
+            """),
+                {"tname": self._json_table_name},
+            )
             json_exists_row = json_exists.fetchone()
             if not json_exists_row or json_exists_row[0] == 0:
                 return {"step_id": step_id, "columns": [], "rows": [], "total": 0, "has_more": False}
@@ -374,8 +373,7 @@ class TempTableManager:
             LIMIT :limit OFFSET :offset
             """
             result = await self.connection.execute(
-                text(query_sql),
-                {"step_id": step_id, "limit": limit, "offset": offset}
+                text(query_sql), {"step_id": step_id, "limit": limit, "offset": offset}
             )
             rows = result.fetchall()
 
@@ -397,17 +395,13 @@ class TempTableManager:
                 "columns": columns,
                 "rows": parsed_rows,
                 "total": total,
-                "has_more": (offset + limit) < total
+                "has_more": (offset + limit) < total,
             }
         except Exception as e:
             logger.error(f"预览失败: {e}")
             return {"step_id": step_id, "columns": [], "rows": [], "total": 0, "has_more": False, "error": str(e)}
 
-    async def discover_schema_from_sql(
-        self,
-        sql: str,
-        sample_rows: int = 5
-    ) -> Tuple[List[str], List[str]]:
+    async def discover_schema_from_sql(self, sql: str, sample_rows: int = 5) -> tuple[list[str], list[str]]:
         """
         通过 LIMIT sample_rows 发现 SQL 结果的列名和类型
 
@@ -420,8 +414,8 @@ class TempTableManager:
         """
         # 对于包含 UNION 的 SQL，不套 SELECT * FROM (...) AS _t，避免
         # "Every derived table must have its own alias" 错误（UNION 本身已含 derived tables）
-        sql_stripped = sql.rstrip().rstrip(';')
-        has_union = re.search(r'\bUNION\b', sql_stripped, re.IGNORECASE)
+        sql_stripped = sql.rstrip().rstrip(";")
+        has_union = re.search(r"\bUNION\b", sql_stripped, re.IGNORECASE)
         if has_union:
             wrapped = f"{sql_stripped} LIMIT {sample_rows}"
         else:
@@ -429,7 +423,7 @@ class TempTableManager:
         try:
             result = await self.connection.execute(text(wrapped))
             columns = list(result.keys()) if result.keys() else []
-            col_types: List[str] = []
+            col_types: list[str] = []
             rows = result.fetchall()
             for col_name in columns:
                 sample = None
@@ -453,12 +447,8 @@ class TempTableManager:
             return fallback_cols, ["TEXT"] * len(fallback_cols)
 
     async def insert_via_select(
-        self,
-        step_id: str,
-        sql: str,
-        sample_rows: int = 5,
-        column_formats: Optional[Dict[str, str]] = None
-    ) -> Tuple[int, List[str]]:
+        self, step_id: str, sql: str, sample_rows: int = 5, column_formats: dict[str, str] | None = None
+    ) -> tuple[int, list[str]]:
         """
         直接通过 INSERT...SELECT 写入列式临时表，不走 Python 逐行搬运。
 
@@ -485,7 +475,7 @@ class TempTableManager:
             return 0, []
 
         # Step 2: 应用格式转换，确定最终列类型
-        final_col_types: List[str] = []
+        final_col_types: list[str] = []
         if column_formats:
             for col in columns:
                 fmt = column_formats.get(col)
@@ -493,15 +483,15 @@ class TempTableManager:
                     _, mysql_type = _build_cast_expression(col, fmt)
                     final_col_types.append(mysql_type)
                 else:
-                    final_col_types.append(col_types[columns.index(col)] if columns.index(col) < len(col_types) else "TEXT")
+                    final_col_types.append(
+                        col_types[columns.index(col)] if columns.index(col) < len(col_types) else "TEXT"
+                    )
         else:
             final_col_types = col_types
 
         # Step 3: 创建列式持久表（跨连接可访问）
         tbl_name = f"tmp_pipeline_{self.exec_id}_{step_id.replace('step_', '')}"
-        col_defs = ", ".join(
-            f"`{c.replace('`', '``')}` {ct}" for c, ct in zip(columns, final_col_types)
-        )
+        col_defs = ", ".join(f"`{c.replace('`', '``')}` {ct}" for c, ct in zip(columns, final_col_types))
         create_sql = f"""
         CREATE TABLE IF NOT EXISTS {self._safe_table_name(tbl_name)} (
             {col_defs}
@@ -518,15 +508,15 @@ class TempTableManager:
         self._struct_tables[step_id] = (tbl_name, columns)
 
         # Step 4: 构建带 CAST 的 SELECT 列表
-        safe_sql = sql.rstrip().rstrip(';')
-        select_exprs: List[str] = []
+        safe_sql = sql.rstrip().rstrip(";")
+        select_exprs: list[str] = []
         for col in columns:
             if column_formats and col in column_formats:
                 cast_expr, _ = _build_cast_expression(col, column_formats[col])
                 select_exprs.append(f"{cast_expr} AS `{col.replace('`', '``')}`")
             else:
                 select_exprs.append(f"`{col.replace('`', '``')}`")
-        
+
         # INSERT 时使用原列名列表（表创建时已用正确类型）
         safe_cols = ", ".join(f"`{c.replace('`', '``')}`" for c in columns)
         if column_formats:
@@ -544,7 +534,9 @@ class TempTableManager:
             row_count = result.rowcount if result.rowcount and result.rowcount > 0 else 0
             logger.info(f"[DEBUG INSERT] result.rowcount={result.rowcount}, row_count={row_count}")
             if row_count == 0:
-                count_res = await self.connection.execute(text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}"))
+                count_res = await self.connection.execute(
+                    text(f"SELECT COUNT(*) FROM {self._safe_table_name(tbl_name)}")
+                )
                 row_count = count_res.fetchone()[0]
                 logger.info(f"[DEBUG INSERT] After COUNT: row_count={row_count}")
         except Exception as e:
@@ -568,7 +560,7 @@ class TempTableManager:
             return 0
         res = await self.connection.execute(
             text(f"SELECT COUNT(*) FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id"),
-            {"step_id": step_id}
+            {"step_id": step_id},
         )
         row = res.fetchone()
         return row[0] if row else 0
@@ -585,11 +577,11 @@ class TempTableManager:
             logger.warning(f"删除列式表 {tbl_name} 失败: {e}")
         del self._struct_tables[step_id]
 
-    async def get_all_steps(self) -> List[Dict[str, Any]]:
+    async def get_all_steps(self) -> list[dict[str, Any]]:
         """
         获取所有步骤摘要（优先列式表，无则查 JSON 表）
         """
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         # 优先列式表
         for step_id, (tbl_name, columns) in self._struct_tables.items():
             try:
@@ -600,27 +592,36 @@ class TempTableManager:
                 logger.warning(f"获取步骤 {step_id} 信息失败: {e}")
         # 回退 JSON 表（直接查 DB，不依赖 _json_created flag）
         try:
-            json_exists = await self.connection.execute(text("""
+            json_exists = await self.connection.execute(
+                text("""
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name = :tname
-            """), {"tname": self._json_table_name})
+            """),
+                {"tname": self._json_table_name},
+            )
             json_exists_count = json_exists.fetchone()[0]
             if json_exists_count > 0:
-                rows = (await self.connection.execute(text(f"""
+                rows = (
+                    await self.connection.execute(
+                        text(f"""
                     SELECT step_id, COUNT(*) as row_count, MIN(created_at) as created_at
                     FROM {self._safe_table_name(self._json_table_name)}
                     GROUP BY step_id
                     ORDER BY created_at
-                """))).fetchall()
+                """)
+                    )
+                ).fetchall()
                 for row in rows:
                     sid = row[0]
                     if not any(s["step_id"] == sid for s in result):
-                        result.append({
-                            "step_id": sid,
-                            "row_count": row[1],
-                            "created_at": row[2].isoformat() if row[2] else None,
-                            "mode": "json"
-                        })
+                        result.append(
+                            {
+                                "step_id": sid,
+                                "row_count": row[1],
+                                "created_at": row[2].isoformat() if row[2] else None,
+                                "mode": "json",
+                            }
+                        )
         except Exception as e:
             logger.warning(f"获取 JSON 步骤信息失败: {e}")
         return result
@@ -645,12 +646,15 @@ class TempTableManager:
 
         # 2. 兜底：扫描所有 tmp_pipeline_{exec_id}_* 表清理（防止异常路径下表已创建但未注册）
         try:
-            res = await self.connection.execute(text("""
+            res = await self.connection.execute(
+                text("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE()
                   AND table_name LIKE :pattern
                   AND table_name NOT LIKE :json_pattern
-            """), {"pattern": f"tmp_pipeline_{self.exec_id}_%", "json_pattern": f"%_json"})
+            """),
+                {"pattern": f"tmp_pipeline_{self.exec_id}_%", "json_pattern": "%_json"},
+            )
             orphans = [r[0] for r in res.fetchall()]
             for tbl in orphans:
                 try:
@@ -691,12 +695,12 @@ class TempTableManager:
         if self._json_created:
             await self.connection.execute(
                 text(f"DELETE FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id"),
-                {"step_id": step_id}
+                {"step_id": step_id},
             )
             await self.connection.commit()
         logger.info(f"步骤 {step_id} 数据已清空")
 
-    async def get_step_schema(self, step_id: str) -> List[Dict[str, str]]:
+    async def get_step_schema(self, step_id: str) -> list[dict[str, str]]:
         """
         获取指定 step 的字段模式（优先列式表，无则回退 JSON 表首行推断）
         """
@@ -706,7 +710,9 @@ class TempTableManager:
 
         if not self._json_created:
             return []
-        query_sql = f"SELECT data_json FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id LIMIT 1"
+        query_sql = (
+            f"SELECT data_json FROM {self._safe_table_name(self._json_table_name)} WHERE step_id = :step_id LIMIT 1"
+        )
         result = await self.connection.execute(text(query_sql), {"step_id": step_id})
         row = result.fetchone()
         if not row:

@@ -2,9 +2,7 @@
  * SourceNodeConfig - 在源节点内选择业务数据源 + 表（不再依赖管道表单顶栏）。
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Form, Select, Alert, Empty, Typography, Tag, Spin, Space, Divider, Button, InputNumber, Collapse,
-} from 'antd';
+import { Form, Select, Alert, Empty, Typography, Tag, Spin, Space, Divider, Button, InputNumber, Collapse } from 'antd';
 import { DatabaseOutlined, ReloadOutlined, TableOutlined, SettingOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -67,7 +65,9 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       .catch(() => {
         if (!cancelled) setAllDataSources([]);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -87,7 +87,9 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       .finally(() => {
         if (!cancelled) setLoadingTables(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [effectiveDsId]);
 
   useEffect(() => {
@@ -106,10 +108,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
           const pn = node.data.pipelineNode as Record<string, unknown>;
           const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
           const prev = cfg.sourceSchemaColumns as string[] | undefined;
-          const same =
-            Array.isArray(prev) &&
-            prev.length === names.length &&
-            prev.every((n, i) => n === names[i]);
+          const same = Array.isArray(prev) && prev.length === names.length && prev.every((n, i) => n === names[i]);
           if (!same) {
             cfg.sourceSchemaColumns = names;
             node.data = {
@@ -230,11 +229,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
       </Form.Item>
 
       {!effectiveDsId && (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无数据"
-          style={{ margin: '12px 0' }}
-        />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" style={{ margin: '12px 0' }} />
       )}
 
       {loadingTables && !!effectiveDsId && (
@@ -352,9 +347,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                     ]}
                   />
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    {config.incrementalMode
-                      ? '只导入新增或变化的数据'
-                      : '每次重新导入全部数据'}
+                    {config.incrementalMode ? '只导入新增或变化的数据' : '每次重新导入全部数据'}
                   </Text>
                 </Space>
               </Form.Item>
@@ -381,24 +374,21 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                           pipelineNode: {
                             ...pn,
                             config: {
-                              ...(pn.config as Record<string, unknown>) || {},
+                              ...((pn.config as Record<string, unknown>) || {}),
                               incrementalField: v,
                             },
                           },
                         };
                         onChange();
                       }}
-                      options={tableColumns.map(col => ({
-                          label: `${col.name} (${col.type})`,
-                          value: col.name,
-                        }))}
+                      options={tableColumns.map((col) => ({
+                        label: `${col.name} (${col.type})`,
+                        value: col.name,
+                      }))}
                     />
                   </Form.Item>
 
-                  <Form.Item
-                    label="条件类型"
-                    style={{ marginBottom: 8 }}
-                  >
+                  <Form.Item label="条件类型" style={{ marginBottom: 8 }}>
                     <Select
                       size="small"
                       value={config.incrementalType || 'gt'}
@@ -409,7 +399,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                           pipelineNode: {
                             ...pn,
                             config: {
-                              ...(pn.config as Record<string, unknown>) || {},
+                              ...((pn.config as Record<string, unknown>) || {}),
                               incrementalType: v,
                             },
                           },
@@ -446,7 +436,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                       pipelineNode: {
                         ...pn,
                         config: {
-                          ...(pn.config as Record<string, unknown>) || {},
+                          ...((pn.config as Record<string, unknown>) || {}),
                           batchSize: v || 5000,
                         },
                       },
@@ -492,7 +482,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                         pipelineNode: {
                           ...pn,
                           config: {
-                            ...(pn.config as Record<string, unknown>) || {},
+                            ...((pn.config as Record<string, unknown>) || {}),
                             autoTriggerEnabled: v === 'on',
                           },
                         },
@@ -515,10 +505,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
 
               {config.autoTriggerEnabled && (
                 <>
-                  <Form.Item
-                    label="轮询间隔"
-                    style={{ marginBottom: 8 }}
-                  >
+                  <Form.Item label="轮询间隔" style={{ marginBottom: 8 }}>
                     <Select
                       size="small"
                       value={config.pollIntervalSeconds || 300}
@@ -529,7 +516,7 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                           pipelineNode: {
                             ...pn,
                             config: {
-                              ...(pn.config as Record<string, unknown>) || {},
+                              ...((pn.config as Record<string, unknown>) || {}),
                               pollIntervalSeconds: v,
                             },
                           },
@@ -566,14 +553,14 @@ export const SourceNodeConfig: React.FC<SourceNodeConfigProps> = ({
                           pipelineNode: {
                             ...pn,
                             config: {
-                              ...(pn.config as Record<string, unknown>) || {},
+                              ...((pn.config as Record<string, unknown>) || {}),
                               triggerWatermarkField: v,
                             },
                           },
                         };
                         onChange();
                       }}
-                      options={tableColumns.map(col => ({
+                      options={tableColumns.map((col) => ({
                         label: `${col.name} (${col.type})`,
                         value: col.name,
                       }))}

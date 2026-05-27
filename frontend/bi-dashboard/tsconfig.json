@@ -23,8 +23,7 @@
     "paths": {
       "@/*": ["src/*"]
     },
-    // 移除了已废弃的选项，保留有用的配置
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictNullChecks": false
   },
   "include": [

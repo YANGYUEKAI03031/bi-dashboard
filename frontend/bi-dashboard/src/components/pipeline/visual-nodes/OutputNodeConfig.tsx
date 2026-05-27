@@ -3,10 +3,7 @@
  * Lets user pick the target table and write mode.
  */
 import React, { useState } from 'react';
-import {
-  Select, Input, Divider, Tag, Typography,
-  Alert, Card, Radio, Tooltip,
-} from 'antd';
+import { Select, Input, Divider, Tag, Typography, Alert, Card, Radio, Tooltip } from 'antd';
 import { ExportOutlined, TableOutlined, WarningOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -22,8 +19,8 @@ interface OutputNodeConfigProps {
 
 export const WRITE_MODES = [
   { value: 'replace', label: '覆盖', description: '删除旧数据，插入新数据', color: '#F97316' },
-  { value: 'append',  label: '追加', description: '在现有数据后追加新行', color: '#0EA5E9' },
-  { value: 'upsert',  label: 'Upsert（插入或更新）', description: '按唯一键，冲突时更新已有行', color: '#22C55E' },
+  { value: 'append', label: '追加', description: '在现有数据后追加新行', color: '#0EA5E9' },
+  { value: 'upsert', label: 'Upsert（插入或更新）', description: '按唯一键，冲突时更新已有行', color: '#22C55E' },
 ];
 
 export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
@@ -54,9 +51,7 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
     // 读取上游表名（供预览/执行时替换 {prev_table} 占位符）
     const upstreamNodeId = (pn.upstream as string[])?.[0] ?? '';
     // 始终写一个合法的占位 SELECT；实际执行时引擎会替换 {prev_table}
-    const sql = upstreamNodeId
-      ? `SELECT * FROM {prev_table}`
-      : `SELECT * FROM {prev_table}`;
+    const sql = upstreamNodeId ? `SELECT * FROM {prev_table}` : `SELECT * FROM {prev_table}`;
     node.data = {
       ...node.data,
       pipelineNode: {
@@ -85,7 +80,7 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
     );
   }
 
-  const writeModeDef = WRITE_MODES.find(w => w.value === writeMode);
+  const writeModeDef = WRITE_MODES.find((w) => w.value === writeMode);
 
   return (
     <div>
@@ -104,19 +99,22 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
             size="small"
             style={{ width: '100%' }}
             value={targetSchema}
-            onChange={(val) => { setTargetSchema(val); updateConfig({ targetSchema: val }); }}
+            onChange={(val) => {
+              setTargetSchema(val);
+              updateConfig({ targetSchema: val });
+            }}
             placeholder="选择目标数据库"
             disabled={readOnly}
-            options={[
-              { label: '同管道数据源', value: 'same' },
-            ]}
+            options={[{ label: '同管道数据源', value: 'same' }]}
           />
         </div>
         <div>
           <div style={{ marginBottom: 4, fontSize: 12 }}>
             <TableOutlined style={{ marginRight: 4 }} />
             目标表名
-            <Text type="danger" style={{ marginLeft: 4 }}>*</Text>
+            <Text type="danger" style={{ marginLeft: 4 }}>
+              *
+            </Text>
           </div>
           <Input
             size="small"
@@ -143,7 +141,9 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
       <Divider style={{ margin: '8px 0' }} />
 
       <div style={{ marginBottom: 8 }}>
-        <Text strong style={{ fontSize: 13 }}>写入模式</Text>
+        <Text strong style={{ fontSize: 13 }}>
+          写入模式
+        </Text>
       </div>
 
       <Radio.Group
@@ -154,7 +154,7 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
         }}
         style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
       >
-        {WRITE_MODES.map(wm => (
+        {WRITE_MODES.map((wm) => (
           <Radio.Button
             key={wm.value}
             value={wm.value}
@@ -194,7 +194,9 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
         <div style={{ marginTop: 12 }}>
           <div style={{ marginBottom: 4, fontSize: 12 }}>
             唯一键列
-            <Text type="danger" style={{ marginLeft: 4 }}>*</Text>
+            <Text type="danger" style={{ marginLeft: 4 }}>
+              *
+            </Text>
           </div>
           <Input
             size="small"
@@ -225,33 +227,43 @@ export const OutputNodeConfig: React.FC<OutputNodeConfigProps> = ({
       <Card size="small" style={{ background: '#f5f7fa', border: 'none' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div>
-            <Text type="secondary" style={{ fontSize: 11 }}>写入位置：</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              写入位置：
+            </Text>
             <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>
               {targetSchema === 'same' ? '（同管道数据源）' : targetSchema || '（未选择）'}
               {targetTable ? `.${targetTable}` : '（未指定表名）'}
             </Text>
           </div>
           <div>
-            <Text type="secondary" style={{ fontSize: 11 }}>写入模式：</Text>
-            <Tag style={{
-              background: writeModeDef?.color + '20',
-              color: writeModeDef?.color,
-              border: 'none',
-              fontSize: 11,
-            }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              写入模式：
+            </Text>
+            <Tag
+              style={{
+                background: writeModeDef?.color + '20',
+                color: writeModeDef?.color,
+                border: 'none',
+                fontSize: 11,
+              }}
+            >
               {writeModeDef?.label}
             </Tag>
           </div>
           <div>
-            <Text type="secondary" style={{ fontSize: 11 }}>数据来源：</Text>
-            <Text style={{ fontSize: 11 }}>
-              {upstreamNodes.length} 个上游节点
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              数据来源：
             </Text>
+            <Text style={{ fontSize: 11 }}>{upstreamNodes.length} 个上游节点</Text>
           </div>
           {writeMode === 'upsert' && uniqueKey && (
             <div>
-              <Text type="secondary" style={{ fontSize: 11 }}>唯一键：</Text>
-              <Text code style={{ fontSize: 11 }}>{uniqueKey}</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                唯一键：
+              </Text>
+              <Text code style={{ fontSize: 11 }}>
+                {uniqueKey}
+              </Text>
             </div>
           )}
         </div>

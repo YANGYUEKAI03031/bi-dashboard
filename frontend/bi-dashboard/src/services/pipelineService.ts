@@ -91,15 +91,18 @@ export interface ExecutionResponse {
   /** 当前步骤已写入行数（SQL 执行阶段为 0，fetchmany 写入后才有值） */
   current_step_rows?: number;
   /** 各步骤进度详情 */
-  step_progress?: Record<string, {
-    status?: string;
-    rows?: number;
-    phase?: string;
-    phase_message?: string;
-    started_at?: string;
-    completed_at?: string;
-    error?: string;
-  }>;
+  step_progress?: Record<
+    string,
+    {
+      status?: string;
+      rows?: number;
+      phase?: string;
+      phase_message?: string;
+      started_at?: string;
+      completed_at?: string;
+      error?: string;
+    }
+  >;
 }
 
 export interface StepPreviewResponse {
@@ -121,13 +124,16 @@ export interface ExecutionProgress {
   current_step_id: string | null;
   current_step_rows: number;
   total_rows: number | null;
-  step_progress: Record<string, {
-    status: string;
-    rows?: number;
-    started_at?: string;
-    completed_at?: string;
-    error?: string;
-  }>;
+  step_progress: Record<
+    string,
+    {
+      status: string;
+      rows?: number;
+      started_at?: string;
+      completed_at?: string;
+      error?: string;
+    }
+  >;
   completed_steps: Record<string, any>[];
   started_at: string | null;
   completed_at: string | null;
@@ -210,17 +216,27 @@ export class PipelineService {
     }
   }
 
-  static async runPipeline(pipelineId: number): Promise<{ execution_id: number; pipeline_id: number; status: string; message: string }> {
+  static async runPipeline(
+    pipelineId: number,
+  ): Promise<{ execution_id: number; pipeline_id: number; status: string; message: string }> {
     try {
-      return await ApiClient.post<{ execution_id: number; pipeline_id: number; status: string; message: string }>(`/pipeline/${pipelineId}/run`);
+      return await ApiClient.post<{ execution_id: number; pipeline_id: number; status: string; message: string }>(
+        `/pipeline/${pipelineId}/run`,
+      );
     } catch (error) {
       throw new Error(parseApiErrorMessage(error as ApiError, '触发管道运行失败'));
     }
   }
 
-  static async getPipelineExecutions(pipelineId: number, skip = 0, limit = 20): Promise<{ items: ExecutionResponse[]; total: number }> {
+  static async getPipelineExecutions(
+    pipelineId: number,
+    skip = 0,
+    limit = 20,
+  ): Promise<{ items: ExecutionResponse[]; total: number }> {
     try {
-      return await ApiClient.get<{ items: ExecutionResponse[]; total: number }>(`/pipeline/${pipelineId}/executions?skip=${skip}&limit=${limit}`);
+      return await ApiClient.get<{ items: ExecutionResponse[]; total: number }>(
+        `/pipeline/${pipelineId}/executions?skip=${skip}&limit=${limit}`,
+      );
     } catch (error) {
       throw new Error(parseApiErrorMessage(error as ApiError, '获取执行历史失败'));
     }
@@ -252,7 +268,9 @@ export class PipelineService {
 
   static async previewStep(pipelineId: number, stepId: string, limit = 100, offset = 0): Promise<StepPreviewResponse> {
     try {
-      return await ApiClient.get<StepPreviewResponse>(`/pipeline/${pipelineId}/preview/${stepId}?limit=${limit}&offset=${offset}`);
+      return await ApiClient.get<StepPreviewResponse>(
+        `/pipeline/${pipelineId}/preview/${stepId}?limit=${limit}&offset=${offset}`,
+      );
     } catch (error) {
       throw new Error(parseApiErrorMessage(error as ApiError, '预览步骤数据失败'));
     }
@@ -266,9 +284,13 @@ export class PipelineService {
     }
   }
 
-  static async getAllSteps(pipelineId: number): Promise<{ steps: { step_id: string; rows: number; created_at: string }[] }> {
+  static async getAllSteps(
+    pipelineId: number,
+  ): Promise<{ steps: { step_id: string; rows: number; created_at: string }[] }> {
     try {
-      return await ApiClient.get<{ steps: { step_id: string; rows: number; created_at: string }[] }>(`/pipeline/${pipelineId}/steps`);
+      return await ApiClient.get<{ steps: { step_id: string; rows: number; created_at: string }[] }>(
+        `/pipeline/${pipelineId}/steps`,
+      );
     } catch (error) {
       throw new Error(parseApiErrorMessage(error as ApiError, '获取所有步骤失败'));
     }
@@ -315,7 +337,7 @@ export class PipelineService {
       watermark_field: string;
       poll_interval_seconds: number;
       enabled: boolean;
-    }
+    },
   ): Promise<PipelineTrigger> {
     try {
       return await ApiClient.post<PipelineTrigger>(`/pipeline/${pipelineId}/trigger`, triggerData);

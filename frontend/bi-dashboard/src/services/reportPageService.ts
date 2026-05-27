@@ -95,7 +95,7 @@ export class ReportPageService {
 
   static async addDashboardToReportPage(
     pageId: number,
-    dashboardData: ReportPageDashboardCreateRequest
+    dashboardData: ReportPageDashboardCreateRequest,
   ): Promise<ReportPageDashboard> {
     try {
       return await ApiClient.post<ReportPageDashboard>(`/report-pages/${pageId}/dashboards`, dashboardData);
@@ -109,7 +109,7 @@ export class ReportPageService {
 
   static async updateReportPageDashboard(
     rpdId: number,
-    updateData: ReportPageDashboardUpdateRequest
+    updateData: ReportPageDashboardUpdateRequest,
   ): Promise<ReportPageDashboard> {
     try {
       return await ApiClient.put<ReportPageDashboard>(`/report-pages/dashboards/${rpdId}`, updateData);

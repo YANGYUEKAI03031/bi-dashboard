@@ -10,16 +10,16 @@
 - SELECT MAX()/COUNT() 查的是已提交数据行，不存在 binlog 的事务未提交问题
 - 防并发：检查 pipeline 是否正在运行，若正在运行则跳过本次触发
 """
+
 import logging
 import re
+from datetime import UTC
+
+from sqlalchemy import select, text, update
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+
 from app.core.time_utils import utc_now
-from datetime import datetime as dt, timezone
-from typing import Dict, Any, Optional
-
-from sqlalchemy import select, update, text
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
-
-from app.models.pipeline import PipelineTrigger, PipelineExecution, DataPipeline
+from app.models.pipeline import DataPipeline, PipelineExecution, PipelineTrigger
 from app.models.visualization import Database
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,9 @@ def _validate_identifier(name: str) -> str:
     支持字母、数字、下划线、中文等 Unicode 字符。
     """
     if not name:
-        raise ValueError(f"Invalid SQL identifier: empty")
+        raise ValueError("Invalid SQL identifier: empty")
     # 支持 Unicode 字母（包括中文）+ 数字 + 下划线
-    if not re.match(r'^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$', name, re.UNICODE):
+    if not re.match(r"^[\w\u4e00-\u9fff][\w\u4e00-\u9fff0-9]*$", name, re.UNICODE):
         raise ValueError(f"Invalid SQL identifier: {name}")
     return name
 
@@ -49,13 +49,15 @@ def _build_mysql_url(db_model: Database) -> str:
 def _run_pipeline_in_thread(pipeline_id: int, execution_id: int, source_data_url: str):
     """在线程中运行异步 pipeline 执行"""
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
-    from sqlalchemy import select, update
+
     from app.core.config import settings
-    from app.services.pipeline_service import PipelineService
-    from app.services.pipeline.engine import PipelineEngine
     from app.models.pipeline import PipelineExecution
+    from app.services.pipeline.engine import PipelineEngine
+    from app.services.pipeline_service import PipelineService
 
     async def _async_run():
         app_engine = None
@@ -76,9 +78,7 @@ def _run_pipeline_in_thread(pipeline_id: int, execution_id: int, source_data_url
                 pool_recycle=1800,
                 pool_pre_ping=True,
             )
-            SessionLocal = sessionmaker(
-                app_engine, class_=AsyncSession, expire_on_commit=False
-            )
+            SessionLocal = sessionmaker(app_engine, class_=AsyncSession, expire_on_commit=False)
 
             async with SessionLocal() as session:
                 service = PipelineService(session)
@@ -86,22 +86,16 @@ def _run_pipeline_in_thread(pipeline_id: int, execution_id: int, source_data_url
                 execution = await service.get_execution(execution_id)
 
                 if not pipeline or not execution:
-                    logger.error(
-                        f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}"
-                    )
+                    logger.error(f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}")
                     return
 
                 # 更新状态为 running
                 await session.execute(
-                    update(PipelineExecution)
-                    .where(PipelineExecution.id == execution_id)
-                    .values(status="running")
+                    update(PipelineExecution).where(PipelineExecution.id == execution_id).values(status="running")
                 )
                 await session.commit()
 
-                pipeline_engine = PipelineEngine(
-                    session, data_source_engine, pipeline.source_data_source_id
-                )
+                pipeline_engine = PipelineEngine(session, data_source_engine, pipeline.source_data_source_id)
 
                 success, error_msg, result_summary = await pipeline_engine.run(
                     pipeline=pipeline,
@@ -121,14 +115,13 @@ def _run_pipeline_in_thread(pipeline_id: int, execution_id: int, source_data_url
                 )
                 await session.commit()
 
-                logger.info(
-                    f"触发器后台执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}"
-                )
+                logger.info(f"触发器后台执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}")
 
                 # 成功后同步图表
                 if success and pipeline.nodes:
                     try:
                         from app.services.pipeline_chart_sync_service import PipelineChartSyncService
+
                         sync_svc = PipelineChartSyncService(session)
                         nodes_list = pipeline.nodes if isinstance(pipeline.nodes, list) else []
                         count, _ = await sync_svc.sync_pipeline_charts(
@@ -177,9 +170,9 @@ class TriggerScheduler:
         """
         self.db = db
         # 缓存数据源 engine，避免重复创建
-        self._engine_cache: Dict[int, AsyncEngine] = {}
+        self._engine_cache: dict[int, AsyncEngine] = {}
 
-    async def _get_data_source_engine(self, data_source_id: int) -> Optional[AsyncEngine]:
+    async def _get_data_source_engine(self, data_source_id: int) -> AsyncEngine | None:
         """获取数据源的连接引擎，带缓存"""
         if data_source_id in self._engine_cache:
             return self._engine_cache[data_source_id]
@@ -236,7 +229,7 @@ class TriggerScheduler:
             if triggered_count > 0:
                 logger.info(f"本次轮询完成，共触发 {triggered_count} 个 pipeline")
             else:
-                logger.debug(f"本次轮询完成，无触发")
+                logger.debug("本次轮询完成，无触发")
 
         except Exception as e:
             logger.error(f"轮询触发器失败: {e}", exc_info=True)
@@ -323,8 +316,8 @@ class TriggerScheduler:
         # 确保 last_check_at 也有时区信息（数据库可能是 naive datetime）
         last_check = trigger.last_check_at
         if last_check.tzinfo is None:
-            last_check = last_check.replace(tzinfo=timezone.utc)
-        
+            last_check = last_check.replace(tzinfo=UTC)
+
         elapsed = (utc_now() - last_check).total_seconds()
         can_poll = elapsed >= trigger.poll_interval_seconds
         if not can_poll:
@@ -335,26 +328,18 @@ class TriggerScheduler:
     async def _record_check_time(self, trigger: PipelineTrigger) -> None:
         """记录本次检查时间（只更新 last_check_at）"""
         now = utc_now()
-        stmt = (
-            update(PipelineTrigger)
-            .where(PipelineTrigger.id == trigger.id)
-            .values(last_check_at=now)
-        )
+        stmt = update(PipelineTrigger).where(PipelineTrigger.id == trigger.id).values(last_check_at=now)
         await self.db.execute(stmt)
         await self.db.commit()
         trigger.last_check_at = now
 
-    async def _get_pipeline(self, pipeline_id: int) -> Optional[DataPipeline]:
+    async def _get_pipeline(self, pipeline_id: int) -> DataPipeline | None:
         """获取 pipeline 信息"""
         stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def _get_source_metrics(
-        self,
-        trigger: PipelineTrigger,
-        data_source_id: int
-    ) -> tuple[Optional[str], Optional[int]]:
+    async def _get_source_metrics(self, trigger: PipelineTrigger, data_source_id: int) -> tuple[str | None, int | None]:
         """
         从源库查询 MAX(watermark_field) 和 COUNT(*)
 
@@ -381,7 +366,7 @@ class TriggerScheduler:
                     row_count = row[1]
 
                     # 转换 MAX 值为字符串
-                    if max_value is not None and hasattr(max_value, 'isoformat'):
+                    if max_value is not None and hasattr(max_value, "isoformat"):
                         max_value = max_value.isoformat()
                     elif max_value is not None:
                         max_value = str(max_value)
@@ -398,12 +383,7 @@ class TriggerScheduler:
         finally:
             await engine.dispose()
 
-    def _has_new_data(
-        self,
-        trigger: PipelineTrigger,
-        current_max: Optional[str],
-        current_count: int
-    ) -> tuple[bool, bool]:
+    def _has_new_data(self, trigger: PipelineTrigger, current_max: str | None, current_count: int) -> tuple[bool, bool]:
         """
         检查是否有数据变更（新增/更新/删除）
 
@@ -429,14 +409,13 @@ class TriggerScheduler:
     async def _is_pipeline_running(self, pipeline_id: int) -> bool:
         """检查 pipeline 是否正在运行"""
         stmt = select(PipelineExecution).where(
-            PipelineExecution.pipeline_id == pipeline_id,
-            PipelineExecution.status == "running"
+            PipelineExecution.pipeline_id == pipeline_id, PipelineExecution.status == "running"
         )
         result = await self.db.execute(stmt)
         running = result.scalar_one_or_none()
         return running is not None
 
-    async def _trigger_pipeline_run(self, pipeline_id: int) -> Optional[PipelineExecution]:
+    async def _trigger_pipeline_run(self, pipeline_id: int) -> PipelineExecution | None:
         """触发 pipeline 运行，创建执行记录并启动后台任务"""
         try:
             # 创建执行记录
@@ -461,8 +440,9 @@ class TriggerScheduler:
     async def _start_pipeline_execution(self, pipeline_id: int, execution_id: int):
         """启动 pipeline 后台执行"""
         try:
-            from app.models.visualization import Database
             import asyncio
+
+            from app.models.visualization import Database
 
             # 获取数据源 URL
             pipeline_stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
@@ -497,12 +477,7 @@ class TriggerScheduler:
         except Exception as e:
             logger.error(f"启动 pipeline 执行失败: {e}", exc_info=True)
 
-    async def _update_trigger_state(
-        self,
-        trigger: PipelineTrigger,
-        watermark_value: str,
-        row_count: int
-    ) -> None:
+    async def _update_trigger_state(self, trigger: PipelineTrigger, watermark_value: str, row_count: int) -> None:
         """更新触发器状态（水位、行数、时间）"""
         logger.info(f"更新触发器 {trigger.id} 状态: MAX={watermark_value}, COUNT={row_count}")
 
@@ -526,10 +501,7 @@ class TriggerScheduler:
         logger.info(f"更新完成，影响行数: {result.rowcount}")
 
     async def check_source_table_index(
-        self,
-        data_source_id: int,
-        source_table: str,
-        watermark_field: str
+        self, data_source_id: int, source_table: str, watermark_field: str
     ) -> tuple[bool, str]:
         """
         检查源表监控字段是否有索引

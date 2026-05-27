@@ -45,7 +45,10 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
       if (Array.isArray(dashboard.settings.tags)) {
         return dashboard.settings.tags;
       } else if (typeof dashboard.settings.tags === 'string') {
-        return dashboard.settings.tags.split(',').map(t => t.trim()).filter(Boolean);
+        return (dashboard.settings.tags as string)
+          .split(',')
+          .map((t: string) => t.trim())
+          .filter(Boolean);
       }
     }
     // 兼容直接使用 tags 字段的情况
@@ -53,7 +56,10 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
       if (Array.isArray(dashboard.tags)) {
         return dashboard.tags;
       } else if (typeof dashboard.tags === 'string') {
-        return dashboard.tags.split(',').map(t => t.trim()).filter(Boolean);
+        return dashboard.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
       }
     }
     return [];
@@ -62,9 +68,9 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
   // 提取所有唯一的标签
   const tags = useMemo(() => {
     const tagSet = new Set<string>();
-    dashboards.forEach(dashboard => {
+    dashboards.forEach((dashboard) => {
       const dashboardTags = getDashboardTags(dashboard);
-      dashboardTags.forEach(tag => tag && tagSet.add(tag));
+      dashboardTags.forEach((tag) => tag && tagSet.add(tag));
     });
     return Array.from(tagSet).sort();
   }, [dashboards]);
@@ -89,7 +95,7 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
       // 如果有选中的标签，添加到 settings.tags 字段
       if (selectedTagForCreate) {
         dashboardData.settings = {
-          tags: [selectedTagForCreate]
+          tags: [selectedTagForCreate],
         };
       }
 
@@ -138,7 +144,7 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
                   size="small"
                   dataSource={dashboards}
                   renderItem={(dashboard) => (
-                    <List.Item 
+                    <List.Item
                       className={`dashboard-item ${activeDashboardId === dashboard.id ? 'active' : ''}`}
                       onClick={() => onDashboardSelect?.(dashboard.id)}
                     >
@@ -150,8 +156,8 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
             </div>
 
             {/* 按标签分组的目录 */}
-            {tags.map(tag => {
-              const tagDashboards = dashboards.filter(dashboard => {
+            {tags.map((tag) => {
+              const tagDashboards = dashboards.filter((dashboard) => {
                 const dashboardTags = getDashboardTags(dashboard);
                 return dashboardTags.includes(tag);
               });
@@ -159,7 +165,7 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
               return (
                 <div key={tag} className="tag-section">
                   <div className="tag-header">
-                    <span 
+                    <span
                       className={`tag-name ${selectedTag === tag ? 'active' : ''}`}
                       onClick={() => onTagSelect(tag)}
                       style={{ cursor: 'pointer', flex: 1 }}
@@ -180,7 +186,7 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
                       size="small"
                       dataSource={tagDashboards}
                       renderItem={(dashboard) => (
-                        <List.Item 
+                        <List.Item
                           className={`dashboard-item ${activeDashboardId === dashboard.id ? 'active' : ''}`}
                           onClick={() => onDashboardSelect?.(dashboard.id)}
                         >
@@ -208,11 +214,7 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
         footer={null}
       >
         <Form form={createForm} onFinish={handleCreateDashboard} layout="vertical">
-          <Form.Item
-            name="name"
-            label="仪表盘名称"
-            rules={[{ required: true, message: '请输入仪表盘名称' }]}
-          >
+          <Form.Item name="name" label="仪表盘名称" rules={[{ required: true, message: '请输入仪表盘名称' }]}>
             <Input placeholder="输入仪表盘名称" />
           </Form.Item>
 
@@ -222,11 +224,13 @@ export const ReportsSidebar: React.FC<ReportsSidebarProps> = ({
 
           <Form.Item>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => {
-                setCreateModalVisible(false);
-                createForm.resetFields();
-                setSelectedTagForCreate(null);
-              }}>
+              <Button
+                onClick={() => {
+                  setCreateModalVisible(false);
+                  createForm.resetFields();
+                  setSelectedTagForCreate(null);
+                }}
+              >
                 取消
               </Button>
               <Button type="primary" htmlType="submit">

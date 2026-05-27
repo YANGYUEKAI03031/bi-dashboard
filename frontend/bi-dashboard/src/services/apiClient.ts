@@ -1,6 +1,6 @@
 /**
  * 统一 API 客户端
- * 
+ *
  * 特点：
  * - 统一 token 管理（自动从 localStorage 读取/存储）
  * - 统一错误处理（网络错误、超时、HTTP 错误）
@@ -53,21 +53,18 @@ export class ApiClient {
 
   /**
    * 统一请求方法
-   * 
+   *
    * @param endpoint API 端点（相对于 /api/v1）
    * @param options fetch 选项
    * @returns 响应数据（不包含 ok/error 等包装）
    */
-  static async request<T = any>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  static async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      Accept: 'application/json',
       ...options.headers,
     };
 
@@ -178,14 +175,14 @@ export class ApiClient {
   static async requestWithTimeout<T = any>(
     endpoint: string,
     options: RequestInit = {},
-    timeoutMs: number = DEFAULT_TIMEOUT
+    timeoutMs: number = DEFAULT_TIMEOUT,
   ): Promise<T> {
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      Accept: 'application/json',
       ...options.headers,
     };
 
@@ -232,7 +229,7 @@ export class ApiClient {
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = 'ApiError';

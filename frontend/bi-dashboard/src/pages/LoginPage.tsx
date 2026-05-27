@@ -15,10 +15,10 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await authLogin(username, password);
-      
+
       if (result.success) {
         navigate('/dashboard');
       } else {
@@ -40,13 +40,9 @@ export const LoginPage: React.FC = () => {
             <h1>BI Dashboard</h1>
             <p>智能数据分析平台</p>
           </div>
-          
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
-          
+
+          {error && <div className="error-message">{error}</div>}
+
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="username">用户名</label>
@@ -60,7 +56,7 @@ export const LoginPage: React.FC = () => {
                 disabled={loading}
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="password">密码</label>
               <input
@@ -73,16 +69,12 @@ export const LoginPage: React.FC = () => {
                 disabled={loading}
               />
             </div>
-            
-            <button 
-              type="submit" 
-              className={`btn-primary ${loading ? 'loading' : ''}`}
-              disabled={loading}
-            >
+
+            <button type="submit" className={`btn-primary ${loading ? 'loading' : ''}`} disabled={loading}>
               {loading ? '登录中...' : '登录'}
             </button>
           </form>
-          
+
           <div className="login-footer">
             <p>© 2024 BI Dashboard - 智能数据分析平台</p>
           </div>

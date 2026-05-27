@@ -8,9 +8,10 @@ Pipeline 验证模块
 - 管道配置验证
 - 表名验证与格式化
 """
-import re
+
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +27,21 @@ def canonical_pipeline_node_type(node_type: str) -> str:
         规范化的节点类型
     """
     mapping = {
-        "sql": "sql", "source": "sql",
-        "join": "join", "merge": "join",
+        "sql": "sql",
+        "source": "sql",
+        "join": "join",
+        "merge": "join",
         "transform": "filter",
-        "aggregate": "aggregate", "aggregation": "aggregate",
-        "filter": "filter", "rowfilter": "filter",
-        "output": "output", "export": "output",
-        "dedup": "dedup", "deduplicate": "dedup",
-        "calculation": "calculation", "calculate": "calculation",
+        "aggregate": "aggregate",
+        "aggregation": "aggregate",
+        "filter": "filter",
+        "rowfilter": "filter",
+        "output": "output",
+        "export": "output",
+        "dedup": "dedup",
+        "deduplicate": "dedup",
+        "calculation": "calculation",
+        "calculate": "calculation",
         "lookup": "lookup",
         "rank": "rank",
         "split": "split",
@@ -44,7 +52,7 @@ def canonical_pipeline_node_type(node_type: str) -> str:
     return mapping.get(node_type.lower().strip(), node_type.lower().strip())
 
 
-def topological_sort(nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+def topological_sort(nodes: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
     """
     Kahn 算法拓扑排序
 
@@ -58,15 +66,15 @@ def topological_sort(nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any
         return []
 
     # 构建 node_id -> node 映射
-    node_map: Dict[str, Dict[str, Any]] = {}
+    node_map: dict[str, dict[str, Any]] = {}
     for i, node in enumerate(nodes):
         node_id = node.get("id") or f"node_{i}"
         node_map[node_id] = node
 
     # 构建入度表和邻接表
     all_ids = set(node_map.keys())
-    in_degree: Dict[str, int] = {nid: 0 for nid in all_ids}
-    adjacency: Dict[str, List[str]] = {nid: [] for nid in all_ids}
+    in_degree: dict[str, int] = {nid: 0 for nid in all_ids}
+    adjacency: dict[str, list[str]] = {nid: [] for nid in all_ids}
 
     for node_id, node in node_map.items():
         upstream = node.get("upstream") or []
@@ -77,7 +85,7 @@ def topological_sort(nodes: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any
 
     # Kahn 算法
     queue = [nid for nid in all_ids if in_degree[nid] == 0]
-    sorted_ids: List[str] = []
+    sorted_ids: list[str] = []
 
     while queue:
         current = queue.pop(0)
@@ -111,9 +119,9 @@ def validate_sql(sql: str) -> bool:
         return False
 
     sql_upper = sql.upper().strip()
-    
+
     # 预处理：移除外层括号和空白，便于验证包含子查询的 SQL
-    # 例如 "(SELECT ... FROM ... WHERE step_id = 'xxx') AS _up0" 
+    # 例如 "(SELECT ... FROM ... WHERE step_id = 'xxx') AS _up0"
     # 预处理后变为 "SELECT ... FROM ..."
     while sql_upper.startswith("(") and sql_upper.endswith(")"):
         sql_upper = sql_upper[1:-1].strip()
@@ -123,10 +131,7 @@ def validate_sql(sql: str) -> bool:
         return False
 
     # 禁止的危险关键字
-    dangerous_keywords = [
-        "INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE",
-        "ALTER", "CREATE", "GRANT", "REVOKE"
-    ]
+    dangerous_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE"]
 
     for keyword in dangerous_keywords:
         # 确保是独立单词
@@ -138,7 +143,7 @@ def validate_sql(sql: str) -> bool:
     return True
 
 
-def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
+def validate_pipeline_config(nodes: list[dict[str, Any]]) -> tuple[bool, str]:
     """
     验证管道配置
 
@@ -183,7 +188,7 @@ def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
 
         # 检查 merge_type（只允许 union / union all，关联用 join 节点）
         merge_type = node.get("merge_type")
-        if merge_type and merge_type not in ('union', 'union all'):
+        if merge_type and merge_type not in ("union", "union all"):
             return False, f"节点 '{node.get('name', i)}' 的 merge_type 必须是 union | union all"
 
         # 输出节点：目标表与写入模式
@@ -209,8 +214,8 @@ def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
     node_map = {node.get("id") or f"node_{i}": node for i, node in enumerate(nodes)}
     all_node_ids = set(node_map.keys())
 
-    in_degree: Dict[str, int] = {nid: 0 for nid in all_node_ids}
-    adjacency: Dict[str, List[str]] = {nid: [] for nid in all_node_ids}
+    in_degree: dict[str, int] = {nid: 0 for nid in all_node_ids}
+    adjacency: dict[str, list[str]] = {nid: [] for nid in all_node_ids}
 
     for node_id, node in node_map.items():
         upstream = node.get("upstream") or []
@@ -221,7 +226,7 @@ def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
 
     # Kahn 算法检测环
     queue = [nid for nid in all_node_ids if in_degree[nid] == 0]
-    sorted_ids: List[str] = []
+    sorted_ids: list[str] = []
 
     while queue:
         current = queue.pop(0)
@@ -237,7 +242,7 @@ def validate_pipeline_config(nodes: List[Dict[str, Any]]) -> Tuple[bool, str]:
     return True, ""
 
 
-def validate_and_quote_table_name(name: str) -> Optional[str]:
+def validate_and_quote_table_name(name: str) -> str | None:
     """
     验证并格式化表名
 
@@ -251,7 +256,7 @@ def validate_and_quote_table_name(name: str) -> Optional[str]:
         return None
 
     # 只允许字母、数字、下划线
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
         logger.warning(f"表名包含非法字符: {name}")
         return None
 

@@ -37,7 +37,8 @@ export const DATA_TYPE_COLORS: Record<string, { bg: string; text: string; label:
 };
 
 export function getDataTypeInfo(type: string): { bg: string; text: string; label: string } {
-  const key = (type || 'unknown').toLowerCase()
+  const key = (type || 'unknown')
+    .toLowerCase()
     .replace(/varchar|text/, 'string')
     .replace(/int.*/, 'int')
     .replace(/double|float|decimal/, 'decimal');

@@ -83,7 +83,7 @@ export class AuthService {
 
   static async changePassword(
     oldPassword: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<{ success: boolean; message?: string }> {
     if (!ApiClient.isAuthenticated()) {
       return { success: false, message: '请先登录' };

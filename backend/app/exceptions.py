@@ -18,7 +18,9 @@
         ├── ExternalServiceException
         └── ConfigurationException
 """
-from typing import Optional, Any, Dict
+
+from typing import Any
+
 from fastapi import HTTPException, status
 
 
@@ -32,9 +34,9 @@ class AppException(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        status_code: Optional[int] = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        status_code: int | None = None,
     ):
         self.message = message
         self.code = code or self.__class__.__name__
@@ -57,7 +59,7 @@ class AppException(Exception):
             },
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典（用于日志或响应）"""
         return {
             "code": self.code,
@@ -72,6 +74,7 @@ class AppException(Exception):
 # ============================================
 # 业务异常（4xx 错误）
 # ============================================
+
 
 class BusinessException(AppException):
     """业务异常基类（4xx 错误）"""
@@ -149,6 +152,7 @@ class AuthenticationException(BusinessException):
 # 系统异常（5xx 错误）
 # ============================================
 
+
 class SystemException(AppException):
     """系统异常基类（5xx 错误）"""
 
@@ -159,7 +163,7 @@ class SystemException(AppException):
 class DatabaseException(SystemException):
     """数据库操作异常"""
 
-    def __init__(self, message: str = "数据库操作失败", original_error: Optional[Exception] = None):
+    def __init__(self, message: str = "数据库操作失败", original_error: Exception | None = None):
         details = {}
         if original_error:
             details["original_error"] = str(original_error)
@@ -195,6 +199,7 @@ class ConfigurationException(SystemException):
 # ============================================
 # 便捷的 HTTPException 转换函数
 # ============================================
+
 
 def http_exception_from_app_exception(exc: AppException) -> HTTPException:
     """将 AppException 转换为 HTTPException（保持原有响应格式兼容）"""

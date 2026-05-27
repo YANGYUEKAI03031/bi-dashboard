@@ -1,24 +1,22 @@
 # app/main_optimized.py
-from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from datetime import datetime, timezone
-import uvicorn
 import logging
 import traceback
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from app.core.config import settings
-from app.core.cache import cache_service
-from app.services.realtime_sync import realtime_service
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
 from app.api.v1.api import api_router
+from app.core.cache import cache_service
+from app.core.config import settings
 from app.exceptions import AppException
+from app.services.realtime_sync import realtime_service
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -38,6 +36,7 @@ async def lifespan(app: FastAPI):
 
     # 启动 Pipeline 触发调度器
     from app.core.scheduler import init_scheduler
+
     init_scheduler()
     logger.info("Pipeline 触发调度器已启动")
 
@@ -54,6 +53,7 @@ async def lifespan(app: FastAPI):
 
     # 关闭调度器
     from app.core.scheduler import shutdown_scheduler
+
     shutdown_scheduler()
 
     # 停止实时同步服务
@@ -64,16 +64,13 @@ async def lifespan(app: FastAPI):
 
 
 # 创建FastAPI应用
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.PROJECT_VERSION,
-    lifespan=lifespan
-)
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.PROJECT_VERSION, lifespan=lifespan)
 
 
 # ============================================
 # 全局异常处理器（必须在 app 创建后注册）
 # ============================================
+
 
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
@@ -155,7 +152,7 @@ async def health_check():
         "status": "healthy" if (db_healthy and cache_healthy) else "unhealthy",
         "database": "connected" if db_healthy else "disconnected",
         "cache": "connected" if cache_healthy else "disconnected",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -166,15 +163,17 @@ async def get_system_stats():
         "active_connections": len(realtime_service.connections),
         "monitored_tables": list(realtime_service.watchers.keys()),
         "cache_status": cache_service.connected,
-        "uptime": "running"
+        "uptime": "running",
     }
 
 
 async def check_database_health():
     """检查数据库连接健康状态"""
     try:
-        from app.db.session import AsyncSessionLocal
         from sqlalchemy import text
+
+        from app.db.session import AsyncSessionLocal
+
         async with AsyncSessionLocal() as session:
             result = await session.execute(text("SELECT 1"))
             return result.scalar() == 1
@@ -184,10 +183,4 @@ async def check_database_health():
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main_optimized:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG,
-        log_level="info"
-    )
+    uvicorn.run("app.main_optimized:app", host="0.0.0.0", port=8000, reload=settings.DEBUG, log_level="info")

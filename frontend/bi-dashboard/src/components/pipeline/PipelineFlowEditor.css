@@ -10,80 +10,80 @@
 /* ── Design tokens ── */
 .pipeline-editor-container {
   /* Canvas */
-  --pipeline-canvas-bg:    #f2f1ed;
-  --pipeline-dot-color:   rgba(38, 37, 30, 0.18);
-  --pipeline-dot-size:     1px;
-  --pipeline-dot-gap:      20px;
+  --pipeline-canvas-bg: #f2f1ed;
+  --pipeline-dot-color: rgba(38, 37, 30, 0.18);
+  --pipeline-dot-size: 1px;
+  --pipeline-dot-gap: 20px;
 
   /* Node card */
-  --pipeline-card-radius:  10px;
-  --pipeline-card-bg:     #ffffff;
-  --pipeline-card-border:  rgba(38, 37, 30, 0.10);
-  --pipeline-card-shadow:  0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --pipeline-card-radius: 10px;
+  --pipeline-card-bg: #ffffff;
+  --pipeline-card-border: rgba(38, 37, 30, 0.1);
+  --pipeline-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
   --pipeline-card-shadow-h: 0 8px 24px rgba(0, 0, 0, 0.11), 0 4px 8px rgba(0, 0, 0, 0.06);
   --pipeline-card-shadow-sel: 0 0 0 2px var(--pipeline-accent-primary);
 
   /* Node type icon badge */
-  --pipeline-icon-size:   28px;
+  --pipeline-icon-size: 28px;
   --pipeline-icon-radius: 6px;
 
   /* Chips (summary pills) */
-  --pipeline-chip-bg:       #ebeae5;
-  --pipeline-chip-text:     #26251e;
-  --pipeline-chip-border:   transparent;
-  --pipeline-chip-radius:  20px;
-  --pipeline-chip-font:     11px;
+  --pipeline-chip-bg: #ebeae5;
+  --pipeline-chip-text: #26251e;
+  --pipeline-chip-border: transparent;
+  --pipeline-chip-radius: 20px;
+  --pipeline-chip-font: 11px;
 
   /* Upstream chips */
-  --pipeline-upstream-bg:   rgba(74, 144, 226, 0.08);
-  --pipeline-upstream-text: #4A90E2;
+  --pipeline-upstream-bg: rgba(74, 144, 226, 0.08);
+  --pipeline-upstream-text: #4a90e2;
 
   /* Edges */
-  --pipeline-edge-color:       rgba(38, 37, 30, 0.35);
-  --pipeline-edge-color-sel:   var(--pipeline-accent-primary);
+  --pipeline-edge-color: rgba(38, 37, 30, 0.35);
+  --pipeline-edge-color-sel: var(--pipeline-accent-primary);
   --pipeline-edge-color-hover: rgba(38, 37, 30, 0.55);
-  --pipeline-edge-width:       1.5px;
-  --pipeline-edge-width-sel:   2px;
-  --pipeline-edge-anim-color:  #9fbbe0;
+  --pipeline-edge-width: 1.5px;
+  --pipeline-edge-width-sel: 2px;
+  --pipeline-edge-anim-color: #9fbbe0;
 
   /* Handles (connection dots) */
-  --pipeline-handle-size:   8px;
-  --pipeline-handle-color:  var(--pipeline-accent-primary);
+  --pipeline-handle-size: 8px;
+  --pipeline-handle-color: var(--pipeline-accent-primary);
   --pipeline-handle-border: 2px solid #fff;
 
   /* Connection line (in-progress drag) */
-  --pipeline-conn-color:    var(--pipeline-accent-primary);
-  --pipeline-conn-width:    1.5px;
+  --pipeline-conn-color: var(--pipeline-accent-primary);
+  --pipeline-conn-width: 1.5px;
 
   /* Accent / semantic */
-  --pipeline-accent-primary: #4A90E2;
+  --pipeline-accent-primary: #4a90e2;
   --pipeline-accent-success: #1f8a65;
-  --pipeline-accent-danger:  #cf2d56;
+  --pipeline-accent-danger: #cf2d56;
   --pipeline-accent-warning: #c08532;
 
   /* Toolbar */
-  --pipeline-toolbar-bg:    #ffffff;
-  --pipeline-toolbar-h:     52px;
+  --pipeline-toolbar-bg: #ffffff;
+  --pipeline-toolbar-h: 52px;
 
   /* Bottom pill bar */
-  --pipeline-pill-bg:      #ffffff;
-  --pipeline-pill-shadow:  0 -2px 16px rgba(0, 0, 0, 0.08), 0 -1px 4px rgba(0, 0, 0, 0.05);
-  --pipeline-pill-radius:  12px;
-  --pipeline-pill-h:       48px;
+  --pipeline-pill-bg: #ffffff;
+  --pipeline-pill-shadow: 0 -2px 16px rgba(0, 0, 0, 0.08), 0 -1px 4px rgba(0, 0, 0, 0.05);
+  --pipeline-pill-radius: 12px;
+  --pipeline-pill-h: 48px;
   --pipeline-pill-btn-radius: 8px;
 
   /* Right panel */
-  --pipeline-panel-w:       380px;
-  --pipeline-panel-bg:     #ffffff;
-  --pipeline-panel-border: rgba(38, 37, 30, 0.10);
+  --pipeline-panel-w: 380px;
+  --pipeline-panel-bg: #ffffff;
+  --pipeline-panel-border: rgba(38, 37, 30, 0.1);
 
   /* Controls / MiniMap */
-  --pipeline-ctrl-bg:      rgba(255, 255, 255, 0.90);
-  --pipeline-ctrl-border:  rgba(38, 37, 30, 0.10);
-  --pipeline-ctrl-shadow:  var(--shadow-md);
+  --pipeline-ctrl-bg: rgba(255, 255, 255, 0.9);
+  --pipeline-ctrl-border: rgba(38, 37, 30, 0.1);
+  --pipeline-ctrl-shadow: var(--shadow-md);
 
   /* Divider / separator */
-  --pipeline-divider:     rgba(38, 37, 30, 0.10);
+  --pipeline-divider: rgba(38, 37, 30, 0.1);
 
   /* ── Apply tokens ── */
   display: flex;
@@ -423,9 +423,10 @@
   max-width: 296px;
   cursor: grab;
   user-select: none;
-  transition: box-shadow var(--transition-base),
-              border-color var(--transition-base),
-              transform var(--transition-base);
+  transition:
+    box-shadow var(--transition-base),
+    border-color var(--transition-base),
+    transform var(--transition-base);
   position: relative;
 }
 
@@ -547,7 +548,7 @@
 .pipeline-chip--placeholder {
   background: transparent;
   border: 1px dashed var(--pipeline-divider);
-  color: rgba(38, 37, 30, 0.40);
+  color: rgba(38, 37, 30, 0.4);
   font-style: italic;
 }
 
@@ -682,7 +683,9 @@
   background: var(--pipeline-handle-color);
   border: var(--pipeline-handle-border);
   border-radius: 50%;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .pipeline-editor-container .react-flow__handle:hover {
@@ -720,7 +723,9 @@
 .pipeline-editor-container .react-flow__edge-path {
   stroke: var(--pipeline-edge-color);
   stroke-width: var(--pipeline-edge-width);
-  transition: stroke var(--transition-fast), stroke-width var(--transition-fast);
+  transition:
+    stroke var(--transition-fast),
+    stroke-width var(--transition-fast);
 }
 
 .pipeline-editor-container .react-flow__edge:hover .react-flow__edge-path {
@@ -741,8 +746,12 @@
 }
 
 @keyframes pipeline-dash {
-  from { stroke-dashoffset: 12; }
-  to   { stroke-dashoffset: 0; }
+  from {
+    stroke-dashoffset: 12;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* Connection line while dragging */
@@ -758,7 +767,7 @@
   border-radius: var(--pipeline-card-radius);
   padding: 8px 12px;
   font-size: 12px;
-  color: rgba(38, 37, 30, 0.80);
+  color: rgba(38, 37, 30, 0.8);
   box-shadow: var(--pipeline-card-shadow);
 }
 
@@ -815,7 +824,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .pipeline-bottom-pill .ant-btn:hover {
@@ -830,7 +841,7 @@
 }
 
 .pipeline-bottom-pill .ant-btn--primary:hover {
-  background: #357ABD;
+  background: #357abd;
   color: #fff;
 }
 
@@ -875,7 +886,9 @@
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .pipeline-bottom-pill .ant-dropdown-trigger:hover {
@@ -904,7 +917,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: rgba(38, 37, 30, 0.40);
+  color: rgba(38, 37, 30, 0.4);
   padding: 0 4px;
   margin-top: 2px;
 }
@@ -922,10 +935,12 @@
   border-radius: 6px;
   height: 32px;
   font-size: 12px;
-  color: rgba(38, 37, 30, 0.80);
+  color: rgba(38, 37, 30, 0.8);
   padding: 0 8px;
   gap: 6px;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .pipeline-add-btn:hover {

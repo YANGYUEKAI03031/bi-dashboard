@@ -17,11 +17,11 @@ import { PipelineTestPage } from './pages/PipelineTestPage';
 // 认证保护组件
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = AuthService.isAuthenticated();
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return <>{children}</>;
 };
 
@@ -55,105 +55,102 @@ function App() {
       <Router>
         <Routes>
           {/* 登录页面 - 未认证用户可访问 */}
-          <Route 
-            path="/login" 
+          <Route
+            path="/login"
             element={
               <RedirectIfAuthenticated>
                 <LoginPage />
               </RedirectIfAuthenticated>
-            } 
+            }
           />
-          
+
           {/* 默认路由重定向到登录页 */}
-          <Route 
-            path="/" 
-            element={<Navigate to="/login" replace />} 
-          />
-          
+          <Route path="/" element={<Navigate to="/login" replace />} />
+
           {/* 仪表盘列表页 */}
-          <Route 
-            path="/dashboard" 
+          <Route
+            path="/dashboard"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <DashboardListPage />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
 
           {/* 新建仪表盘 - 全画布编辑页 */}
-          <Route 
-            path="/dashboard/new" 
+          <Route
+            path="/dashboard/new"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <DashboardEditorPage mode="create" />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
 
           {/* 编辑仪表盘 - 全画布编辑页 */}
-          <Route 
-            path="/dashboard/edit/:id" 
+          <Route
+            path="/dashboard/edit/:id"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <DashboardEditorPage mode="edit" />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
 
-          <Route 
-            path="/reports" 
+          <Route
+            path="/reports"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <ReportsPage />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          
-          <Route 
-            path="/reports/:pageId" 
+
+          <Route
+            path="/reports/:pageId"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <ReportsPage />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-         
+
           {/* 添加可视化构建器路由 */}
-          <Route 
-            path="/visualization-builder" 
+          <Route
+            path="/visualization-builder"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <VisualizationBuilder />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          
+
           {/* 添加图表管理路由 */}
-          <Route 
-            path="/charts-management" 
+          <Route
+            path="/charts-management"
             element={
               <ProtectedRoute>
                 <MainLayout>
                   <ChartsManagementPage />
                 </MainLayout>
               </ProtectedRoute>
-            } 
+            }
           />
 
           {/* 数据源管理路由 */}
-          <Route 
+          <Route
             path="/datasources"
             element={
               <ProtectedRoute>
@@ -187,12 +184,10 @@ function App() {
               </ProtectedRoute>
             }
           />
-
         </Routes>
       </Router>
-      </AuthProvider>
+    </AuthProvider>
   );
 }
 
 export default App;
-

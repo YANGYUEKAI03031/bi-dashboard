@@ -198,7 +198,7 @@ export const DataSourceManagementPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <Typography.Title level={2} style={{ margin: 0 }}>
+          <Typography.Title level={3} style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
             数据源管理
           </Typography.Title>
           <Space>
@@ -234,61 +234,33 @@ export const DataSourceManagementPage: React.FC = () => {
         destroyOnClose
       >
         <Form<CreateDataSourcePayload> form={form} layout="vertical">
-          <Form.Item
-            label="名称"
-            name="name"
-            rules={[{ required: true, message: '请输入数据源名称' }]}
-          >
+          <Form.Item label="名称" name="name" rules={[{ required: true, message: '请输入数据源名称' }]}>
             <Input placeholder="例如：生产库 / 报表库" />
           </Form.Item>
 
-          <Form.Item
-            label="类型"
-            name="engine"
-            rules={[{ required: true, message: '请选择数据库类型' }]}
-          >
+          <Form.Item label="类型" name="engine" rules={[{ required: true, message: '请选择数据库类型' }]}>
             <Select>
               <Select.Option value="mysql">MySQL</Select.Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            label="Host"
-            name="host"
-            rules={[{ required: true, message: '请输入数据库地址' }]}
-          >
+          <Form.Item label="Host" name="host" rules={[{ required: true, message: '请输入数据库地址' }]}>
             <Input placeholder="例如：127.0.0.1" />
           </Form.Item>
 
-          <Form.Item
-            label="端口"
-            name="port"
-            rules={[{ required: true, message: '请输入端口号' }]}
-          >
+          <Form.Item label="端口" name="port" rules={[{ required: true, message: '请输入端口号' }]}>
             <InputNumber style={{ width: '100%' }} min={1} max={65535} />
           </Form.Item>
 
-          <Form.Item
-            label="用户名"
-            name="username"
-            rules={[{ required: true, message: '请输入数据库用户名' }]}
-          >
+          <Form.Item label="用户名" name="username" rules={[{ required: true, message: '请输入数据库用户名' }]}>
             <Input />
           </Form.Item>
 
-          <Form.Item
-            label="密码"
-            name="password"
-            rules={[{ required: true, message: '请输入数据库密码' }]}
-          >
+          <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入数据库密码' }]}>
             <Input.Password />
           </Form.Item>
 
-          <Form.Item
-            label="数据库名"
-            name="database_name"
-            rules={[{ required: true, message: '请输入数据库名' }]}
-          >
+          <Form.Item label="数据库名" name="database_name" rules={[{ required: true, message: '请输入数据库名' }]}>
             <Input />
           </Form.Item>
 
@@ -300,4 +272,3 @@ export const DataSourceManagementPage: React.FC = () => {
     </div>
   );
 };
-

@@ -3,10 +3,7 @@
  * Non-technical users build filter conditions by selecting column + operator + value.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import {
-  Select, Divider, Tag, Typography,
-  Alert, Card, DatePicker, Button, Input, Space, Tooltip,
-} from 'antd';
+import { Select, Divider, Tag, Typography, Alert, Card, DatePicker, Button, Input, Space, Tooltip } from 'antd';
 import { PlusOutlined, DeleteOutlined, FilterOutlined, CalendarOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { GraphNode } from '../../../utils/graphUtils';
@@ -95,7 +92,11 @@ export const FILTER_OPERATORS = [
   { label: '开头是', value: 'startsWith', types: ['string'] },
   { label: '结尾是', value: 'endsWith', types: ['string'] },
   { label: '为空', value: 'isNull', types: ['string', 'int', 'bigint', 'decimal', 'date', 'datetime', 'uuid', 'null'] },
-  { label: '不为空', value: 'isNotNull', types: ['string', 'int', 'bigint', 'decimal', 'date', 'datetime', 'uuid', 'null'] },
+  {
+    label: '不为空',
+    value: 'isNotNull',
+    types: ['string', 'int', 'bigint', 'decimal', 'date', 'datetime', 'uuid', 'null'],
+  },
   { label: '在列表中', value: 'in', types: ['string', 'int', 'bigint', 'decimal'] },
 ];
 
@@ -112,10 +113,10 @@ interface Condition {
   column: string;
   operator: string;
   value: string;
-  valueType?: 'input' | 'preset' | 'range';  // 值类型：输入值、快捷日期、日期范围
-  preset?: string;  // 快捷日期选项，如 'today', 'yesterday', 'last_30_days'
-  rangeStart?: string;  // 范围开始日期
-  rangeEnd?: string;  // 范围结束日期
+  valueType?: 'input' | 'preset' | 'range'; // 值类型：输入值、快捷日期、日期范围
+  preset?: string; // 快捷日期选项，如 'today', 'yesterday', 'last_30_days'
+  rangeStart?: string; // 范围开始日期
+  rangeEnd?: string; // 范围结束日期
 }
 
 interface FilterNodeConfigProps {
@@ -141,25 +142,26 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
   const logic = (config.logic as string) || 'AND';
 
   const [conditions, setConditions] = useState<Condition[]>(
-    savedConditions.length > 0 ? savedConditions : [{ id: `cond_${Date.now()}`, column: '', operator: '', value: '' }]
+    savedConditions.length > 0 ? savedConditions : [{ id: `cond_${Date.now()}`, column: '', operator: '', value: '' }],
   );
   const [columns, setColumns] = useState<Array<{ name: string; type: string }>>([]);
 
   // ── 上游预览：获取列信息 ────────────────────────────────────────
   const upstreamNode = upstreamNodes[0] ?? null;
   const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
-  const upstreamDsId = upstreamPn
-    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
-    : undefined;
+  const upstreamDsId = upstreamPn ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null) : undefined;
 
   const { previewData, loadPreview, clearPreview } = useNodePreview();
 
   const nodesSignature = useMemo(
-    () => JSON.stringify(allNodes.map(n => ({
-      id: n.id,
-      pn: (n.data.pipelineNode as PNode),
-    }))),
-    [allNodes]
+    () =>
+      JSON.stringify(
+        allNodes.map((n) => ({
+          id: n.id,
+          pn: n.data.pipelineNode as PNode,
+        })),
+      ),
+    [allNodes],
   );
 
   // 请求上游预览（仅首次加载或上游 id / nodes 签名变化时）
@@ -173,12 +175,15 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
     if (key === loadKeyRef.current) return;
     loadKeyRef.current = key;
     clearPreview();
-    loadPreview({
-      node: upstreamNode,
-      allNodes,
-      pipelineDataSourceId: upstreamDsId,
-      limit: 50,
-    }, true);
+    loadPreview(
+      {
+        node: upstreamNode,
+        allNodes,
+        pipelineDataSourceId: upstreamDsId,
+        limit: 50,
+      },
+      true,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNode?.id, nodesSignature, upstreamDsId, loadPreview, clearPreview]);
 
@@ -213,16 +218,13 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
   };
 
   const addCondition = () => {
-    const newConditions = [
-      ...conditions,
-      { id: `cond_${Date.now()}`, column: '', operator: '', value: '' },
-    ];
+    const newConditions = [...conditions, { id: `cond_${Date.now()}`, column: '', operator: '', value: '' }];
     setConditions(newConditions);
     updateConfig(newConditions);
   };
 
   const removeCondition = (id: string) => {
-    const newConditions = conditions.filter(c => c.id !== id);
+    const newConditions = conditions.filter((c) => c.id !== id);
     if (newConditions.length === 0) {
       newConditions.push({ id: `cond_${Date.now()}`, column: '', operator: '', value: '' });
     }
@@ -231,9 +233,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
   };
 
   const updateCondition = (id: string, field: keyof Condition, fieldValue: any) => {
-    const newConditions = conditions.map(c =>
-      c.id === id ? { ...c, [field]: fieldValue } : c
-    );
+    const newConditions = conditions.map((c) => (c.id === id ? { ...c, [field]: fieldValue } : c));
     setConditions(newConditions);
     updateConfig(newConditions);
   };
@@ -252,15 +252,12 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
 
   const getOperatorsForColumn = (colName: string) => {
     // 根据列类型过滤操作符
-    const col = columns.find(c => c.name === colName);
+    const col = columns.find((c) => c.name === colName);
     const colType = col?.type;
 
     if (colType === 'date' || colType === 'datetime') {
       // 日期类型：使用标准操作符 + 日期专用操作符
-      return [
-        ...FILTER_OPERATORS.filter(op => op.types.includes(colType)),
-        ...DATE_FILTER_OPERATORS,
-      ];
+      return [...FILTER_OPERATORS.filter((op) => op.types.includes(colType)), ...DATE_FILTER_OPERATORS];
     }
 
     // 其他类型：使用标准操作符
@@ -278,7 +275,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
 
   // 获取列类型
   const getColumnType = (colName: string) => {
-    const col = columns.find(c => c.name === colName);
+    const col = columns.find((c) => c.name === colName);
     return col?.type;
   };
 
@@ -290,15 +287,17 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
           筛选条件
         </Text>
         <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-          {conditions.filter(c => c.column && c.operator).length} 个条件
+          {conditions.filter((c) => c.column && c.operator).length} 个条件
         </Text>
       </div>
 
       {/* Logic toggle: ALL / ANY */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>同时满足：</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          同时满足：
+        </Text>
         <Space>
-          {['AND', 'OR'].map(l => (
+          {['AND', 'OR'].map((l) => (
             <Tag
               key={l}
               style={{
@@ -308,14 +307,18 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
                 border: logic === l ? '1px solid #0EA5E9' : '1px solid #d9d9d9',
                 fontWeight: logic === l ? 600 : 400,
               }}
-              onClick={() => { updateConfig(conditions, l); }}
+              onClick={() => {
+                updateConfig(conditions, l);
+              }}
             >
               {l === 'AND' ? '全部 (AND)' : '任一 (OR)'}
             </Tag>
           ))}
         </Space>
         <Tooltip title={logic === 'AND' ? '所有条件都满足时才保留行' : '任意一个条件满足时就保留行'}>
-          <Text type="secondary" style={{ fontSize: 11, cursor: 'help' }}>❓</Text>
+          <Text type="secondary" style={{ fontSize: 11, cursor: 'help' }}>
+            ❓
+          </Text>
         </Tooltip>
       </div>
 
@@ -337,26 +340,30 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
             size="small"
             style={{
               marginBottom: 8,
-              borderColor: cond.column && cond.operator && needsValue &&
-                !cond.value && !cond.preset && !cond.rangeStart ? '#faad14' : '#f0f0f0',
+              borderColor:
+                cond.column && cond.operator && needsValue && !cond.value && !cond.preset && !cond.rangeStart
+                  ? '#faad14'
+                  : '#f0f0f0',
             }}
             bodyStyle={{ padding: '10px 12px' }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
               {/* Row number badge */}
-              <div style={{
-                minWidth: 20,
-                height: 20,
-                borderRadius: 10,
-                background: '#f0f0f0',
-                color: '#595959',
-                fontSize: 11,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: 4,
-                flexShrink: 0,
-              }}>
+              <div
+                style={{
+                  minWidth: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  background: '#f0f0f0',
+                  color: '#595959',
+                  fontSize: 11,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginTop: 4,
+                  flexShrink: 0,
+                }}
+              >
                 {idx + 1}
               </div>
 
@@ -377,15 +384,21 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
                 showSearch
                 optionFilterProp="label"
                 disabled={readOnly}
-                options={columns.map(c => ({
+                options={columns.map((c) => ({
                   label: (() => {
                     const typeInfo = getDataTypeInfo(c.type);
                     return (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Tag style={{
-                          background: typeInfo.bg, color: typeInfo.text,
-                          border: 'none', fontSize: 9, padding: '0 3px', lineHeight: '14px',
-                        }}>
+                        <Tag
+                          style={{
+                            background: typeInfo.bg,
+                            color: typeInfo.text,
+                            border: 'none',
+                            fontSize: 9,
+                            padding: '0 3px',
+                            lineHeight: '14px',
+                          }}
+                        >
                           {typeInfo.label}
                         </Tag>
                         {c.name}
@@ -422,7 +435,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
                 }}
                 style={{ minWidth: 100, flex: 1 }}
                 disabled={readOnly}
-                options={ops.map(op => ({ label: op.label, value: op.value }))}
+                options={ops.map((op) => ({ label: op.label, value: op.value }))}
               />
 
               {/* 普通输入框 */}
@@ -446,7 +459,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
                   onChange={(val) => updateCondition(cond.id, 'preset', val)}
                   style={{ minWidth: 120, flex: 1 }}
                   disabled={readOnly}
-                  options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+                  options={DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }))}
                   suffixIcon={<CalendarOutlined />}
                 />
               )}
@@ -455,10 +468,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
               {showRangePicker && (
                 <RangePicker
                   size="small"
-                  value={[
-                    cond.rangeStart ? dayjs(cond.rangeStart) : null,
-                    cond.rangeEnd ? dayjs(cond.rangeEnd) : null,
-                  ]}
+                  value={[cond.rangeStart ? dayjs(cond.rangeStart) : null, cond.rangeEnd ? dayjs(cond.rangeEnd) : null]}
                   onChange={(dates) => {
                     updateCondition(cond.id, 'rangeStart', dates?.[0]?.format('YYYY-MM-DD') || '');
                     updateCondition(cond.id, 'rangeEnd', dates?.[1]?.format('YYYY-MM-DD') || '');
@@ -479,7 +489,7 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
                   onChange={(val) => updateCondition(cond.id, 'preset', val)}
                   style={{ minWidth: 120, flex: 1 }}
                   disabled={readOnly}
-                  options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+                  options={DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }))}
                   suffixIcon={<CalendarOutlined />}
                 />
               )}
@@ -520,20 +530,22 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
       <Text type="secondary" style={{ fontSize: 11 }}>
         生成的查询条件：
       </Text>
-      <div style={{
-        marginTop: 4,
-        padding: '6px 10px',
-        background: '#f5f7fa',
-        borderRadius: 4,
-        fontFamily: 'monospace',
-        fontSize: 11,
-        color: '#595959',
-        minHeight: 28,
-      }}>
+      <div
+        style={{
+          marginTop: 4,
+          padding: '6px 10px',
+          background: '#f5f7fa',
+          borderRadius: 4,
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: '#595959',
+          minHeight: 28,
+        }}
+      >
         {(() => {
-          const validConds = conditions.filter(c => c.column && c.operator);
+          const validConds = conditions.filter((c) => c.column && c.operator);
           if (validConds.length === 0) return <span style={{ color: '#bfbfbf' }}>（请添加筛选条件）</span>;
-          const clauses = validConds.map(c => {
+          const clauses = validConds.map((c) => {
             const col = `\`${c.column}\``;
             const val = c.value;
 
@@ -564,19 +576,32 @@ export const FilterNodeConfig: React.FC<FilterNodeConfigProps> = ({
             }
 
             switch (c.operator) {
-              case 'eq': return `${col} = '${val}'`;
-              case 'ne': return `${col} != '${val}'`;
-              case 'gt': return `${col} > '${val}'`;
-              case 'ge': return `${col} >= '${val}'`;
-              case 'lt': return `${col} < '${val}'`;
-              case 'le': return `${col} <= '${val}'`;
-              case 'contains': return `${col} LIKE '%${val}%'`;
-              case 'startsWith': return `${col} LIKE '${val}%'`;
-              case 'endsWith': return `${col} LIKE '%${val}'`;
-              case 'isNull': return `${col} IS NULL`;
-              case 'isNotNull': return `${col} IS NOT NULL`;
-              case 'in': return `${col} IN (${val})`;
-              default: return `${col} = '${val}'`;
+              case 'eq':
+                return `${col} = '${val}'`;
+              case 'ne':
+                return `${col} != '${val}'`;
+              case 'gt':
+                return `${col} > '${val}'`;
+              case 'ge':
+                return `${col} >= '${val}'`;
+              case 'lt':
+                return `${col} < '${val}'`;
+              case 'le':
+                return `${col} <= '${val}'`;
+              case 'contains':
+                return `${col} LIKE '%${val}%'`;
+              case 'startsWith':
+                return `${col} LIKE '${val}%'`;
+              case 'endsWith':
+                return `${col} LIKE '%${val}'`;
+              case 'isNull':
+                return `${col} IS NULL`;
+              case 'isNotNull':
+                return `${col} IS NOT NULL`;
+              case 'in':
+                return `${col} IN (${val})`;
+              default:
+                return `${col} = '${val}'`;
             }
           });
           return clauses.join(` ${logic} `);

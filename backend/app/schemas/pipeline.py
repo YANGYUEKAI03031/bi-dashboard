@@ -1,38 +1,41 @@
 # backend/app/schemas/pipeline.py
 """数据管道 (Pipeline) Schema 定义"""
-from pydantic import BaseModel, Field, validator
-from typing import Optional, Dict, Any, List
+
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field, validator
 
 
 class PipelineNodeCreate(BaseModel):
     """管道节点配置 - 创建时"""
-    id: Optional[str] = None  # 节点ID，如 "step_1"
+
+    id: str | None = None  # 节点ID，如 "step_1"
     name: str = Field(..., description="节点名称")
     type: str = Field(default="transform", description="节点类型: source | transform | output | merge")
     sql: str = Field(default="", description="SQL 语句")
     order: int = Field(..., description="执行顺序")
-    upstream: Optional[List[str]] = Field(default=None, description="上游节点 ID 列表")
-    position: Optional[Dict[str, float]] = Field(default=None, description="画布坐标 {x, y}")
-    merge_type: Optional[str] = Field(
+    upstream: list[str] | None = Field(default=None, description="上游节点 ID 列表")
+    position: dict[str, float] | None = Field(default=None, description="画布坐标 {x, y}")
+    merge_type: str | None = Field(
         default=None,
         description="合并类型: union | union all | left_join | right_join | full_join",
     )
-    config: Optional[Dict[str, Any]] = None  # 节点额外配置
+    config: dict[str, Any] | None = None  # 节点额外配置
 
-    @validator('upstream', always=True)
+    @validator("upstream", always=True)
     def validate_upstream(cls, v, values):
         if v is None:
             return None
         # 禁止自引用
-        node_id = values.get('id')
+        node_id = values.get("id")
         if node_id and node_id in v:
             raise ValueError(f"节点 '{node_id}' 不能将自己作为上游")
         return v
 
-    @validator('merge_type')
+    @validator("merge_type")
     def validate_merge_type(cls, v):
-        allowed = ('union', 'union all', 'left_join', 'right_join', 'full_join')
+        allowed = ("union", "union all", "left_join", "right_join", "full_join")
         if v is not None and v not in allowed:
             raise ValueError("merge_type 必须是 union | union all | left_join | right_join | full_join")
         return v
@@ -40,15 +43,16 @@ class PipelineNodeCreate(BaseModel):
 
 class PipelineNodeResponse(BaseModel):
     """管道节点配置 - 响应时"""
+
     id: str
     name: str
     type: str
     sql: str = ""
     order: int
-    upstream: Optional[List[str]] = None
-    position: Optional[Dict[str, float]] = None
-    merge_type: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None
+    upstream: list[str] | None = None
+    position: dict[str, float] | None = None
+    merge_type: str | None = None
+    config: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True
@@ -56,15 +60,16 @@ class PipelineNodeResponse(BaseModel):
 
 class PipelineCreate(BaseModel):
     """创建管道请求"""
+
     name: str = Field(..., min_length=1, max_length=255, description="管道名称")
-    description: Optional[str] = Field(None, description="管道描述")
+    description: str | None = Field(None, description="管道描述")
     source_data_source_id: int = Field(..., description="源数据源 ID")
-    nodes: List[PipelineNodeCreate] = Field(..., min_items=1, description="节点配置列表")
-    variables: Optional[Dict[str, Any]] = Field(default_factory=dict, description="全局变量")
-    config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="执行配置")
+    nodes: list[PipelineNodeCreate] = Field(..., min_items=1, description="节点配置列表")
+    variables: dict[str, Any] | None = Field(default_factory=dict, description="全局变量")
+    config: dict[str, Any] | None = Field(default_factory=dict, description="执行配置")
     is_public: bool = Field(default=False, description="是否公开")
 
-    @validator('nodes')
+    @validator("nodes")
     def validate_nodes(cls, nodes):
         if not nodes:
             return nodes
@@ -86,11 +91,7 @@ class PipelineCreate(BaseModel):
         upstream_map = {node.id: list(node.upstream or []) for node in nodes if node.id}
         remaining = set(upstream_map.keys())
         while remaining:
-            ready = [
-                nid
-                for nid in remaining
-                if all(u not in remaining for u in upstream_map.get(nid, []))
-            ]
+            ready = [nid for nid in remaining if all(u not in remaining for u in upstream_map.get(nid, []))]
             if not ready:
                 raise ValueError(f"管道配置存在循环依赖，环中的节点可能在: {remaining}")
             for nid in ready:
@@ -101,37 +102,38 @@ class PipelineCreate(BaseModel):
 
 class PipelineUpdate(BaseModel):
     """更新管道请求"""
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    nodes: Optional[List[PipelineNodeCreate]] = None
-    variables: Optional[Dict[str, Any]] = None
-    config: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
-    is_public: Optional[bool] = None
-    source_data_source_id: Optional[int] = Field(
-        None, description="管道级业务数据源；可与源节点 config 中的选择同步"
-    )
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    nodes: list[PipelineNodeCreate] | None = None
+    variables: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
+    is_active: bool | None = None
+    is_public: bool | None = None
+    source_data_source_id: int | None = Field(None, description="管道级业务数据源；可与源节点 config 中的选择同步")
 
 
 class PipelineResponse(BaseModel):
     """管道响应"""
+
     id: int
     name: str
-    description: Optional[str]
+    description: str | None
     source_data_source_id: int
-    nodes: List[Dict[str, Any]]  # JSON 格式
-    variables: Optional[Dict[str, Any]]
-    config: Optional[Dict[str, Any]]
+    nodes: list[dict[str, Any]]  # JSON 格式
+    variables: dict[str, Any] | None
+    config: dict[str, Any] | None
     is_active: bool
     created_by: int
     is_public: bool
     created_at: datetime
     updated_at: datetime
 
-    @validator('nodes', pre=True)
+    @validator("nodes", pre=True)
     def parse_nodes(cls, v):
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
@@ -144,7 +146,8 @@ class PipelineResponse(BaseModel):
 
 class PipelineListResponse(BaseModel):
     """管道列表响应"""
-    items: List[PipelineResponse]
+
+    items: list[PipelineResponse]
     total: int
     skip: int
     limit: int
@@ -152,50 +155,54 @@ class PipelineListResponse(BaseModel):
 
 class ExecutionResponse(BaseModel):
     """执行记录响应"""
+
     id: int
     pipeline_id: int
     status: str  # pending | running | completed | failed | cancelled | expired
-    temp_table_name: Optional[str]
-    completed_steps: List[Dict[str, Any]]
-    config: Optional[Dict[str, Any]]
-    result_summary: Optional[Dict[str, Any]]
-    error_message: Optional[str]
+    temp_table_name: str | None
+    completed_steps: list[dict[str, Any]]
+    config: dict[str, Any] | None
+    result_summary: dict[str, Any] | None
+    error_message: str | None
     total_rows: int
-    execution_time_ms: Optional[int]
-    logs: List[Dict[str, Any]]
+    execution_time_ms: int | None
+    logs: list[dict[str, Any]]
     retention_minutes: int
-    expires_at: Optional[datetime]
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    expires_at: datetime | None
+    started_at: datetime | None
+    completed_at: datetime | None
     # 进度相关字段
-    current_step_id: Optional[str] = None
+    current_step_id: str | None = None
     current_step_rows: int = 0
-    step_progress: Optional[Dict[str, Any]] = None
+    step_progress: dict[str, Any] | None = None
 
-    @validator('completed_steps', 'logs', pre=True)
+    @validator("completed_steps", "logs", pre=True)
     def parse_json_list(cls, v):
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
                 return []
         return v or []
 
-    @validator('result_summary', pre=True)
+    @validator("result_summary", pre=True)
     def parse_json_dict(cls, v):
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
                 return None
         return v
 
-    @validator('step_progress', pre=True)
+    @validator("step_progress", pre=True)
     def parse_step_progress(cls, v):
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
@@ -208,27 +215,31 @@ class ExecutionResponse(BaseModel):
 
 class ExecutionListResponse(BaseModel):
     """执行记录列表响应"""
-    items: List[ExecutionResponse]
+
+    items: list[ExecutionResponse]
     total: int
 
 
 class StepPreviewResponse(BaseModel):
     """步骤预览响应"""
+
     step_id: str
-    columns: List[str]
-    rows: List[Dict[str, Any]]
+    columns: list[str]
+    rows: list[dict[str, Any]]
     total: int
     has_more: bool
 
 
 class StepSchemaResponse(BaseModel):
     """步骤字段模式响应"""
+
     step_id: str
-    schema: List[Dict[str, str]]  # [{"name": "field1", "type": "string"}, ...]
+    schema: list[dict[str, str]]  # [{"name": "field1", "type": "string"}, ...]
 
 
 class RunPipelineResponse(BaseModel):
     """触发运行响应"""
+
     execution_id: int
     pipeline_id: int
     status: str
@@ -237,122 +248,130 @@ class RunPipelineResponse(BaseModel):
 
 class PipelineStatsResponse(BaseModel):
     """管道统计响应"""
+
     pipeline_id: int
     total_executions: int
     successful_executions: int
     failed_executions: int
-    avg_execution_time_ms: Optional[float]
-    last_execution: Optional[datetime]
+    avg_execution_time_ms: float | None
+    last_execution: datetime | None
 
 
 class GraphEdgeSchema(BaseModel):
     """图中单条边"""
+
     source: str = Field(..., description="源节点 ID")
     target: str = Field(..., description="目标节点 ID")
 
 
 class GraphNodeSchema(BaseModel):
     """图中单个节点（最小字段，仅用于预览折叠）"""
+
     id: str
     type: str
-    config: Dict[str, Any] = Field(default_factory=dict)
-    merge_type: Optional[str] = Field(default=None, description="merge 节点合并类型: union | left_join | right_join | full_join")
+    config: dict[str, Any] = Field(default_factory=dict)
+    merge_type: str | None = Field(
+        default=None, description="merge 节点合并类型: union | left_join | right_join | full_join"
+    )
 
 
 class InsertedColumnConfig(BaseModel):
     """插入新列的配置"""
+
     name: str = Field(..., description="新列名")
-    method: str = Field(
-        ...,
-        description="方法类型: calculation | split | function | lookup | rank | category | bin"
-    )
+    method: str = Field(..., description="方法类型: calculation | split | function | lookup | rank | category | bin")
     source_column: str = Field(..., description="源列名")
-    config: Dict[str, Any] = Field(default_factory=dict, description="方法特定配置")
+    config: dict[str, Any] = Field(default_factory=dict, description="方法特定配置")
 
 
 class CalculationConfig(BaseModel):
     """计算列配置"""
+
     expression: str = Field(..., description="计算表达式，如 A + B 或 (A + B) * 1.1")
 
 
 class SplitConfig(BaseModel):
     """分列配置"""
-    delimiter: Optional[str] = Field(None, description="分隔符，如 , 或 |")
-    regex: Optional[str] = Field(None, description="正则表达式")
+
+    delimiter: str | None = Field(None, description="分隔符，如 , 或 |")
+    regex: str | None = Field(None, description="正则表达式")
     position: int = Field(default=1, ge=1, description="提取第N部分，从1开始")
     split_type: str = Field(default="delimiter", description="split_type: delimiter | regex | fixed")
 
 
 class FunctionConfig(BaseModel):
     """函数配置"""
-    function_name: str = Field(..., description="函数名: CONCAT | SUBSTRING | TRIM | UPPER | LOWER | YEAR | MONTH | DAY | ROUND | ABS | IF")
-    arguments: List[Any] = Field(default_factory=list, description="函数参数列表")
+
+    function_name: str = Field(
+        ..., description="函数名: CONCAT | SUBSTRING | TRIM | UPPER | LOWER | YEAR | MONTH | DAY | ROUND | ABS | IF"
+    )
+    arguments: list[Any] = Field(default_factory=list, description="函数参数列表")
 
 
 class LookupConfig(BaseModel):
     """查找替换配置"""
-    lookup_table: List[Dict[str, str]] = Field(
-        default_factory=list,
-        description="查找映射表: [{key: '北京', value: '北方'}, {key: '上海', value: '南方'}]"
+
+    lookup_table: list[dict[str, str]] = Field(
+        default_factory=list, description="查找映射表: [{key: '北京', value: '北方'}, {key: '上海', value: '南方'}]"
     )
-    default_value: Optional[str] = Field(None, description="未匹配时的默认值")
+    default_value: str | None = Field(None, description="未匹配时的默认值")
 
 
 class RankConfig(BaseModel):
     """排名配置"""
-    partition_by: List[str] = Field(default_factory=list, description="分区字段列表")
-    order_by: Dict[str, str] = Field(..., description="排序配置: {column: 'col1', direction: 'desc'}")
+
+    partition_by: list[str] = Field(default_factory=list, description="分区字段列表")
+    order_by: dict[str, str] = Field(..., description="排序配置: {column: 'col1', direction: 'desc'}")
     rank_type: str = Field(default="ROW_NUMBER", description="排名类型: ROW_NUMBER | RANK | DENSE_RANK")
 
 
 class CategoryConfig(BaseModel):
     """分类分组配置"""
-    ranges: List[Dict[str, Any]] = Field(
+
+    ranges: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="区间配置: [{from: 0, to: 1000, label: '低'}, {from: 1000, to: 5000, label: '中'}, {from: 5000, to: null, label: '高'}]"
+        description="区间配置: [{from: 0, to: 1000, label: '低'}, {from: 1000, to: 5000, label: '中'}, {from: 5000, to: null, label: '高'}]",
     )
     default_label: str = Field(default="其他", description="未匹配时的默认标签")
 
 
 class BinConfig(BaseModel):
     """区间提取配置"""
+
     bin_type: str = Field(default="fixed", description="bin_type: fixed | custom")
-    bin_size: Optional[float] = Field(None, description="固定区间大小")
-    custom_bins: Optional[List[float]] = Field(None, description="自定义区间边界")
+    bin_size: float | None = Field(None, description="固定区间大小")
+    custom_bins: list[float] | None = Field(None, description="自定义区间边界")
 
 
 class NodePreviewRequest(BaseModel):
     """节点预览请求 - 用于无代码编辑器的实时预览"""
+
     node_type: str = Field(..., description="节点类型: source | filter | aggregate | join | column_select | output")
-    config: Dict[str, Any] = Field(default_factory=dict, description="节点可视化配置 JSON")
+    config: dict[str, Any] = Field(default_factory=dict, description="节点可视化配置 JSON")
     source_data_source_id: int = Field(..., description="管道级业务数据源 ID")
     # 图结构：用于链式折叠上游子查询
-    graph_nodes: Optional[List[GraphNodeSchema]] = Field(
+    graph_nodes: list[GraphNodeSchema] | None = Field(
         default=None, description="图中所有节点（可选，不传则退化为单节点预览）"
     )
-    graph_edges: Optional[List[GraphEdgeSchema]] = Field(
-        default=None, description="图中所有边（可选）"
-    )
-    focus_node_id: Optional[str] = Field(
-        default=None, description="当前要预览的节点 ID（用于图折叠模式）"
-    )
+    graph_edges: list[GraphEdgeSchema] | None = Field(default=None, description="图中所有边（可选）")
+    focus_node_id: str | None = Field(default=None, description="当前要预览的节点 ID（用于图折叠模式）")
     # 兼容旧调用：若只传 node_type + config 则走单节点模式
-    upstream_previews: Optional[List[Dict[str, Any]]] = Field(
-        default=None,
-        description="上游节点预览结果列表，每个元素含 node_id, columns, rows"
+    upstream_previews: list[dict[str, Any]] | None = Field(
+        default=None, description="上游节点预览结果列表，每个元素含 node_id, columns, rows"
     )
     limit: int = Field(default=100, ge=1, le=500, description="预览行数限制")
 
 
 class NodePreviewResponse(BaseModel):
     """节点预览响应"""
-    columns: List[str]
-    column_types: List[str] = Field(default_factory=list, description="列类型列表")
-    rows: List[Dict[str, Any]]
+
+    columns: list[str]
+    column_types: list[str] = Field(default_factory=list, description="列类型列表")
+    rows: list[dict[str, Any]]
     total: int
     has_more: bool
     sql_generated: str = Field(default="", description="实际生成的 SQL（调试用）")
-    all_columns: Optional[List[str]] = Field(
+    all_columns: list[str] | None = Field(
         default=None,
         description="链式预览在列投影前 focus 节点的全部列名，供列选择器展示未选列",
     )

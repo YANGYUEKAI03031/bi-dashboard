@@ -1,15 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy import text, select, asc
-from typing import List, Dict, Any, Optional
-from app.db.session import get_db
-from pydantic import BaseModel
 import logging
 import re
+from typing import Any
 
-from app.models.visualization import Database
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy import asc, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+from app.core.crypto import decrypt_password, encrypt_password
 from app.core.security import get_current_user_id
-from app.core.crypto import encrypt_password, decrypt_password
+from app.db.session import get_db
+from app.exceptions import (
+    DatabaseException,
+    ResourceNotFoundException,
+    ValidationException,
+)
+from app.models.visualization import Database
 
 router = APIRouter(tags=["visualization-datasources"])
 
@@ -18,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class DataSourceInfo(BaseModel):
     """前端使用的数据源信息结构"""
+
     id: str
     name: str
     type: str  # mysql / postgres / etc.
@@ -27,16 +34,17 @@ class ColumnInfo(BaseModel):
     name: str
     type: str
     is_nullable: bool
-    default_value: Optional[str] = None
+    default_value: str | None = None
 
 
 class TableInfo(BaseModel):
     name: str
-    columns: List[ColumnInfo] = []
+    columns: list[ColumnInfo] = []
 
 
 class QueryRequest(BaseModel):
     """通用查询请求体"""
+
     data_source_id: str
     query: str
 
@@ -45,10 +53,7 @@ def _build_mysql_url(db_model: Database) -> str:
     """根据Database记录构建异步MySQL连接URL"""
     # 解密密码（支持双轨：加密和明文）
     password = decrypt_password(db_model.password)
-    return (
-        f"mysql+aiomysql://{db_model.username}:{password}"
-        f"@{db_model.host}:{db_model.port}/{db_model.database_name}"
-    )
+    return f"mysql+aiomysql://{db_model.username}:{password}@{db_model.host}:{db_model.port}/{db_model.database_name}"
 
 
 def _validate_safe_select_sql(sql: str, max_rows: int = 5000) -> str:
@@ -56,19 +61,19 @@ def _validate_safe_select_sql(sql: str, max_rows: int = 5000) -> str:
     基础安全校验：只允许单条 SELECT 语句，并自动追加/收紧 LIMIT
     """
     if not sql:
-        raise HTTPException(status_code=400, detail="查询语句不能为空")
+        raise ValidationException("query", "查询语句不能为空")
 
     raw = sql.strip().rstrip(";")
 
     # 只允许 SELECT 开头
     if not raw.lower().startswith("select"):
-        raise HTTPException(status_code=400, detail="当前接口仅支持只读的 SELECT 查询")
+        raise ValidationException("query", "仅支持只读的 SELECT 查询")
 
     # 禁止危险关键字（简单兜底）
     forbidden = ["insert ", "update ", "delete ", "drop ", "alter ", "truncate ", "create "]
     lowered = raw.lower()
     if any(kw in lowered for kw in forbidden):
-        raise HTTPException(status_code=400, detail="查询中包含不安全关键字，仅允许只读查询")
+        raise ValidationException("query", "包含不安全关键字，仅允许只读查询")
 
     # 如果已存在 LIMIT，则收紧到 max_rows
     limit_match = re.search(r"limit\s+(\d+)", lowered)
@@ -87,7 +92,7 @@ def _validate_safe_select_sql(sql: str, max_rows: int = 5000) -> str:
     return raw
 
 
-@router.get("/", response_model=List[DataSourceInfo])
+@router.get("/", response_model=list[DataSourceInfo])
 async def get_visualization_datasources(db: AsyncSession = Depends(get_db)):
     """
     获取可视化可用的数据源列表
@@ -101,9 +106,9 @@ async def get_visualization_datasources(db: AsyncSession = Depends(get_db)):
             .order_by(asc(Database.id))
         )
         result = await db.execute(stmt)
-        databases: List[Database] = list(result.scalars().all())
+        databases: list[Database] = list(result.scalars().all())
 
-        datasources: List[DataSourceInfo] = []
+        datasources: list[DataSourceInfo] = []
         for d in databases:
             # 目前主要支持 mysql，引擎字段可以直接复用
             ds_type = (d.engine or "mysql").lower()
@@ -120,7 +125,7 @@ async def get_visualization_datasources(db: AsyncSession = Depends(get_db)):
 
     except Exception as e:
         logger.error("获取数据源列表失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取数据源列表失败: {str(e)}")
+        raise DatabaseException("获取数据源列表失败", original_error=e)
 
 
 async def _get_database_or_404(db: AsyncSession, data_source_id: str) -> Database:
@@ -128,16 +133,16 @@ async def _get_database_or_404(db: AsyncSession, data_source_id: str) -> Databas
     try:
         ds_id_int = int(data_source_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="无效的数据源ID")
+        raise ValidationException("data_source_id", "无效的数据源ID")
 
     db_model = await db.get(Database, ds_id_int)
     if not db_model or not db_model.is_active:
-        raise HTTPException(status_code=404, detail="数据源不存在或已停用")
+        raise ResourceNotFoundException("数据源", data_source_id)
 
     return db_model
 
 
-@router.get("/{data_source_id}/tables", response_model=List[TableInfo])
+@router.get("/{data_source_id}/tables", response_model=list[TableInfo])
 async def get_tables(data_source_id: str, db: AsyncSession = Depends(get_db)):
     """
     获取指定数据源的表列表
@@ -149,13 +154,13 @@ async def get_tables(data_source_id: str, db: AsyncSession = Depends(get_db)):
 
         # 仅支持 MySQL（后续可以按 engine 拓展）
         if (db_model.engine or "").lower() != "mysql":
-            raise HTTPException(status_code=400, detail=f"暂不支持的数据源类型: {db_model.engine}")
+            raise ValidationException("engine", f"暂不支持的数据源类型: {db_model.engine}")
 
         db_url = _build_mysql_url(db_model)
         temp_engine = create_async_engine(db_url)
 
         try:
-            table_infos: List[TableInfo] = []
+            table_infos: list[TableInfo] = []
             async with temp_engine.connect() as conn:
                 # SHOW TABLES
                 result = await conn.execute(text("SHOW TABLES"))
@@ -168,7 +173,7 @@ async def get_tables(data_source_id: str, db: AsyncSession = Depends(get_db)):
                     describe_result = await conn.execute(text(f"DESCRIBE `{table_name}`"))
                     columns_info = describe_result.fetchall()
 
-                    columns: List[ColumnInfo] = []
+                    columns: list[ColumnInfo] = []
                     for col in columns_info:
                         columns.append(
                             ColumnInfo(
@@ -185,14 +190,12 @@ async def get_tables(data_source_id: str, db: AsyncSession = Depends(get_db)):
         finally:
             await temp_engine.dispose()
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("获取表列表失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取表列表失败: {str(e)}")
+        raise DatabaseException("获取表列表失败", original_error=e)
 
 
-@router.get("/{data_source_id}/tables/{table_name}/columns", response_model=List[ColumnInfo])
+@router.get("/{data_source_id}/tables/{table_name}/columns", response_model=list[ColumnInfo])
 async def get_table_columns(
     data_source_id: str,
     table_name: str,
@@ -203,7 +206,7 @@ async def get_table_columns(
         db_model = await _get_database_or_404(db, data_source_id)
 
         if (db_model.engine or "").lower() != "mysql":
-            raise HTTPException(status_code=400, detail=f"暂不支持的数据源类型: {db_model.engine}")
+            raise ValidationException("engine", f"暂不支持的数据源类型: {db_model.engine}")
 
         db_url = _build_mysql_url(db_model)
         temp_engine = create_async_engine(db_url)
@@ -213,7 +216,7 @@ async def get_table_columns(
                 result = await conn.execute(text(f"DESCRIBE `{table_name}`"))
                 columns_info = result.fetchall()
 
-                columns: List[ColumnInfo] = []
+                columns: list[ColumnInfo] = []
                 for col in columns_info:
                     columns.append(
                         ColumnInfo(
@@ -228,11 +231,9 @@ async def get_table_columns(
         finally:
             await temp_engine.dispose()
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("获取列信息失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取列信息失败: {str(e)}")
+        raise DatabaseException("获取列信息失败", original_error=e)
 
 
 @router.post("/query")
@@ -247,7 +248,7 @@ async def execute_query(payload: QueryRequest, db: AsyncSession = Depends(get_db
         db_model = await _get_database_or_404(db, payload.data_source_id)
 
         if (db_model.engine or "").lower() != "mysql":
-            raise HTTPException(status_code=400, detail=f"暂不支持的数据源类型: {db_model.engine}")
+            raise ValidationException("engine", f"暂不支持的数据源类型: {db_model.engine}")
 
         safe_sql = _validate_safe_select_sql(payload.query)
         db_url = _build_mysql_url(db_model)
@@ -259,14 +260,16 @@ async def execute_query(payload: QueryRequest, db: AsyncSession = Depends(get_db
                 rows = result.fetchall()
 
                 # 列名
-                column_names = list(result.keys()) if result.keys() else [
-                    f"column_{i}" for i in range(len(rows[0]) if rows else 0)
-                ]
+                column_names = (
+                    list(result.keys())
+                    if result.keys()
+                    else [f"column_{i}" for i in range(len(rows[0]) if rows else 0)]
+                )
 
                 # 转为行字典
-                result_rows: List[Dict[str, Any]] = []
+                result_rows: list[dict[str, Any]] = []
                 for row in rows:
-                    row_dict: Dict[str, Any] = {}
+                    row_dict: dict[str, Any] = {}
                     for i, value in enumerate(row):
                         col_name = column_names[i] if i < len(column_names) else f"column_{i}"
                         row_dict[col_name] = value
@@ -280,27 +283,27 @@ async def execute_query(payload: QueryRequest, db: AsyncSession = Depends(get_db
         finally:
             await temp_engine.dispose()
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("查询执行失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"查询执行失败: {str(e)}")
+        raise DatabaseException("查询执行失败", original_error=e)
 
 
 class ConnectionTestRequest(BaseModel):
     """测试连接请求：可以直接传配置，也可以传已有 data_source_id"""
-    data_source_id: Optional[str] = None
-    name: Optional[str] = None
-    engine: Optional[str] = "mysql"
-    host: Optional[str] = None
-    port: Optional[int] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-    database_name: Optional[str] = None
+
+    data_source_id: str | None = None
+    name: str | None = None
+    engine: str | None = "mysql"
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    database_name: str | None = None
 
 
 class CreateDataSourceRequest(BaseModel):
     """创建数据源请求体"""
+
     name: str
     engine: str = "mysql"
     host: str
@@ -308,7 +311,7 @@ class CreateDataSourceRequest(BaseModel):
     username: str
     password: str
     database_name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 @router.post("/datasources/test")
@@ -325,11 +328,11 @@ async def test_connection(payload: ConnectionTestRequest, db: AsyncSession = Dep
         else:
             # 使用临时配置
             if not all([payload.host, payload.port, payload.username, payload.password, payload.database_name]):
-                raise HTTPException(status_code=400, detail="请提供完整的连接配置或已有的数据源ID")
+                raise ValidationException("config", "请提供完整的连接配置或已有的数据源ID")
 
             engine_name = (payload.engine or "mysql").lower()
             if engine_name != "mysql":
-                raise HTTPException(status_code=400, detail="目前测试接口仅支持 MySQL")
+                raise ValidationException("engine", "目前测试接口仅支持 MySQL")
 
             class _TmpDB:
                 engine = engine_name
@@ -342,7 +345,7 @@ async def test_connection(payload: ConnectionTestRequest, db: AsyncSession = Dep
             db_model = _TmpDB()  # type: ignore
 
         if (db_model.engine or "").lower() != "mysql":
-            raise HTTPException(status_code=400, detail=f"暂不支持的数据源类型: {db_model.engine}")
+            raise ValidationException("engine", f"暂不支持的数据源类型: {db_model.engine}")
 
         db_url = _build_mysql_url(db_model)  # type: ignore[arg-type]
         temp_engine = create_async_engine(db_url)
@@ -359,11 +362,9 @@ async def test_connection(payload: ConnectionTestRequest, db: AsyncSession = Dep
         finally:
             await temp_engine.dispose()
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error("测试数据源连接失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"连接测试失败: {str(e)}")
+        raise DatabaseException("连接测试失败", original_error=e)
 
 
 @router.post("/datasources", response_model=DataSourceInfo)
@@ -379,7 +380,7 @@ async def create_datasource(
         # 目前主要支持 MySQL，其他类型后续可扩展
         engine_name = (payload.engine or "mysql").lower()
         if engine_name != "mysql":
-            raise HTTPException(status_code=400, detail="当前仅支持 MySQL 数据源")
+            raise ValidationException("engine", "当前仅支持 MySQL 数据源")
 
         db_model = Database(
             name=payload.name,
@@ -402,12 +403,10 @@ async def create_datasource(
             name=db_model.name,
             type=(db_model.engine or "mysql").lower(),
         )
-    except HTTPException:
-        raise
     except Exception as e:
         await db.rollback()
         logger.error("创建数据源失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"创建数据源失败: {str(e)}")
+        raise DatabaseException("创建数据源失败", original_error=e)
 
 
 @router.delete("/datasources/{data_source_id}")
@@ -432,16 +431,14 @@ async def delete_datasource(
 
         if len(active_dbs) <= 1:
             # 系统中仅剩的这个数据源视为“默认数据源”，不允许删除
-            raise HTTPException(status_code=400, detail="默认数据源不允许删除")
+            raise ValidationException("data_source", "默认数据源不允许删除")
 
         # 做软删除，避免影响历史可视化记录
         db_model.is_active = False
         await db.commit()
 
         return {"success": True}
-    except HTTPException:
-        raise
     except Exception as e:
         await db.rollback()
         logger.error("删除数据源失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"删除数据源失败: {str(e)}")
+        raise DatabaseException("删除数据源失败", original_error=e)

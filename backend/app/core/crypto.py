@@ -7,15 +7,16 @@
 1. 首次运行时自动生成密钥，保存到 .env 的 ENCRYPTION_KEY
 2. 已有数据可通过 migrate_encrypt_passwords.py 迁移
 """
+
 import logging
-from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_fernet: Optional[Fernet] = None
+_fernet: Fernet | None = None
 
 
 def _get_fernet() -> Fernet:
@@ -26,7 +27,7 @@ def _get_fernet() -> Fernet:
         if not key:
             raise ValueError(
                 "ENCRYPTION_KEY 未配置。请在 backend/.env 中设置 "
-                "ENCRYPTION_KEY=$(python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\")"
+                'ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")'
             )
         try:
             _fernet = Fernet(key.encode())
@@ -127,8 +128,7 @@ def get_or_create_encryption_key() -> str:
     # 生成新密钥
     new_key = Fernet.generate_key()
     logger.warning(
-        "ENCRYPTION_KEY 已生成。请在 backend/.env 中设置:\n"
-        "ENCRYPTION_KEY=%s",
+        "ENCRYPTION_KEY 已生成。请在 backend/.env 中设置:\nENCRYPTION_KEY=%s",
         new_key.decode(),
     )
     return new_key.decode()

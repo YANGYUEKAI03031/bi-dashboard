@@ -31,6 +31,7 @@ pytest>=7.4.0                    # Testing framework
 pytest-asyncio>=0.21.0           # Async testing support
 
 # Optional but Recommended
+ruff>=0.4.0                     # Linting + Formatting (replaces black + flake8)
 black>=23.0.0                    # Code formatting
 flake8>=6.0.0                    # Code linting
 mypy>=1.5.0                      # Type checking

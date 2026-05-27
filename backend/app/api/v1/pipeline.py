@@ -12,28 +12,43 @@
 - GET /pipeline/{id}/preview/{step_id} - 预览节点数据
 - GET /pipeline/{id}/stats - 获取管道统计
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from fastapi import Body
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-import logging
 
+from app.core.security import get_current_user_id
+from app.exceptions import (
+    AppException,
+    DatabaseException,
+    PermissionDeniedException,
+    ResourceNotFoundException,
+    ValidationException,
+)
 from app.db.session import get_db
-from app.services.pipeline_service import PipelineService
+from app.models.pipeline import DataPipeline, PipelineExecution, PipelineTrigger, PipelineWatermark
+from app.models.visualization import Database
+from app.schemas.pipeline import (
+    ExecutionListResponse,
+    ExecutionResponse,
+    NodePreviewRequest,
+    NodePreviewResponse,
+    PipelineCreate,
+    PipelineListResponse,
+    PipelineResponse,
+    PipelineStatsResponse,
+    PipelineUpdate,
+    RunPipelineResponse,
+    StepPreviewResponse,
+    StepSchemaResponse,
+)
 from app.services.pipeline.engine import PipelineEngine
-from app.services.pipeline.temp_table_manager import TempTableManager
 from app.services.pipeline.validator import validate_pipeline_config
 from app.services.pipeline_chart_sync_service import PipelineChartSyncService
-from app.schemas.pipeline import (
-    PipelineCreate, PipelineUpdate, PipelineResponse,
-    PipelineListResponse, ExecutionResponse, ExecutionListResponse,
-    StepPreviewResponse, StepSchemaResponse, RunPipelineResponse,
-    PipelineStatsResponse, NodePreviewRequest, NodePreviewResponse
-)
-from app.core.security import get_current_user_id
-from app.models.pipeline import DataPipeline, PipelineExecution, PipelineWatermark, PipelineTrigger
-from app.models.visualization import Database
+from app.services.pipeline_service import PipelineService
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = logging.getLogger(__name__)
@@ -41,11 +56,10 @@ logger = logging.getLogger(__name__)
 
 # ==================== Pipeline CRUD ====================
 
+
 @router.post("/", response_model=PipelineResponse, status_code=201)
 async def create_pipeline(
-    pipeline_data: PipelineCreate,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_data: PipelineCreate, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """创建新管道"""
     try:
@@ -55,7 +69,7 @@ async def create_pipeline(
         nodes_dict = [n.dict() for n in pipeline_data.nodes]
         is_valid, error_msg = validate_pipeline_config(nodes_dict)
         if not is_valid:
-            raise HTTPException(status_code=400, detail=error_msg)
+            raise ValidationException("request", error_msg)
 
         pipeline = await service.create_pipeline(
             name=pipeline_data.name,
@@ -65,7 +79,7 @@ async def create_pipeline(
             description=pipeline_data.description,
             variables=pipeline_data.variables,
             config=pipeline_data.config,
-            is_public=pipeline_data.is_public
+            is_public=pipeline_data.is_public,
         )
 
         # 创建成功后，同步 chart 节点到 visualization_cards
@@ -82,11 +96,11 @@ async def create_pipeline(
 
         return PipelineResponse.model_validate(pipeline)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"创建管道API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/", response_model=PipelineListResponse)
@@ -94,35 +108,27 @@ async def get_pipelines(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """获取管道列表"""
     try:
         service = PipelineService(db)
         pipelines, total = await service.get_user_pipelines(
-            user_id=user_id,
-            skip=skip,
-            limit=limit,
-            include_public=True
+            user_id=user_id, skip=skip, limit=limit, include_public=True
         )
 
         return PipelineListResponse(
-            items=[PipelineResponse.model_validate(p) for p in pipelines],
-            total=total,
-            skip=skip,
-            limit=limit
+            items=[PipelineResponse.model_validate(p) for p in pipelines], total=total, skip=skip, limit=limit
         )
 
     except Exception as e:
         logger.error(f"获取管道列表API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}", response_model=PipelineResponse)
 async def get_pipeline(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """获取管道详情"""
     try:
@@ -130,19 +136,19 @@ async def get_pipeline(
         pipeline = await service.get_pipeline(pipeline_id)
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         return PipelineResponse.model_validate(pipeline)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取管道详情API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.put("/{pipeline_id}", response_model=PipelineResponse)
@@ -150,7 +156,7 @@ async def update_pipeline(
     pipeline_id: int,
     update_data: PipelineUpdate,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """更新管道"""
     try:
@@ -161,32 +167,32 @@ async def update_pipeline(
             nodes_dict = [n.dict() for n in update_data.nodes]
             is_valid, error_msg = validate_pipeline_config(nodes_dict)
             if not is_valid:
-                raise HTTPException(status_code=400, detail=error_msg)
+                raise ValidationException("request", error_msg)
 
         # 构建更新字段
         update_fields = {}
         if update_data.name is not None:
-            update_fields['name'] = update_data.name
+            update_fields["name"] = update_data.name
         if update_data.description is not None:
-            update_fields['description'] = update_data.description
+            update_fields["description"] = update_data.description
         if update_data.nodes is not None:
-            update_fields['nodes'] = [n.dict() for n in update_data.nodes]
+            update_fields["nodes"] = [n.dict() for n in update_data.nodes]
         if update_data.variables is not None:
-            update_fields['variables'] = update_data.variables
+            update_fields["variables"] = update_data.variables
         if update_data.config is not None:
-            update_fields['config'] = update_data.config
+            update_fields["config"] = update_data.config
         if update_data.is_active is not None:
-            update_fields['is_active'] = update_data.is_active
+            update_fields["is_active"] = update_data.is_active
         if update_data.is_public is not None:
-            update_fields['is_public'] = update_data.is_public
+            update_fields["is_public"] = update_data.is_public
         if update_data.source_data_source_id is not None:
             await service._assert_pipeline_business_data_source(update_data.source_data_source_id)
-            update_fields['source_data_source_id'] = update_data.source_data_source_id
+            update_fields["source_data_source_id"] = update_data.source_data_source_id
 
         pipeline = await service.update_pipeline(pipeline_id, user_id, **update_fields)
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 节点有更新时，同步 chart 节点到 visualization_cards
         if update_data.nodes is not None:
@@ -204,19 +210,17 @@ async def update_pipeline(
         return PipelineResponse.model_validate(pipeline)
 
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except HTTPException:
+        raise PermissionDeniedException(str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"更新管道API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.delete("/{pipeline_id}")
 async def delete_pipeline(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """删除管道"""
     try:
@@ -224,27 +228,28 @@ async def delete_pipeline(
         success = await service.delete_pipeline(pipeline_id, user_id)
 
         if not success:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         return {"message": "管道删除成功"}
 
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except HTTPException:
+        raise PermissionDeniedException(str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"删除管道API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 执行管理 ====================
+
 
 @router.post("/{pipeline_id}/run", response_model=RunPipelineResponse)
 async def run_pipeline(
     pipeline_id: int,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     触发 ETL 运行
@@ -258,16 +263,16 @@ async def run_pipeline(
         # 获取管道
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限执行此管道")
+            raise PermissionDeniedException("执行此管道")
 
         # 获取数据源
         db_model = await db.get(Database, pipeline.source_data_source_id)
         if not db_model:
-            raise HTTPException(status_code=400, detail="数据源不存在")
+            raise ResourceNotFoundException("数据源")
 
         # 创建执行记录
         execution = await service.create_execution(pipeline_id)
@@ -288,14 +293,14 @@ async def run_pipeline(
             execution_id=execution.id,
             pipeline_id=pipeline_id,
             status="pending",
-            message="管道已加入执行队列，请通过 GET /pipeline/executions/{execution_id} 查看进度"
+            message="管道已加入执行队列，请通过 GET /pipeline/executions/{execution_id} 查看进度",
         )
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"触发管道运行API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 async def _run_pipeline_background(
@@ -309,8 +314,9 @@ async def _run_pipeline_background(
     注意：应用元数据（data_pipelines / pipeline_executions）在 settings.DATABASE_URL；
     管道 SQL 在数据源库执行，需单独的引擎。
     """
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
+
     from app.core.config import settings
 
     app_engine = None
@@ -331,9 +337,7 @@ async def _run_pipeline_background(
             pool_recycle=1800,
             pool_pre_ping=True,
         )
-        SessionLocal = sessionmaker(
-            app_engine, class_=AsyncSession, expire_on_commit=False
-        )
+        SessionLocal = sessionmaker(app_engine, class_=AsyncSession, expire_on_commit=False)
 
         async with SessionLocal() as session:
             service = PipelineService(session)
@@ -342,14 +346,10 @@ async def _run_pipeline_background(
             execution = await service.get_execution(execution_id)
 
             if not pipeline or not execution:
-                logger.error(
-                    f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}"
-                )
+                logger.error(f"管道或执行记录不存在: pipeline={pipeline_id}, execution={execution_id}")
                 return
 
-            pipeline_engine = PipelineEngine(
-                session, data_source_engine, pipeline.source_data_source_id
-            )
+            pipeline_engine = PipelineEngine(session, data_source_engine, pipeline.source_data_source_id)
 
             success, error_msg, result_summary = await pipeline_engine.run(
                 pipeline=pipeline,
@@ -357,15 +357,11 @@ async def _run_pipeline_background(
                 config=pipeline.config,
             )
 
-            logger.info(
-                f"管道执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}"
-            )
+            logger.info(f"管道执行完成: pipeline={pipeline_id}, execution={execution_id}, success={success}")
 
             # 执行成功后，同步 chart 节点配置到 visualization_cards
             if success and pipeline.nodes:
                 try:
-                    from app.db.session import get_db
-                    from app.core.security import get_current_user_id
                     async with SessionLocal() as sync_session:
                         sync_svc = PipelineChartSyncService(sync_session)
                         nodes_list = pipeline.nodes if isinstance(pipeline.nodes, list) else []
@@ -373,9 +369,7 @@ async def _run_pipeline_background(
                             pipeline_id=pipeline_id,
                             nodes=nodes_list,
                         )
-                        logger.info(
-                            f"管道 {pipeline_id} 执行后图表同步完成: {count} 条"
-                        )
+                        logger.info(f"管道 {pipeline_id} 执行后图表同步完成: {count} 条")
                 except Exception as sync_err:
                     logger.warning(f"执行后图表同步失败（不影响执行结果）: {sync_err}")
 
@@ -394,7 +388,7 @@ async def get_pipeline_executions(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """获取管道的执行历史"""
     try:
@@ -403,35 +397,26 @@ async def get_pipeline_executions(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
-        executions, total = await service.get_pipeline_executions(
-            pipeline_id=pipeline_id,
-            skip=skip,
-            limit=limit
-        )
+        executions, total = await service.get_pipeline_executions(pipeline_id=pipeline_id, skip=skip, limit=limit)
 
-        return ExecutionListResponse(
-            items=[ExecutionResponse.model_validate(e) for e in executions],
-            total=total
-        )
+        return ExecutionListResponse(items=[ExecutionResponse.model_validate(e) for e in executions], total=total)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取执行历史API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}/executions/latest", response_model=ExecutionResponse)
 async def get_latest_execution(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """获取管道最新的执行记录"""
     try:
@@ -440,30 +425,28 @@ async def get_latest_execution(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         execution = await service.get_latest_execution(pipeline_id)
         if not execution:
-            raise HTTPException(status_code=404, detail="暂无执行记录")
+            raise ResourceNotFoundException("执行记录")
 
         return ExecutionResponse.model_validate(execution)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取最新执行记录API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}/stats", response_model=PipelineStatsResponse)
 async def get_pipeline_stats(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """获取管道统计信息"""
     try:
@@ -472,23 +455,24 @@ async def get_pipeline_stats(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         stats = await service.get_pipeline_stats(pipeline_id)
         return PipelineStatsResponse(**stats)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取管道统计API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 预览接口 ====================
+
 
 @router.get("/{pipeline_id}/preview/{step_id}", response_model=StepPreviewResponse)
 async def preview_step(
@@ -497,7 +481,7 @@ async def preview_step(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     预览节点数据
@@ -510,42 +494,34 @@ async def preview_step(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取最新执行记录
         execution = await service.get_latest_execution(pipeline_id)
         if not execution:
-            raise HTTPException(status_code=404, detail="暂无执行记录")
+            raise ResourceNotFoundException("执行记录")
 
         # 获取预览数据
-        preview = await service.get_step_preview(
-            execution_id=execution.id,
-            step_id=step_id,
-            limit=limit,
-            offset=offset
-        )
+        preview = await service.get_step_preview(execution_id=execution.id, step_id=step_id, limit=limit, offset=offset)
 
         return StepPreviewResponse(**preview)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+        raise ValidationException("input", str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"预览节点数据API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}/schema/{step_id}", response_model=StepSchemaResponse)
 async def get_step_schema(
-    pipeline_id: int,
-    step_id: str,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, step_id: str, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     获取步骤字段模式
@@ -558,39 +534,34 @@ async def get_step_schema(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取最新执行记录
         execution = await service.get_latest_execution(pipeline_id)
         if not execution:
-            raise HTTPException(status_code=404, detail="暂无执行记录")
+            raise ResourceNotFoundException("执行记录")
 
         # 获取字段模式
-        schema_info = await service.get_step_schema(
-            execution_id=execution.id,
-            step_id=step_id
-        )
+        schema_info = await service.get_step_schema(execution_id=execution.id, step_id=step_id)
 
         return StepSchemaResponse(**schema_info)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+        raise ValidationException("input", str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取步骤模式API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}/steps")
 async def get_all_steps(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     获取所有步骤摘要
@@ -603,16 +574,16 @@ async def get_all_steps(
         # 检查管道存在
         pipeline = await service.get_pipeline(pipeline_id)
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取最新执行记录
         execution = await service.get_latest_execution(pipeline_id)
         if not execution:
-            raise HTTPException(status_code=404, detail="暂无执行记录")
+            raise ResourceNotFoundException("执行记录")
 
         # 获取所有步骤信息
         steps_info = await service.get_all_steps_info(execution.id)
@@ -620,21 +591,20 @@ async def get_all_steps(
         return {"steps": steps_info}
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+        raise ValidationException("input", str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取所有步骤API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 执行记录操作 ====================
 
+
 @router.post("/executions/{execution_id}/cancel")
 async def cancel_execution(
-    execution_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    execution_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """取消正在执行的管道"""
     try:
@@ -642,24 +612,22 @@ async def cancel_execution(
         success = await service.cancel_execution(execution_id, user_id)
 
         if not success:
-            raise HTTPException(status_code=404, detail="执行记录不存在")
+            raise ResourceNotFoundException("执行记录", execution_id)
 
         return {"message": "执行已取消"}
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+        raise ValidationException("input", str(e))
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"取消执行API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/executions/{execution_id}", response_model=ExecutionResponse)
 async def get_execution(
-    execution_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    execution_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """获取执行记录详情"""
     try:
@@ -667,27 +635,25 @@ async def get_execution(
         execution = await service.get_execution(execution_id)
 
         if not execution:
-            raise HTTPException(status_code=404, detail="执行记录不存在")
+            raise ResourceNotFoundException("执行记录", execution_id)
 
         # 获取管道检查权限
         pipeline = await service.get_pipeline(execution.pipeline_id)
         if pipeline and not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此执行记录")
+            raise PermissionDeniedException("访问此执行记录")
 
         return ExecutionResponse.model_validate(execution)
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取执行记录API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/executions/{execution_id}/progress")
 async def get_execution_progress(
-    execution_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    execution_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     获取执行进度（用于前端轮询）
@@ -703,7 +669,7 @@ async def get_execution_progress(
         execution = result.scalar_one_or_none()
 
         if not execution:
-            raise HTTPException(status_code=404, detail="执行记录不存在")
+            raise ResourceNotFoundException("执行记录", execution_id)
 
         # 获取管道检查权限
         pipeline_stmt = select(DataPipeline).where(DataPipeline.id == execution.pipeline_id)
@@ -711,7 +677,7 @@ async def get_execution_progress(
         pipeline = pipeline_result.scalar_one_or_none()
 
         if pipeline and not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此执行记录")
+            raise PermissionDeniedException("访问此执行记录")
 
         # 计算总进度
         total_steps = len(execution.completed_steps) if execution.completed_steps else 0
@@ -738,22 +704,25 @@ async def get_execution_progress(
             "started_at": execution.started_at.isoformat() if execution.started_at else None,
             "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
             "execution_time_ms": execution.execution_time_ms,
-            "error_message": execution.error_message
+            "error_message": execution.error_message,
         }
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取执行进度API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 节点实时预览（无代码编辑器用）====================
 
+
 async def _get_data_source_engine(db: AsyncSession, data_source_id: int):
     """根据 data_source_id 获取数据源引擎和 Database 记录"""
     from sqlalchemy import select
+
     from app.models.visualization import Database
+
     stmt = select(Database).where(Database.id == data_source_id, Database.is_active == True)  # noqa: E712
     result = await db.execute(stmt)
     db_model = result.scalar_one_or_none()
@@ -764,6 +733,7 @@ async def _get_data_source_engine(db: AsyncSession, data_source_id: int):
         f"@{db_model.host}:{db_model.port}/{db_model.database_name}"
     )
     from sqlalchemy.ext.asyncio import create_async_engine
+
     return db_model, create_async_engine(url, pool_pre_ping=True)
 
 
@@ -788,7 +758,7 @@ async def preview_node(
         db_model, engine = await _get_data_source_engine(db, request.source_data_source_id)
 
         # 构建图节点字典（用于折叠）
-        graph_nodes_dict: Optional[Dict[str, Dict[str, Any]]] = None
+        graph_nodes_dict: Dict[str, Dict[str, Any]] | None = None
         if request.graph_nodes is not None:
             graph_nodes_dict = {}
             for gn in request.graph_nodes:
@@ -796,7 +766,7 @@ async def preview_node(
                 node_dict: Dict[str, Any] = {
                     "type": gn.type,
                     "config": gn.config,
-                    "upstream": [],   # upstream 从边推导
+                    "upstream": [],  # upstream 从边推导
                 }
                 if gn.merge_type:
                     node_dict["merge_type"] = gn.merge_type
@@ -822,19 +792,18 @@ async def preview_node(
         )
         return NodePreviewResponse(**result)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationException("input", str(e))
     except Exception as e:
         logger.error(f"节点预览API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 水位线管理 ====================
 
+
 @router.get("/{pipeline_id}/watermarks")
 async def get_pipeline_watermarks(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     获取管道所有节点的水位线
@@ -850,11 +819,11 @@ async def get_pipeline_watermarks(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取所有水位线
         wm_stmt = select(PipelineWatermark).where(PipelineWatermark.pipeline_id == pipeline_id)
@@ -868,25 +837,22 @@ async def get_pipeline_watermarks(
                     "node_id": w.node_id,
                     "watermark_field": w.watermark_field,
                     "last_value": w.last_value,
-                    "last_processed_at": w.last_processed_at.isoformat() if w.last_processed_at else None
+                    "last_processed_at": w.last_processed_at.isoformat() if w.last_processed_at else None,
                 }
                 for w in watermarks
-            ]
+            ],
         }
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取水位线API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.delete("/{pipeline_id}/watermarks/{node_id}")
 async def delete_watermark(
-    pipeline_id: int,
-    node_id: str,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, node_id: str, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     删除指定节点的水位线
@@ -894,7 +860,7 @@ async def delete_watermark(
     删除后下次执行将执行全量查询。
     """
     try:
-        from sqlalchemy import select, and_
+        from sqlalchemy import and_, select
 
         # 检查管道存在
         stmt = select(DataPipeline).where(DataPipeline.id == pipeline_id)
@@ -902,18 +868,15 @@ async def delete_watermark(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 删除水位线
         wm_stmt = select(PipelineWatermark).where(
-            and_(
-                PipelineWatermark.pipeline_id == pipeline_id,
-                PipelineWatermark.node_id == node_id
-            )
+            and_(PipelineWatermark.pipeline_id == pipeline_id, PipelineWatermark.node_id == node_id)
         )
         wm_result = await db.execute(wm_stmt)
         watermark = wm_result.scalar_one_or_none()
@@ -924,33 +887,36 @@ async def delete_watermark(
 
         return {"message": "水位线已删除，下次执行将执行全量查询"}
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"删除水位线API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 # ==================== 触发器管理 ====================
 
+
 class TriggerCreateRequest(BaseModel):
     """创建/更新触发器请求"""
-    source_table: str                    # 监控的源表名
-    watermark_field: str                 # 高水位字段（updated_at / id）
-    poll_interval_seconds: int = 300     # 轮询间隔（默认 5 分钟）
-    enabled: bool = True                 # 是否启用
+
+    source_table: str  # 监控的源表名
+    watermark_field: str  # 高水位字段（updated_at / id）
+    poll_interval_seconds: int = 300  # 轮询间隔（默认 5 分钟）
+    enabled: bool = True  # 是否启用
 
 
 class TriggerResponse(BaseModel):
     """触发器响应"""
+
     id: int
     pipeline_id: int
     source_table: str
     watermark_field: str
     poll_interval_seconds: int
     enabled: bool
-    last_check_at: Optional[str]
-    last_watermark_value: Optional[str]
+    last_check_at: str | None
+    last_watermark_value: str | None
     created_at: str
     updated_at: str
 
@@ -960,7 +926,7 @@ async def create_or_update_trigger(
     pipeline_id: int,
     trigger_data: TriggerCreateRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    user_id: int = Depends(get_current_user_id),
 ):
     """
     创建或更新管道触发器
@@ -976,11 +942,11 @@ async def create_or_update_trigger(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限配置此管道")
+            raise PermissionDeniedException("配置此管道")
 
         # 查找现有触发器
         trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
@@ -1020,19 +986,17 @@ async def create_or_update_trigger(
             updated_at=trigger.updated_at.isoformat() if trigger.updated_at else "",
         )
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"创建/更新触发器API错误: {str(e)}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.get("/{pipeline_id}/trigger", response_model=Optional[TriggerResponse])
 async def get_trigger(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     获取管道触发器配置
@@ -1046,11 +1010,11 @@ async def get_trigger(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取触发器
         trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
@@ -1073,18 +1037,16 @@ async def get_trigger(
             updated_at=trigger.updated_at.isoformat() if trigger.updated_at else "",
         )
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"获取触发器API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.delete("/{pipeline_id}/trigger")
 async def delete_trigger(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     删除管道触发器
@@ -1098,11 +1060,11 @@ async def delete_trigger(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限删除此管道触发器")
+            raise PermissionDeniedException("删除此管道触发器")
 
         # 删除触发器
         trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
@@ -1115,19 +1077,17 @@ async def delete_trigger(
 
         return {"message": "触发器已删除"}
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"删除触发器API错误: {str(e)}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.post("/{pipeline_id}/trigger/check-index")
 async def check_trigger_index(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     检查触发器配置的字段是否有索引
@@ -1143,11 +1103,11 @@ async def check_trigger_index(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取触发器
         trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
@@ -1155,15 +1115,14 @@ async def check_trigger_index(
         trigger = trigger_result.scalar_one_or_none()
 
         if not trigger:
-            raise HTTPException(status_code=404, detail="该管道未配置触发器")
+            raise ResourceNotFoundException("触发器", pipeline_id)
 
         # 检查索引
         from app.services.pipeline.trigger_scheduler import TriggerScheduler
+
         scheduler = TriggerScheduler(db)
         has_index, message = await scheduler.check_source_table_index(
-            pipeline.source_data_source_id,
-            trigger.source_table,
-            trigger.watermark_field
+            pipeline.source_data_source_id, trigger.source_table, trigger.watermark_field
         )
 
         return {
@@ -1171,18 +1130,16 @@ async def check_trigger_index(
             "message": message,
         }
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"检查索引API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseException("操作失败", original_error=e)
 
 
 @router.post("/{pipeline_id}/trigger/test")
 async def test_trigger(
-    pipeline_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id)
+    pipeline_id: int, db: AsyncSession = Depends(get_db), user_id: int = Depends(get_current_user_id)
 ):
     """
     测试触发器配置
@@ -1198,11 +1155,11 @@ async def test_trigger(
         pipeline = result.scalar_one_or_none()
 
         if not pipeline:
-            raise HTTPException(status_code=404, detail="管道不存在")
+            raise ResourceNotFoundException("管道", pipeline_id)
 
         # 权限检查
         if not pipeline.is_public and pipeline.created_by != user_id:
-            raise HTTPException(status_code=403, detail="无权限访问此管道")
+            raise PermissionDeniedException("访问此管道")
 
         # 获取触发器
         trigger_stmt = select(PipelineTrigger).where(PipelineTrigger.pipeline_id == pipeline_id)
@@ -1210,10 +1167,11 @@ async def test_trigger(
         trigger = trigger_result.scalar_one_or_none()
 
         if not trigger:
-            raise HTTPException(status_code=404, detail="该管道未配置触发器")
+            raise ResourceNotFoundException("触发器", pipeline_id)
 
         # 执行一次轮询
         from app.services.pipeline.trigger_scheduler import TriggerScheduler
+
         scheduler = TriggerScheduler(db)
         current_max = await scheduler._get_current_max_value(trigger, pipeline.source_data_source_id)
 
@@ -1225,9 +1183,8 @@ async def test_trigger(
             "has_new_data": scheduler._has_new_data(trigger, current_max) if current_max else False,
         }
 
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"测试触发器API错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise DatabaseException("操作失败", original_error=e)

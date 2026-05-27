@@ -22,12 +22,7 @@ interface ChartEditModalProps {
   onCancel: () => void;
 }
 
-export const ChartEditModal: React.FC<ChartEditModalProps> = ({ 
-  chart, 
-  visible, 
-  onEdit, 
-  onCancel 
-}) => {
+export const ChartEditModal: React.FC<ChartEditModalProps> = ({ chart, visible, onEdit, onCancel }) => {
   const [form] = Form.useForm();
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,7 +53,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       chart_type: values.chart_type,
       database_id: parseInt(values.database_id, 10),
     };
-    
+
     onEdit(updatedData);
   };
 
@@ -85,23 +80,18 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       metric_filters: Array.isArray(vs.metric_filters) ? vs.metric_filters : [],
       metric_filter_expr: vs.metric_filter_expr,
       // 预览不再手写 grid，交给 ChartFactory 统一控制网格与居中布局
-      series: [{
-        data: previewData.map(item => item.value1),
-        type: chart.chart_type,
-        name: '数值1'
-      }]
+      series: [
+        {
+          data: previewData.map((item) => item.value1),
+          type: chart.chart_type,
+          name: '数值1',
+        },
+      ],
     };
   };
 
   return (
-    <Modal
-      title="编辑图表"
-      open={visible}
-      footer={null}
-      onCancel={onCancel}
-      width={900}
-      destroyOnClose
-    >
+    <Modal title="编辑图表" open={visible} footer={null} onCancel={onCancel} width={900} destroyOnClose>
       <div style={{ display: 'flex', gap: 24 }}>
         {/* 左侧：配置表单 */}
         <div style={{ flex: 1, minWidth: 300 }}>
@@ -112,19 +102,11 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             onFinish={handleFinish}
             style={{ maxWidth: 600 }}
           >
-            <Form.Item
-              label="图表名称"
-              name="name"
-              rules={[{ required: true, message: '请输入图表名称' }]}
-            >
+            <Form.Item label="图表名称" name="name" rules={[{ required: true, message: '请输入图表名称' }]}>
               <Input placeholder="请输入图表名称" />
             </Form.Item>
 
-            <Form.Item
-              label="图表类型"
-              name="chart_type"
-              rules={[{ required: true, message: '请选择图表类型' }]}
-            >
+            <Form.Item label="图表类型" name="chart_type" rules={[{ required: true, message: '请选择图表类型' }]}>
               <Select placeholder="请选择图表类型">
                 <Option value="bar">柱状图</Option>
                 <Option value="line">折线图</Option>
@@ -134,11 +116,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
               </Select>
             </Form.Item>
 
-            <Form.Item
-              label="数据源"
-              name="database_id"
-              rules={[{ required: true, message: '请选择数据源' }]}
-            >
+            <Form.Item label="数据源" name="database_id" rules={[{ required: true, message: '请选择数据源' }]}>
               <Select placeholder="请选择数据源">
                 <Option value="1">数据库 #1</Option>
                 <Option value="2">数据库 #2</Option>
@@ -151,9 +129,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                 <Button type="primary" htmlType="submit">
                   保存修改
                 </Button>
-                <Button onClick={onCancel}>
-                  取消
-                </Button>
+                <Button onClick={onCancel}>取消</Button>
               </Space>
             </Form.Item>
           </Form>
@@ -168,10 +144,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             </div>
           ) : (
             <div style={{ height: 400, border: '1px solid #d9d9d9', borderRadius: '4px', padding: '10px' }}>
-              <ChartFactory 
-                config={getChartConfig()}
-                data={previewData}
-              />
+              <ChartFactory config={getChartConfig()} data={previewData} />
             </div>
           )}
         </div>

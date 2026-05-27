@@ -5,10 +5,7 @@
  * 配置写回 config.groupBy 与 config.aggregations，与后端引擎协议一致。
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  Table, Select, Input, Switch, Typography,
-  Alert, Spin, Divider, Tag,
-} from 'antd';
+import { Table, Select, Input, Switch, Typography, Alert, Spin, Divider, Tag } from 'antd';
 import { BarChartOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -46,13 +43,15 @@ interface ColState {
 
 /** 与后端 PipelineEngine._build_step_sql 配合：持久化用 FROM {prev_table}，预览用 FROM upstream */
 function formatAggregateSql(cols: ColState[], fromLine: string): string | null {
-  const gbCols = cols.filter(c => c.isGrouped).map(c => `\`${c.name}\``);
-  const aggCols = cols.filter(c => c.func && !c.isGrouped).map(c => {
-    const fn = c.func.toUpperCase();
-    const alias = c.alias || `${c.func}_${c.name}`;
-    if (c.func === 'count_distinct') return `COUNT(DISTINCT \`${c.name}\`) AS \`${alias}\``;
-    return `${fn}(\`${c.name}\`) AS \`${alias}\``;
-  });
+  const gbCols = cols.filter((c) => c.isGrouped).map((c) => `\`${c.name}\``);
+  const aggCols = cols
+    .filter((c) => c.func && !c.isGrouped)
+    .map((c) => {
+      const fn = c.func.toUpperCase();
+      const alias = c.alias || `${c.func}_${c.name}`;
+      if (c.func === 'count_distinct') return `COUNT(DISTINCT \`${c.name}\`) AS \`${alias}\``;
+      return `${fn}(\`${c.name}\`) AS \`${alias}\``;
+    });
   const selectParts = [...gbCols, ...aggCols];
   if (selectParts.length === 0) return null;
   const gbStr = gbCols.length > 0 ? ` GROUP BY ${gbCols.join(', ')}` : '';
@@ -82,18 +81,19 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
   // ── 上游预览 ────────────────────────────────────────────────
   const upstreamNode = upstreamNodes[0] ?? null;
   const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
-  const upstreamDsId = upstreamPn
-    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
-    : undefined;
+  const upstreamDsId = upstreamPn ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null) : undefined;
 
   const { previewData, previewLoading, previewError, loadPreview, clearPreview } = useNodePreview();
 
   const nodesSignature = useMemo(
-    () => JSON.stringify(allNodes.map(n => ({
-      id: n.id,
-      pn: (n.data.pipelineNode as PNode),
-    }))),
-    [allNodes]
+    () =>
+      JSON.stringify(
+        allNodes.map((n) => ({
+          id: n.id,
+          pn: n.data.pipelineNode as PNode,
+        })),
+      ),
+    [allNodes],
   );
 
   // 请求上游预览（仅首次加载或上游 id / nodes 签名变化时）
@@ -104,55 +104,58 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
     if (key === loadKeyRef.current) return;
     loadKeyRef.current = key;
     clearPreview();
-    loadPreview({
-      node: upstreamNode,
-      allNodes,
-      pipelineDataSourceId: upstreamDsId,
-      limit: 50,
-    }, true);
+    loadPreview(
+      {
+        node: upstreamNode,
+        allNodes,
+        pipelineDataSourceId: upstreamDsId,
+        limit: 50,
+      },
+      true,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNode?.id, nodesSignature, upstreamDsId]);
 
   // 稳定序列化，避免「每次渲染新 []」导致 useEffect 死循环
-  const groupBySig = useMemo(
-    () => JSON.stringify((config.groupBy as string[]) ?? []),
-    [config.groupBy]
-  );
+  const groupBySig = useMemo(() => JSON.stringify((config.groupBy as string[]) ?? []), [config.groupBy]);
   const aggregationsSig = useMemo(
     () => JSON.stringify((config.aggregations as Aggregation[]) ?? []),
-    [config.aggregations]
+    [config.aggregations],
   );
   const previewColumnsSig = previewData?.columns?.join('\0') ?? '';
 
   const [cols, setCols] = useState<ColState[]>([]);
 
   // ── 写回 groupBy / aggregations + sql（后端校验与执行均要求 node.sql 非空） ──
-  const flushToConfig = useCallback((newCols: ColState[]) => {
-    if (readOnly) return;
-    const newGroupBy = newCols.filter(c => c.isGrouped).map(c => c.name);
-    const newAggs: Aggregation[] = newCols
-      .filter(c => c.func && (!c.isGrouped))
-      .map(c => ({
-        id: `${c.name}_${c.func}`,
-        column: c.name,
-        func: c.func,
-        alias: c.alias || `${c.func}_${c.name}`,
-      }));
+  const flushToConfig = useCallback(
+    (newCols: ColState[]) => {
+      if (readOnly) return;
+      const newGroupBy = newCols.filter((c) => c.isGrouped).map((c) => c.name);
+      const newAggs: Aggregation[] = newCols
+        .filter((c) => c.func && !c.isGrouped)
+        .map((c) => ({
+          id: `${c.name}_${c.func}`,
+          column: c.name,
+          func: c.func,
+          alias: c.alias || `${c.func}_${c.name}`,
+        }));
 
-    const sqlPersisted = formatAggregateSql(newCols, 'FROM {prev_table}') ?? '';
+      const sqlPersisted = formatAggregateSql(newCols, 'FROM {prev_table}') ?? '';
 
-    const pn = node.data.pipelineNode as Record<string, unknown>;
-    const currentCfg = (pn.config || {}) as Record<string, unknown>;
-    node.data = {
-      ...node.data,
-      pipelineNode: {
-        ...pn,
-        sql: sqlPersisted,
-        config: { ...currentCfg, groupBy: newGroupBy, aggregations: newAggs },
-      },
-    };
-    onChange();
-  }, [readOnly, node, onChange]);
+      const pn = node.data.pipelineNode as Record<string, unknown>;
+      const currentCfg = (pn.config || {}) as Record<string, unknown>;
+      node.data = {
+        ...node.data,
+        pipelineNode: {
+          ...pn,
+          sql: sqlPersisted,
+          config: { ...currentCfg, groupBy: newGroupBy, aggregations: newAggs },
+        },
+      };
+      onChange();
+    },
+    [readOnly, node, onChange],
+  );
 
   const lastMergedSigRef = useRef<string>('');
   useEffect(() => {
@@ -186,53 +189,56 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
 
   // ── 列状态变更 ───────────────────────────────────────────────
   const toggleGroup = (name: string, checked: boolean) => {
-    const next = cols.map(c =>
-      c.name === name ? { ...c, isGrouped: checked, func: checked ? '' : c.func, alias: '' } : c
+    const next = cols.map((c) =>
+      c.name === name ? { ...c, isGrouped: checked, func: checked ? '' : c.func, alias: '' } : c,
     );
     setCols(next);
     flushToConfig(next);
   };
 
   const setFunc = (name: string, func: string) => {
-    const next = cols.map(c =>
-      c.name === name
-        ? { ...c, func, isGrouped: false, alias: func ? `${func}_${c.name}` : '' }
-        : c
+    const next = cols.map((c) =>
+      c.name === name ? { ...c, func, isGrouped: false, alias: func ? `${func}_${c.name}` : '' } : c,
     );
     setCols(next);
     flushToConfig(next);
   };
 
   const setAlias = (name: string, alias: string) => {
-    const next = cols.map(c => c.name === name ? { ...c, alias } : c);
+    const next = cols.map((c) => (c.name === name ? { ...c, alias } : c));
     setCols(next);
     flushToConfig(next);
   };
 
   // ── 校验：存在分组列时，未选分组的列必须汇总 ────────────────────
-  const hasGroup = cols.some(c => c.isGrouped);
-  const ungroupedWithNoAgg = cols.filter(c => !c.isGrouped && !c.func);
-  const validationError = hasGroup && ungroupedWithNoAgg.length > 0
-    ? `以下 ${ungroupedWithNoAgg.length} 个非分组列未选汇总方式：${ungroupedWithNoAgg.map(c => c.name).join('、')}。SQL 将仅输出分组列，结果可能为空。`
-    : null;
+  const hasGroup = cols.some((c) => c.isGrouped);
+  const ungroupedWithNoAgg = cols.filter((c) => !c.isGrouped && !c.func);
+  const validationError =
+    hasGroup && ungroupedWithNoAgg.length > 0
+      ? `以下 ${ungroupedWithNoAgg.length} 个非分组列未选汇总方式：${ungroupedWithNoAgg.map((c) => c.name).join('、')}。SQL 将仅输出分组列，结果可能为空。`
+      : null;
 
   // ── SQL 预览（展示用 upstream；落库用 {prev_table}，见 flushToConfig） ──
-  const sqlPreview = useMemo(
-    () => formatAggregateSql(cols, 'FROM upstream'),
-    [cols]
-  );
+  const sqlPreview = useMemo(() => formatAggregateSql(cols, 'FROM upstream'), [cols]);
 
   // ── 渲染 ─────────────────────────────────────────────────────
   if (upstreamNodes.length === 0) {
     return (
-      <Alert type="info" showIcon message="请先连接上游节点" description="聚合节点需要至少一个上游数据源。" style={{ marginBottom: 12 }} />
+      <Alert
+        type="info"
+        showIcon
+        message="请先连接上游节点"
+        description="聚合节点需要至少一个上游数据源。"
+        style={{ marginBottom: 12 }}
+      />
     );
   }
 
   if (!upstreamDsId) {
     return (
       <Alert
-        type="warning" showIcon
+        type="warning"
+        showIcon
         message="无法确定数据源"
         description="请检查上游数据源节点的数据库配置。"
         style={{ marginBottom: 12 }}
@@ -243,7 +249,12 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
   return (
     <div>
       {previewError ? (
-        <Alert type="error" message="加载上游列信息失败" description={previewError} style={{ fontSize: 11, marginBottom: 12 }} />
+        <Alert
+          type="error"
+          message="加载上游列信息失败"
+          description={previewError}
+          style={{ fontSize: 11, marginBottom: 12 }}
+        />
       ) : null}
       {previewLoading && !previewData?.columns?.length ? (
         <div style={{ padding: '12px 0', textAlign: 'center', marginBottom: 12 }}>
@@ -261,15 +272,9 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
             <BarChartOutlined style={{ marginRight: 6 }} />
             按列配置
           </Text>
-          <Tag style={{ fontSize: 10, background: '#F0FDF4', color: '#22C55E', border: 'none' }}>
-            GROUP BY
-          </Tag>
-          <Tag style={{ fontSize: 10, background: '#EDE9FE', color: '#8B5CF6', border: 'none' }}>
-            汇总
-          </Tag>
-          <Tag style={{ fontSize: 10, background: '#FEF3C7', color: '#D97706', border: 'none' }}>
-            别名
-          </Tag>
+          <Tag style={{ fontSize: 10, background: '#F0FDF4', color: '#22C55E', border: 'none' }}>GROUP BY</Tag>
+          <Tag style={{ fontSize: 10, background: '#EDE9FE', color: '#8B5CF6', border: 'none' }}>汇总</Tag>
+          <Tag style={{ fontSize: 10, background: '#FEF3C7', color: '#D97706', border: 'none' }}>别名</Tag>
         </div>
 
         {/* 列配置 Table */}
@@ -290,7 +295,16 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
                 const info = getDataTypeInfo(record.type);
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Tag style={{ background: info.bg, color: info.text, border: 'none', fontSize: 9, padding: '0 3px', flexShrink: 0 }}>
+                    <Tag
+                      style={{
+                        background: info.bg,
+                        color: info.text,
+                        border: 'none',
+                        fontSize: 9,
+                        padding: '0 3px',
+                        flexShrink: 0,
+                      }}
+                    >
                       {info.label}
                     </Tag>
                     <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{name}</span>
@@ -370,18 +384,22 @@ export const AggregateNodeConfig: React.FC<AggregateNodeConfigProps> = ({
       <Divider style={{ margin: '0 0 10px' }} />
 
       {/* 区块 C：SQL 预览 */}
-      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>生成的查询：</Text>
-      <div style={{
-        padding: '6px 10px',
-        background: '#f5f7fa',
-        borderRadius: 4,
-        fontFamily: 'monospace',
-        fontSize: 11,
-        color: '#595959',
-        minHeight: 28,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all',
-      }}>
+      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+        生成的查询：
+      </Text>
+      <div
+        style={{
+          padding: '6px 10px',
+          background: '#f5f7fa',
+          borderRadius: 4,
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: '#595959',
+          minHeight: 28,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
         {sqlPreview ? (
           <span>{sqlPreview}</span>
         ) : (

@@ -56,8 +56,6 @@ export const DashboardListPage: React.FC = () => {
   // 创建新仪表盘（复用 DashboardPage 的创建逻辑）
   const handleCreateDashboard = async (values: any) => {
     try {
-      console.log('创建仪表盘请求:', values);
-
       if (!values.name || !values.name.trim()) {
         message.error('请输入仪表盘名称');
         return;
@@ -68,10 +66,8 @@ export const DashboardListPage: React.FC = () => {
         description: values.description ? values.description.trim() : '',
       });
 
-      console.log('创建成功:', newDashboard);
-
       // 先更新本地列表，避免返回列表时看不到刚创建的项（即便后端列表刷新有延迟）
-      setDashboards(prev => [...prev, newDashboard]);
+      setDashboards((prev) => [...prev, newDashboard]);
       setCreateModalVisible(false);
       createForm.resetFields();
       message.success('仪表盘创建成功');
@@ -93,7 +89,7 @@ export const DashboardListPage: React.FC = () => {
       await DashboardService.deleteDashboard(record.id);
       message.success('仪表盘删除成功');
       // 从列表中移除已删除的仪表盘
-      setDashboards(prev => prev.filter(d => d.id !== record.id));
+      setDashboards((prev) => prev.filter((d) => d.id !== record.id));
     } catch (error: any) {
       console.error('删除仪表盘失败:', error);
       message.error(error?.message || '删除仪表盘失败');
@@ -127,12 +123,7 @@ export const DashboardListPage: React.FC = () => {
       fixed: 'right' as const,
       render: (_: any, record: Dashboard) => (
         <Space size="small" wrap>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-          >
+          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small">
             编辑
           </Button>
           <Popconfirm
@@ -164,11 +155,7 @@ export const DashboardListPage: React.FC = () => {
         >
           <h1>仪表盘</h1>
           <Space>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleCreateClick}
-            >
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateClick}>
               新建仪表盘
             </Button>
           </Space>
@@ -199,11 +186,7 @@ export const DashboardListPage: React.FC = () => {
         footer={null}
       >
         <Form form={createForm} onFinish={handleCreateDashboard} layout="vertical">
-          <Form.Item
-            name="name"
-            label="仪表盘名称"
-            rules={[{ required: true, message: '请输入仪表盘名称' }]}
-          >
+          <Form.Item name="name" label="仪表盘名称" rules={[{ required: true, message: '请输入仪表盘名称' }]}>
             <Input placeholder="输入仪表盘名称" />
           </Form.Item>
 
@@ -224,4 +207,3 @@ export const DashboardListPage: React.FC = () => {
     </div>
   );
 };
-

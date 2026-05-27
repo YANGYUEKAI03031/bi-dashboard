@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { flushSync } from 'react-dom';
-import { Card, Spin, Empty, message, Typography, Button, Modal, Form, Input, Select, Dropdown, MenuProps, DatePicker } from 'antd';
+import {
+  Card,
+  Spin,
+  Empty,
+  message,
+  Typography,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Dropdown,
+  MenuProps,
+  DatePicker,
+} from 'antd';
 import dayjs from 'dayjs';
 import { useAuth } from '../contexts/AuthContext';
 import { DashboardService } from '../services/dashboardService';
@@ -10,7 +24,15 @@ import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import './ReportsPage.css';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { EditOutlined, PlusOutlined, MoreOutlined, DeleteOutlined, FilterOutlined, CalendarOutlined, DownCircleOutlined } from '@ant-design/icons';
+import {
+  EditOutlined,
+  PlusOutlined,
+  MoreOutlined,
+  DeleteOutlined,
+  FilterOutlined,
+  CalendarOutlined,
+  DownCircleOutlined,
+} from '@ant-design/icons';
 import { ReportPageService, ReportPage, ReportPageDashboard } from '../services/reportPageService';
 
 const { Title, Paragraph } = Typography;
@@ -86,9 +108,9 @@ const convertChartResponseToChart = (chartResponse: ChartResponse): Chart => {
 
 const hydrateDashboardCards = (d: Dashboard, latestCharts: Chart[]): Dashboard => {
   if (!d?.cards || d.cards.length === 0) return d;
-  const chartMap = new Map<number, Chart>(latestCharts.map(c => [c.id, c]));
+  const chartMap = new Map<number, Chart>(latestCharts.map((c) => [c.id, c]));
 
-  const nextCards = d.cards.map(card => {
+  const nextCards = d.cards.map((card) => {
     if (card.chart) return card;
     const hydrated = chartMap.get(card.chart_id);
     return hydrated ? { ...card, chart: hydrated } : card;
@@ -117,13 +139,13 @@ const AutoWidthGridLayout: React.FC<any> = (props) => {
 };
 
 // 图表卡片组件（只读模式）—— 与 DashboardEditorPage 保持一致
-const ChartCardComponent: React.FC<{ 
-  card: DashboardCard; 
-  filterValues?: Record<string, any>; 
+const ChartCardComponent: React.FC<{
+  card: DashboardCard;
+  filterValues?: Record<string, any>;
   allFilters?: DashboardFilter[];
-  chartData?: any[];      // 外部传入的数据（批量查询时使用）
-  dataLoading?: boolean;   // 外部传入的加载状态
-  error?: string | null;  // 外部传入的错误信息
+  chartData?: any[]; // 外部传入的数据（批量查询时使用）
+  dataLoading?: boolean; // 外部传入的加载状态
+  error?: string | null; // 外部传入的错误信息
   /** 全局图表联动筛选值 */
   chartLinkValue?: any;
   /** 联动筛选字段（按同名列筛选时仅来源图高亮，其他图不按 x 轴变暗） */
@@ -132,7 +154,18 @@ const ChartCardComponent: React.FC<{
   chartLinkSourceChartId?: number | null;
   /** 点击 X 轴时回调（value, fieldName 用于按同名列联动） */
   onChartXAxisClick?: (value: any, fieldName?: string) => void;
-}> = ({ card, filterValues = {}, allFilters = [], chartData: externalData, dataLoading: externalLoading, error: externalError, chartLinkValue, chartLinkField, chartLinkSourceChartId, onChartXAxisClick }) => {
+}> = ({
+  card,
+  filterValues = {},
+  allFilters = [],
+  chartData: externalData,
+  dataLoading: externalLoading,
+  error: externalError,
+  chartLinkValue,
+  chartLinkField,
+  chartLinkSourceChartId,
+  onChartXAxisClick,
+}) => {
   const [internalChartData, setChartData] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +194,7 @@ const ChartCardComponent: React.FC<{
         const filteredFilterValues: Record<string, any> = {};
 
         if (!isMetricChart) {
-          allFilters.forEach(filter => {
+          allFilters.forEach((filter) => {
             const filterValue = filterValues[filter.id];
             if (filterValue === undefined || filterValue === null) return;
             if (filterValue === '') return;
@@ -210,8 +243,8 @@ const ChartCardComponent: React.FC<{
 
   // 使用外部或内部数据
   const displayData = externalData !== undefined ? externalData : internalChartData;
-  
-  const displayLoading = externalData !== undefined ? (externalLoading || false) : dataLoading;
+
+  const displayLoading = externalData !== undefined ? externalLoading || false : dataLoading;
   const displayError = externalData !== undefined ? externalError : error;
 
   if (!card.chart) {
@@ -311,10 +344,7 @@ const ChartCardComponent: React.FC<{
             yFields,
             colorField: viz.color_field,
             // 报表视图中同样支持 Y 轴聚合方式
-            y_agg_method:
-              viz.y_agg_method ??
-              viz['graph.y_agg_method'] ??
-              undefined,
+            y_agg_method: viz.y_agg_method ?? viz['graph.y_agg_method'] ?? undefined,
             // X 轴聚合开关：明细型图表（散点图）默认不聚合，其它默认聚合
             x_group_by_enabled:
               typeof (viz as any).x_group_by_enabled === 'boolean'
@@ -325,13 +355,10 @@ const ChartCardComponent: React.FC<{
             line_y_fields: viz.line_y_fields,
             y_axis_right_title: viz.y_axis_right_title,
             metric_mode: viz.metric_mode === 'cell' ? 'cell' : 'aggregate',
-            metric_filter_field:
-              viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
-            metric_filter_value:
-              viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
+            metric_filter_field: viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
+            metric_filter_value: viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
             metric_unit: viz.metric_unit != null ? String(viz.metric_unit) : '',
-            metric_decimals:
-              typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
+            metric_decimals: typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
             metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
             metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
             metric_filter_expr: viz.metric_filter_expr,
@@ -348,7 +375,13 @@ const ChartCardComponent: React.FC<{
           data={chartDataForDisplay}
           style={{ height: '100%', width: '100%' }}
           onXAxisClick={onChartXAxisClick}
-          selectedXValue={chartLinkSourceChartId === card.chart?.id ? chartLinkValue : (chartLinkField == null ? chartLinkValue : undefined)}
+          selectedXValue={
+            chartLinkSourceChartId === card.chart?.id
+              ? chartLinkValue
+              : chartLinkField == null
+                ? chartLinkValue
+                : undefined
+          }
         />
       )}
     </div>
@@ -371,7 +404,17 @@ const DashboardView: React.FC<{
   chartLinkSourceChartId?: number | null;
   /** 清除图表联动筛选回调 */
   onClearChartLink?: () => void;
-}> = ({ dashboard, filterValues = {}, onFilterChange, batchChartData, chartLinkValue, chartLinkField, onChartXAxisClick, chartLinkSourceChartId, onClearChartLink }) => {
+}> = ({
+  dashboard,
+  filterValues = {},
+  onFilterChange,
+  batchChartData,
+  chartLinkValue,
+  chartLinkField,
+  onChartXAxisClick,
+  chartLinkSourceChartId,
+  onClearChartLink,
+}) => {
   const widgets = (dashboard?.settings as any)?.widgets || [];
   const cards = dashboard.cards || [];
   const filters = dashboard.filters || [];
@@ -383,13 +426,15 @@ const DashboardView: React.FC<{
     return s;
   };
 
-  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
+  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>(
+    {},
+  );
   const [filterOptionsLoading, setFilterOptionsLoading] = useState<Record<number, boolean>>({});
   const [filterOptionsCache, setFilterOptionsCache] = useState<Record<number, string[]>>({});
 
   // 初始加载：筛选器列表变化时，加载 select/multi_select 的选项
   useEffect(() => {
-    filters.forEach(filter => {
+    filters.forEach((filter) => {
       if (filter.filter_type === 'select' || filter.filter_type === 'multi_select') {
         if (!filterSelectOptions[filter.id]) {
           loadFilterOptions(filter, undefined);
@@ -404,14 +449,14 @@ const DashboardView: React.FC<{
   useEffect(() => {
     const prev = prevFilterValuesRef.current;
     const allKeys = Array.from(new Set([...Object.keys(prev), ...Object.keys(filterValues)]));
-    const hasChanged = allKeys.some(k => (prev as any)[k] !== (filterValues as any)[k]);
+    const hasChanged = allKeys.some((k) => (prev as any)[k] !== (filterValues as any)[k]);
     if (!hasChanged) return;
     prevFilterValuesRef.current = filterValues;
 
-    filters.forEach(filter => {
+    filters.forEach((filter) => {
       if (filter.filter_type !== 'select' && filter.filter_type !== 'multi_select') return;
       const cascadeConditions: Record<string, any> = {};
-      filters.forEach(f => {
+      filters.forEach((f) => {
         if (f.id === filter.id) return;
         const val = filterValues[f.id];
         if (val === undefined || val === null || val === '') return;
@@ -429,23 +474,20 @@ const DashboardView: React.FC<{
    * ② 有绑定图表 → 从绑定图表推断
    * ③ 无绑定 → 遍历所有仪表盘图表找第一个能返回选项的
    */
-  const loadFilterOptions = async (
-    filter: DashboardFilter,
-    filterConditions: Record<string, any> | undefined,
-  ) => {
+  const loadFilterOptions = async (filter: DashboardFilter, filterConditions: Record<string, any> | undefined) => {
     const hasCascade = filterConditions && Object.keys(filterConditions).length > 0;
 
     // 命中缓存时仍需刷新 UI（防止级联缩小的选项残留）
     if (!hasCascade && filterOptionsCache[filter.id]) {
       const cached = filterOptionsCache[filter.id];
-      setFilterSelectOptions(prev => ({
+      setFilterSelectOptions((prev) => ({
         ...prev,
         [filter.id]: cached.map((opt: string) => ({ label: String(opt), value: String(opt) })),
       }));
       return cached;
     }
 
-    setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
+    setFilterOptionsLoading((prev) => ({ ...prev, [filter.id]: true }));
 
     try {
       let options: string[] = [];
@@ -463,7 +505,7 @@ const DashboardView: React.FC<{
       } else {
         // ② 从绑定图表推断
         const firstBinding = filter.bindings?.[0];
-        const boundCard = firstBinding ? cards.find(c => c.id === firstBinding.card_id) : undefined;
+        const boundCard = firstBinding ? cards.find((c) => c.id === firstBinding.card_id) : undefined;
         let chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
 
         // ③ 无绑定 → 遍历所有图表
@@ -473,18 +515,26 @@ const DashboardView: React.FC<{
             if (!candidateId) continue;
             try {
               const result = await ChartService.getFilterOptionsFromChart(
-                candidateId, filter.field_name, undefined, filterConditions,
+                candidateId,
+                filter.field_name,
+                undefined,
+                filterConditions,
               );
               if (result.options && result.options.length > 0) {
                 options = result.options;
                 break;
               }
-            } catch { continue; }
+            } catch {
+              continue;
+            }
           }
         } else if (chartId && filter.field_name) {
           try {
             const result = await ChartService.getFilterOptionsFromChart(
-              chartId, filter.field_name, undefined, filterConditions,
+              chartId,
+              filter.field_name,
+              undefined,
+              filterConditions,
             );
             options = result.options || [];
           } catch (e) {
@@ -494,9 +544,9 @@ const DashboardView: React.FC<{
       }
 
       if (!hasCascade) {
-        setFilterOptionsCache(prev => ({ ...prev, [filter.id]: options }));
+        setFilterOptionsCache((prev) => ({ ...prev, [filter.id]: options }));
       }
-      setFilterSelectOptions(prev => ({
+      setFilterSelectOptions((prev) => ({
         ...prev,
         [filter.id]: options.map((opt: string) => ({ label: String(opt), value: String(opt) })),
       }));
@@ -505,12 +555,12 @@ const DashboardView: React.FC<{
       console.error('[Report] 加载筛选器选项失败:', error);
       return [];
     } finally {
-      setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
+      setFilterOptionsLoading((prev) => ({ ...prev, [filter.id]: false }));
     }
   };
 
   const sortedItems = [
-    ...cards.map(card => ({
+    ...cards.map((card) => ({
       i: card.id.toString(),
       x: Number.isFinite(card.card_col) ? (card.card_col as number) : 0,
       y: Number.isFinite(card.card_row) ? (card.card_row as number) : 0,
@@ -519,7 +569,7 @@ const DashboardView: React.FC<{
     })),
     ...widgets
       .filter((w: any) => w && w.type === 'title')
-      .map(w => ({
+      .map((w: any) => ({
         i: w.id,
         x: Number.isFinite(w.card_col) ? (w.card_col as number) : 0,
         y: Number.isFinite(w.card_row) ? (w.card_row as number) : 0,
@@ -529,28 +579,41 @@ const DashboardView: React.FC<{
   ].sort((a, b) => a.y - b.y);
 
   // Reports 只读模式：所有布局项设为 static，禁止拖拽和缩放
-  const mergedLayout = sortedItems.map(item => ({ ...item, static: true }));
+  const mergedLayout = sortedItems.map((item) => ({ ...item, static: true }));
 
   return (
     <div className="reports-dashboard-view">
       {/* 筛选器渲染区域 */}
       {filters.length > 0 && (
-        <div className="reports-filter-bar" style={{
-          marginBottom: 16,
-          padding: '16px 20px',
-          borderRadius: 12,
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-        }}>
+        <div
+          className="reports-filter-bar"
+          style={{
+            marginBottom: 16,
+            padding: '16px 20px',
+            borderRadius: 12,
+            position: 'sticky',
+            top: 0,
+            zIndex: 100,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <FilterOutlined style={{ color: '#6366F1', fontSize: 16 }} />
             <span style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>筛选条件</span>
-            {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
+            {Object.keys(filterValues).some(
+              (k) => (filterValues as any)[k] !== undefined && (filterValues as any)[k] !== null,
+            ) && (
               <button
                 type="button"
                 onClick={() => onFilterChange?.({})}
-                style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', color: '#6366F1', background: 'none', border: 'none', padding: 0 }}
+                style={{
+                  marginLeft: 'auto',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  color: '#6366F1',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                }}
               >
                 重置全部
               </button>
@@ -581,11 +644,14 @@ const DashboardView: React.FC<{
 
               const getControlWidth = () => {
                 switch (filter.filter_type) {
-                  case 'date_range': return 260;
+                  case 'date_range':
+                    return 260;
                   case 'select':
                   case 'multi_select':
-                  case 'input': return 160;
-                  default: return 150;
+                  case 'input':
+                    return 160;
+                  default:
+                    return 150;
                 }
               };
 
@@ -611,10 +677,14 @@ const DashboardView: React.FC<{
                     <DatePicker.RangePicker
                       size="small"
                       style={{ width: getControlWidth() }}
-                      value={currentVal ? [
-                        currentVal.start ? dayjs(currentVal.start) : null,
-                        currentVal.end ? dayjs(currentVal.end) : null
-                      ] : null}
+                      value={
+                        currentVal
+                          ? [
+                              currentVal.start ? dayjs(currentVal.start) : null,
+                              currentVal.end ? dayjs(currentVal.end) : null,
+                            ]
+                          : null
+                      }
                       onChange={(dates) => {
                         if (dates) {
                           handleFilterChange({
@@ -627,13 +697,28 @@ const DashboardView: React.FC<{
                       }}
                       presets={[
                         { label: '今日', value: [dayjs().startOf('day'), dayjs().endOf('day')] },
-                        { label: '昨日', value: [dayjs().subtract(1, 'day').startOf('day'), dayjs().subtract(1, 'day').endOf('day')] },
+                        {
+                          label: '昨日',
+                          value: [dayjs().subtract(1, 'day').startOf('day'), dayjs().subtract(1, 'day').endOf('day')],
+                        },
                         { label: '近7天', value: [dayjs().subtract(6, 'day'), dayjs()] },
                         { label: '近30天', value: [dayjs().subtract(29, 'day'), dayjs()] },
                         { label: '本月', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
-                        { label: '上月', value: [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')] },
+                        {
+                          label: '上月',
+                          value: [
+                            dayjs().subtract(1, 'month').startOf('month'),
+                            dayjs().subtract(1, 'month').endOf('month'),
+                          ],
+                        },
                         { label: '本年', value: [dayjs().startOf('year'), dayjs().endOf('year')] },
-                        { label: '去年', value: [dayjs().subtract(1, 'year').startOf('year'), dayjs().subtract(1, 'year').endOf('year')] },
+                        {
+                          label: '去年',
+                          value: [
+                            dayjs().subtract(1, 'year').startOf('year'),
+                            dayjs().subtract(1, 'year').endOf('year'),
+                          ],
+                        },
                       ]}
                     />
                   )}
@@ -698,12 +783,7 @@ const DashboardView: React.FC<{
 
       {/* 标题组件和图表网格布局 - 与 DashboardEditorPage 保持一致 */}
       {widgets.length > 0 || cards.length > 0 ? (
-        <AutoWidthGridLayout
-          cols={12}
-          rowHeight={30}
-          margin={[12, 12]}
-          layout={mergedLayout}
-        >
+        <AutoWidthGridLayout cols={12} rowHeight={30} margin={[12, 12]} layout={mergedLayout}>
           {widgets
             .filter((w: any) => w && w.type === 'title')
             .map((w: any) => (
@@ -712,7 +792,8 @@ const DashboardView: React.FC<{
                   size="small"
                   style={{
                     height: '100%',
-                    borderBottom: w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} rgba(255, 255, 255, 0.06)`,
+                    borderBottom:
+                      w.borderBottom === 'none' ? 'none' : `2px ${w.borderBottom || 'solid'} rgba(255, 255, 255, 0.06)`,
                     display: 'flex',
                     flexDirection: 'column',
                     border: '1px solid rgba(255, 255, 255, 0.06)',
@@ -721,28 +802,42 @@ const DashboardView: React.FC<{
                     backdropFilter: 'blur(12px)',
                   }}
                   styles={{
-                    body: { height: '100%', padding: '2px 6px', background: 'transparent' }
+                    body: { height: '100%', padding: '2px 6px', background: 'transparent' },
                   }}
                 >
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
                     <Title level={w.level || 1} style={{ margin: 0, color: '#e2e8f0' }}>
                       {w.title}
                     </Title>
                     {w.subtitle && (
-                      <Paragraph style={{ margin: 0, color: '#94a3b8', fontSize: 11 }}>
-                        {w.subtitle}
-                      </Paragraph>
+                      <Paragraph style={{ margin: 0, color: '#94a3b8', fontSize: 11 }}>{w.subtitle}</Paragraph>
                     )}
                   </div>
                 </Card>
               </div>
             ))}
-          {cards.map(card => (
+          {cards.map((card) => (
             <div key={card.id.toString()}>
               <Card
                 size="small"
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', color: '#e2e8f0', fontWeight: 500 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      width: '100%',
+                      color: '#e2e8f0',
+                      fontWeight: 500,
+                    }}
+                  >
                     <span>{card.chart?.name || `图表 #${card.chart_id}`}</span>
                   </div>
                 }
@@ -755,38 +850,47 @@ const DashboardView: React.FC<{
                   alignItems: 'stretch',
                 }}
               >
-                <ChartCardComponent 
-                  card={card} 
-                  filterValues={filterValues} 
+                <ChartCardComponent
+                  card={card}
+                  filterValues={filterValues}
                   allFilters={filters}
-                  chartData={card.chart?.id ? (() => {
-                    const rawData = batchChartData?.get(card.chart!.id)?.data || [];
-                    // 如果图表联动筛选的字段在当前图表数据中不存在，则不做筛选，保持原数据
-                    if (chartLinkField && chartLinkValue != null && rawData.length > 0) {
-                      const first = rawData[0];
-                      if (!first || typeof first !== 'object' || !Object.prototype.hasOwnProperty.call(first, chartLinkField)) {
-                        return rawData;
-                      }
-                      return rawData.filter((row: any) => normalizeLinkValue(row[chartLinkField]) === chartLinkValue);
-                    }
-                    return rawData;
-                  })() : undefined}
+                  chartData={
+                    card.chart?.id
+                      ? (() => {
+                          const rawData = batchChartData?.get(card.chart!.id)?.data || [];
+                          // 如果图表联动筛选的字段在当前图表数据中不存在，则不做筛选，保持原数据
+                          if (chartLinkField && chartLinkValue != null && rawData.length > 0) {
+                            const first = rawData[0];
+                            if (
+                              !first ||
+                              typeof first !== 'object' ||
+                              !Object.prototype.hasOwnProperty.call(first, chartLinkField)
+                            ) {
+                              return rawData;
+                            }
+                            return rawData.filter(
+                              (row: any) => normalizeLinkValue(row[chartLinkField]) === chartLinkValue,
+                            );
+                          }
+                          return rawData;
+                        })()
+                      : undefined
+                  }
                   dataLoading={card.chart?.id ? batchChartData?.get(card.chart.id)?.loading : false}
                   error={card.chart?.id ? batchChartData?.get(card.chart.id)?.error : null}
                   chartLinkValue={chartLinkValue}
                   chartLinkField={chartLinkField}
                   chartLinkSourceChartId={chartLinkSourceChartId}
-                  onChartXAxisClick={(value, fieldName) => onChartXAxisClick?.(card.chart?.id ?? null, value, fieldName)}
+                  onChartXAxisClick={(value, fieldName) =>
+                    onChartXAxisClick?.(card.chart?.id ?? null, value, fieldName)
+                  }
                 />
               </Card>
             </div>
           ))}
         </AutoWidthGridLayout>
       ) : (
-        <Empty
-          description="该仪表盘暂无图表"
-          style={{ marginTop: 40 }}
-        />
+        <Empty description="该仪表盘暂无图表" style={{ marginTop: 40 }} />
       )}
     </div>
   );
@@ -812,7 +916,7 @@ export const ReportsPage: React.FC = () => {
   const [addDashboardForm] = Form.useForm();
   const [availableDashboardsForAdd, setAvailableDashboardsForAdd] = useState<Dashboard[]>([]);
   const [addingDashboard, setAddingDashboard] = useState(false);
-// 当前仪表盘的筛选器值（key 为 filter.id）
+  // 当前仪表盘的筛选器值（key 为 filter.id）
   const [filterValues, setFilterValues] = useState<Record<number, any>>({});
   // 图表联动筛选值（全局选中的值）
   const [chartLinkValue, setChartLinkValue] = useState<any>(null);
@@ -821,17 +925,26 @@ export const ReportsPage: React.FC = () => {
   // 图表联动来源（哪个图触发的点击）
   const [chartLinkSourceChartId, setChartLinkSourceChartId] = useState<number | null>(null);
   // 批量图表数据（chartId -> 数据）
-  const [batchChartData, setBatchChartData] = useState<Map<number, { data: any[]; loading: boolean; error: string | null }>>(new Map());
+  const [batchChartData, setBatchChartData] = useState<
+    Map<number, { data: any[]; loading: boolean; error: string | null }>
+  >(new Map());
 
   // 处理筛选器变化
   const handleFilterChange = (newValues: Record<number, any>) => {
     setFilterValues(newValues);
     const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
     if (currentDashboard && currentDashboard.cards && currentDashboard.cards.length > 0) {
-      const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
-        ? { field: chartLinkField, value: String(chartLinkValue) }
-        : null;
-      loadBatchChartData(currentDashboard.cards, currentDashboard.filters || [], newValues, linkFilter, activeDashboardId ?? null);
+      const linkFilter =
+        chartLinkField && chartLinkValue != null && chartLinkValue !== ''
+          ? { field: chartLinkField, value: String(chartLinkValue) }
+          : null;
+      loadBatchChartData(
+        currentDashboard.cards,
+        currentDashboard.filters || [],
+        newValues,
+        linkFilter,
+        activeDashboardId ?? null,
+      );
     }
   };
 
@@ -847,7 +960,6 @@ export const ReportsPage: React.FC = () => {
   const handleChartLinkClick = (chartId: number | null, value: any, fieldName?: string) => {
     const nextVal = value == null ? null : normalizeLinkValue(value);
     if (nextVal == null) {
-      if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (click same or null)');
       flushSync(() => {
         setChartLinkValue(null);
         setChartLinkField(null);
@@ -856,10 +968,7 @@ export const ReportsPage: React.FC = () => {
       return;
     }
     if (process.env.NODE_ENV === 'development') {
-      const currentDashboard = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
-      console.log('[ReportsPage] ========== 图表联动触发 ==========');
-      console.log('[ReportsPage] 来源图表ID:', chartId, '选中的值:', nextVal, '字段名:', fieldName);
-      console.log('[ReportsPage] 当前仪表盘所有图表ID:', currentDashboard?.cards?.map(c => ({ cardId: c.id, chartId: c.chart?.id, chartName: c.chart?.name })));
+      // debug: chart link triggered
     }
     setChartLinkValue(nextVal);
     setChartLinkField(fieldName ?? null);
@@ -873,7 +982,6 @@ export const ReportsPage: React.FC = () => {
       const target = ev.target as HTMLElement | null;
       const inChart = !!target?.closest?.('[data-chart-container="true"]');
       if (!inChart) {
-        if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (click outside)');
         flushSync(() => {
           setChartLinkValue(null);
           setChartLinkField(null);
@@ -886,94 +994,101 @@ export const ReportsPage: React.FC = () => {
   }, [chartLinkValue]);
 
   // 批量加载所有图表数据（linkFilter 与筛选器一致：按同名字段在 SQL 中加 WHERE 条件）
-  const loadBatchChartData = useCallback(async (
-    cards: DashboardCard[],
-    filters: DashboardFilter[],
-    currentFilterValues: Record<number, any>,
-    linkFilter?: { field: string; value: string } | null,
-    dashboardId?: number | null,
-  ) => {
-    if (!cards || cards.length === 0) return;
+  const loadBatchChartData = useCallback(
+    async (
+      cards: DashboardCard[],
+      filters: DashboardFilter[],
+      currentFilterValues: Record<number, any>,
+      linkFilter?: { field: string; value: string } | null,
+      dashboardId?: number | null,
+    ) => {
+      if (!cards || cards.length === 0) return;
 
-    const requestKey = JSON.stringify({
-      dashboardId: dashboardId ?? null,
-      cardIds: cards.map(c => c.chart?.id).filter(Boolean).sort(),
-      filterValues: currentFilterValues,
-      linkFilter: linkFilter ?? null,
-    });
+      const requestKey = JSON.stringify({
+        dashboardId: dashboardId ?? null,
+        cardIds: cards
+          .map((c) => c.chart?.id)
+          .filter(Boolean)
+          .sort(),
+        filterValues: currentFilterValues,
+        linkFilter: linkFilter ?? null,
+      });
 
-    if ((loadBatchChartData as any).lastRequestKey === requestKey) {
-      return;
-    }
-    (loadBatchChartData as any).lastRequestKey = requestKey;
-
-    const requests: { chartId: number; filterParams: Record<string, any> }[] = [];
-
-    cards.forEach(card => {
-      if (!card.chart?.id) return;
-
-      const isMetricChart = (card.chart?.chart_type || '').toLowerCase() === 'metric';
-      const filteredFilterValues: Record<string, any> = {};
-      if (!isMetricChart) {
-        filters.forEach(filter => {
-          const filterValue = currentFilterValues[filter.id];
-          if (filterValue === undefined || filterValue === null) return;
-          if (filterValue === '') return;
-          if (Array.isArray(filterValue) && filterValue.length === 0) return;
-          const paramKey = `${filter.id}_${filter.field_name}`;
-          filteredFilterValues[paramKey] = filterValue;
-        });
-        // 图表联动：按同名列在 SQL 中筛选（指标图不参与）
-        if (linkFilter?.field && linkFilter?.value != null && linkFilter.value !== '') {
-          filteredFilterValues[linkFilter.field] = linkFilter.value;
-        }
+      if ((loadBatchChartData as any).lastRequestKey === requestKey) {
+        return;
       }
+      (loadBatchChartData as any).lastRequestKey = requestKey;
 
-      requests.push({ chartId: card.chart.id, filterParams: filteredFilterValues });
-    });
-    
-    if (requests.length === 0) return;
-    
-    // 设置所有图表为 loading 状态（保留原数据）
-    const loadingMap = new Map(batchChartData);
-    requests.forEach(req => {
-      const existing = loadingMap.get(req.chartId);
-      loadingMap.set(req.chartId, { 
-        data: existing?.data || [], // 保留原有数据
-        loading: true, 
-        error: null 
+      const requests: { chartId: number; filterParams: Record<string, any> }[] = [];
+
+      cards.forEach((card) => {
+        if (!card.chart?.id) return;
+
+        const isMetricChart = (card.chart?.chart_type || '').toLowerCase() === 'metric';
+        const filteredFilterValues: Record<string, any> = {};
+        if (!isMetricChart) {
+          filters.forEach((filter) => {
+            const filterValue = currentFilterValues[filter.id];
+            if (filterValue === undefined || filterValue === null) return;
+            if (filterValue === '') return;
+            if (Array.isArray(filterValue) && filterValue.length === 0) return;
+            const paramKey = `${filter.id}_${filter.field_name}`;
+            filteredFilterValues[paramKey] = filterValue;
+          });
+          // 图表联动：按同名列在 SQL 中筛选（指标图不参与）
+          if (linkFilter?.field && linkFilter?.value != null && linkFilter.value !== '') {
+            filteredFilterValues[linkFilter.field] = linkFilter.value;
+          }
+        }
+
+        requests.push({ chartId: card.chart.id, filterParams: filteredFilterValues });
       });
-    });
-    setBatchChartData(loadingMap);
-    
-    try {
-      // 批量查询（不修改数据，只更新loading状态）
-      const results = await ChartService.executeBatchChartQuery(requests);
-      
-      // 更新数据（忽略各图表的错误信息，保持原样）
-      const newDataMap = new Map(batchChartData);
-      results.forEach(result => {
-        newDataMap.set(result.chartId, {
-          data: result.data || [],
-          loading: false,
-          error: null, // 忽略错误，保持图表原样
+
+      if (requests.length === 0) return;
+
+      // 设置所有图表为 loading 状态（保留原数据）
+      const loadingMap = new Map(batchChartData);
+      requests.forEach((req) => {
+        const existing = loadingMap.get(req.chartId);
+        loadingMap.set(req.chartId, {
+          data: existing?.data || [], // 保留原有数据
+          loading: true,
+          error: null,
         });
       });
-      setBatchChartData(newDataMap);
-    } catch (err: any) {
-      console.error('批量加载图表数据失败:', err);
-      // 忽略所有错误，保持图表原样不变
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内部使用 ref 和稳定的回调
-  }, []);
+      setBatchChartData(loadingMap);
+
+      try {
+        // 批量查询（不修改数据，只更新loading状态）
+        const results = await ChartService.executeBatchChartQuery(requests);
+
+        // 更新数据（忽略各图表的错误信息，保持原样）
+        const newDataMap = new Map(batchChartData);
+        results.forEach((result) => {
+          newDataMap.set(result.chartId, {
+            data: result.data || [],
+            loading: false,
+            error: null, // 忽略错误，保持图表原样
+          });
+        });
+        setBatchChartData(newDataMap);
+      } catch (err: any) {
+        console.error('批量加载图表数据失败:', err);
+        // 忽略所有错误，保持图表原样不变
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 内部使用 ref 和稳定的回调
+    },
+    [],
+  );
 
   // 图表联动变化时按「同名列」重新请求后端数据（与筛选器一致，在 SQL 中加 WHERE）
   const currentDashboardForLink = activeDashboardId ? dashboardDetails.get(activeDashboardId) : null;
   useEffect(() => {
     if (!currentDashboardForLink?.cards?.length) return;
-    const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
-      ? { field: chartLinkField, value: String(chartLinkValue) }
-      : null;
+    const linkFilter =
+      chartLinkField && chartLinkValue != null && chartLinkValue !== ''
+        ? { field: chartLinkField, value: String(chartLinkValue) }
+        : null;
     loadBatchChartData(
       currentDashboardForLink.cards,
       currentDashboardForLink.filters || [],
@@ -1002,23 +1117,23 @@ export const ReportsPage: React.FC = () => {
           try {
             const page = await ReportPageService.getReportPage(Number(pageId));
             setReportPage(page);
-            
+
             // 保存报表页仪表盘关联信息（包含 rpdId）
             const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
             setReportPageDashboards(sortedRpd);
-            
+
             // 加载报表页关联的仪表盘
             const pageDashboards = sortedRpd
-              .map(rpd => rpd.dashboard)
+              .map((rpd) => rpd.dashboard)
               .filter((d): d is Dashboard => d !== null && d !== undefined);
-            
+
             setDashboards(pageDashboards);
-            
+
             // 加载可用图表列表
             const userCharts = await ChartService.getUserCharts();
             const convertedCharts = userCharts.map(convertChartResponseToChart);
             setCharts(convertedCharts);
-            
+
             // 如果有仪表盘，默认选中第一个并强制拉取其图表数据（切换报表页后必须重新拉数）
             if (pageDashboards.length > 0) {
               const firstDashboardId = pageDashboards[0].id;
@@ -1068,9 +1183,8 @@ export const ReportsPage: React.FC = () => {
   // 监听路由变化，从编辑页返回时刷新当前仪表盘数据
   useEffect(() => {
     if (activeDashboardId) {
-      console.log('[ReportsPage] location changed, refreshing dashboard:', activeDashboardId);
-      // 清除缓存并重新加载
-      setDashboardDetails(prev => {
+      // Clear cache and reload on route change
+      setDashboardDetails((prev) => {
         const next = new Map(prev);
         next.delete(activeDashboardId);
         return next;
@@ -1082,41 +1196,36 @@ export const ReportsPage: React.FC = () => {
 
   const loadDashboardDetails = async (dashboardId: number, availableCharts: Chart[], forceRefreshCharts?: boolean) => {
     // 若已加载过且非强制刷新图表，直接返回（切换报表页时上层会先清空缓存再调用，此处 forceRefreshCharts 可不用传）
-    console.log('[ReportsPage] loadDashboardDetails called - id:', dashboardId, 'forceRefreshCharts:', forceRefreshCharts, 'has in cache:', dashboardDetails.has(dashboardId));
     if (dashboardDetails.has(dashboardId) && !forceRefreshCharts) {
-      console.log('[ReportsPage] loadDashboardDetails - returning early due to cache');
       return;
     }
 
-    setLoadingDashboard(prev => new Set(prev).add(dashboardId));
+    setLoadingDashboard((prev) => new Set(prev).add(dashboardId));
 
     try {
       const dashboard = await DashboardService.getDashboard(dashboardId);
-      console.log('[ReportsPage] loadDashboardDetails - FULL dashboard data:', JSON.stringify({
-        id: dashboard.id,
-        cardsCount: dashboard.cards?.length,
-        cardsIds: dashboard.cards?.map(c => c.id),
-        settings: dashboard.settings,
-        widgetsCount: (dashboard.settings as any)?.widgets?.length,
-        widgets: (dashboard.settings as any)?.widgets
-      }));
-      console.log('[ReportsPage] loadDashboardDetails - fetched dashboard id:', dashboard.id, 'cards:', dashboard.cards?.length);
       const hydratedDashboard = hydrateDashboardCards(dashboard, availableCharts);
       const filters = await DashboardService.getDashboardFilters(dashboardId);
       hydratedDashboard.filters = filters;
-      console.log('[ReportsPage] loadDashboardDetails - setting cache, hydrated cards:', hydratedDashboard.cards?.length);
-      setDashboardDetails(prev => new Map(prev).set(dashboardId, hydratedDashboard));
+      setDashboardDetails((prev) => new Map(prev).set(dashboardId, hydratedDashboard));
 
       if (hydratedDashboard.cards && hydratedDashboard.cards.length > 0) {
-        const linkFilter = chartLinkField && chartLinkValue != null && chartLinkValue !== ''
-          ? { field: chartLinkField, value: String(chartLinkValue) }
-          : null;
-        loadBatchChartData(hydratedDashboard.cards, hydratedDashboard.filters || [], filterValues, linkFilter, dashboardId);
+        const linkFilter =
+          chartLinkField && chartLinkValue != null && chartLinkValue !== ''
+            ? { field: chartLinkField, value: String(chartLinkValue) }
+            : null;
+        loadBatchChartData(
+          hydratedDashboard.cards,
+          hydratedDashboard.filters || [],
+          filterValues,
+          linkFilter,
+          dashboardId,
+        );
       }
     } catch (error: any) {
       message.error(`加载仪表盘详情失败: ${error?.message || '未知错误'}`);
     } finally {
-      setLoadingDashboard(prev => {
+      setLoadingDashboard((prev) => {
         const next = new Set(prev);
         next.delete(dashboardId);
         return next;
@@ -1126,21 +1235,19 @@ export const ReportsPage: React.FC = () => {
 
   const handleTabChange = async (dashboardId: string) => {
     const id = Number(dashboardId);
-    console.log('[ReportsPage] handleTabChange - dashboardId:', id, 'current activeDashboardId:', activeDashboardId);
     setActiveDashboardId(id);
     setFilterValues({}); // 切换仪表盘时重置筛选状态
     setBatchChartData(new Map()); // 防止不同 tab 的 batch 数据互相覆盖导致"暂无数据"
 
     (loadBatchChartData as any).lastRequestKey = undefined;
-    
+
     // 清除缓存，强制重新加载仪表盘详情（包含最新的 cards 列表）
-    setDashboardDetails(prev => {
-      console.log('[ReportsPage] handleTabChange - clearing cache for id:', id, 'prev size:', prev.size);
+    setDashboardDetails((prev) => {
       const next = new Map(prev);
       next.delete(id);
       return next;
     });
-    
+
     await loadDashboardDetails(id, charts);
   };
 
@@ -1156,7 +1263,7 @@ export const ReportsPage: React.FC = () => {
     try {
       const userDashboards = await DashboardService.getUserDashboards();
       setDashboards(userDashboards);
-      
+
       // 选中新创建的仪表盘
       setActiveDashboardId(newDashboard.id);
       await loadDashboardDetails(newDashboard.id, charts);
@@ -1171,8 +1278,8 @@ export const ReportsPage: React.FC = () => {
     try {
       // 加载所有用户仪表盘，并过滤掉已经在当前报表页中的
       const userDashboards = await DashboardService.getUserDashboards();
-      const existingIds = new Set(dashboards.map(d => d.id));
-      const candidates = userDashboards.filter(d => !existingIds.has(d.id));
+      const existingIds = new Set(dashboards.map((d) => d.id));
+      const candidates = userDashboards.filter((d) => !existingIds.has(d.id));
 
       if (candidates.length === 0) {
         message.info('暂无可添加的仪表盘，请先在仪表盘页面创建。');
@@ -1208,7 +1315,6 @@ export const ReportsPage: React.FC = () => {
         name: values.name.trim(),
         description: values.description ? values.description.trim() : '',
       };
-
 
       const newDashboard = await DashboardService.createDashboard(dashboardData);
       message.success('仪表盘创建成功');
@@ -1246,11 +1352,10 @@ export const ReportsPage: React.FC = () => {
 
       // 在前端状态中追加该仪表盘
       const addedDashboard =
-        availableDashboardsForAdd.find(d => d.id === dashboardId) ||
-        dashboards.find(d => d.id === dashboardId);
+        availableDashboardsForAdd.find((d) => d.id === dashboardId) || dashboards.find((d) => d.id === dashboardId);
 
       if (addedDashboard) {
-        setDashboards(prev => [...prev, addedDashboard]);
+        setDashboards((prev) => [...prev, addedDashboard]);
       }
 
       // 选中新添加的仪表盘，并确保其详情被加载
@@ -1262,14 +1367,14 @@ export const ReportsPage: React.FC = () => {
       // 重新加载报表页以获取最新数据
       const page = await ReportPageService.getReportPage(Number(pageId));
       setReportPage(page);
-      
+
       const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
       setReportPageDashboards(sortedRpd);
-      
+
       const pageDashboards = sortedRpd
-        .map(rpd => rpd.dashboard)
+        .map((rpd) => rpd.dashboard)
         .filter((d): d is Dashboard => d !== null && d !== undefined);
-      
+
       setDashboards(pageDashboards);
 
       // 选中新添加的仪表盘，并确保其详情被加载
@@ -1303,20 +1408,20 @@ export const ReportsPage: React.FC = () => {
       onOk: async () => {
         try {
           await ReportPageService.removeDashboardFromReportPage(rpdId);
-          
+
           // 重新加载报表页
           const page = await ReportPageService.getReportPage(Number(pageId));
           setReportPage(page);
-          
+
           const sortedRpd = page.dashboards.sort((a, b) => a.order_index - b.order_index);
           setReportPageDashboards(sortedRpd);
-          
+
           const pageDashboards = sortedRpd
-            .map(rpd => rpd.dashboard)
+            .map((rpd) => rpd.dashboard)
             .filter((d): d is Dashboard => d !== null && d !== undefined);
-          
+
           setDashboards(pageDashboards);
-          
+
           // 如果移除的是当前选中的仪表盘，切换到第一个（如果还有的话）
           if (pageDashboards.length > 0) {
             const firstDashboardId = pageDashboards[0].id;
@@ -1327,7 +1432,7 @@ export const ReportsPage: React.FC = () => {
           } else {
             setActiveDashboardId(null);
           }
-          
+
           message.success('已从报表页移除仪表盘');
         } catch (error: any) {
           console.error('移除仪表盘失败:', error);
@@ -1372,22 +1477,24 @@ export const ReportsPage: React.FC = () => {
                 <>
                   {dashboards.map((dashboard, index) => {
                     // 找到对应的 ReportPageDashboard 以获取 rpdId
-                    const rpd = reportPageDashboards.find(rpd => rpd.dashboard_id === dashboard.id);
-                    
-                    const menuItems: MenuProps['items'] = pageId ? [
-                      {
-                        key: 'remove',
-                        label: '从报表页移除',
-                        icon: <DeleteOutlined />,
-                        danger: true,
-                        onClick: () => {
-                          if (rpd) {
-                            handleRemoveDashboardFromReportPage(rpd.id, dashboard.name);
-                          }
-                        },
-                      },
-                    ] : [];
-                    
+                    const rpd = reportPageDashboards.find((rpd) => rpd.dashboard_id === dashboard.id);
+
+                    const menuItems: MenuProps['items'] = pageId
+                      ? [
+                          {
+                            key: 'remove',
+                            label: '从报表页移除',
+                            icon: <DeleteOutlined />,
+                            danger: true,
+                            onClick: () => {
+                              if (rpd) {
+                                handleRemoveDashboardFromReportPage(rpd.id, dashboard.name);
+                              }
+                            },
+                          },
+                        ]
+                      : [];
+
                     return (
                       <div key={dashboard.id} className="dashboard-nav-tag-wrapper">
                         <button
@@ -1402,11 +1509,7 @@ export const ReportsPage: React.FC = () => {
                           {dashboard.name}
                         </button>
                         {pageId && rpd && (
-                          <Dropdown
-                            menu={{ items: menuItems }}
-                            trigger={['click']}
-                            placement="bottomRight"
-                          >
+                          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
                             <button
                               className="dashboard-nav-tag-more-btn"
                               onClick={(e) => e.stopPropagation()}
@@ -1419,22 +1522,14 @@ export const ReportsPage: React.FC = () => {
                       </div>
                     );
                   })}
-                  <button
-                    className="dashboard-nav-add-icon-btn"
-                    onClick={handleCreateFromTab}
-                    title="添加仪表盘"
-                  >
+                  <button className="dashboard-nav-add-icon-btn" onClick={handleCreateFromTab} title="添加仪表盘">
                     <PlusOutlined />
                   </button>
                 </>
               ) : (
                 <>
                   <span className="dashboard-nav-empty-text">暂无仪表盘</span>
-                  <button
-                    className="dashboard-nav-add-icon-btn"
-                    onClick={handleCreateFromTab}
-                    title="添加仪表盘"
-                  >
+                  <button className="dashboard-nav-add-icon-btn" onClick={handleCreateFromTab} title="添加仪表盘">
                     <PlusOutlined />
                   </button>
                 </>
@@ -1453,7 +1548,7 @@ export const ReportsPage: React.FC = () => {
         ) : dashboards.length === 0 ? (
           <Card className="reports-content-card">
             <Empty
-              description={reportPage ? "该报表页暂无仪表盘" : "暂无仪表盘，请先在仪表盘页面创建"}
+              description={reportPage ? '该报表页暂无仪表盘' : '暂无仪表盘，请先在仪表盘页面创建'}
               style={{ padding: '40px 0' }}
             />
           </Card>
@@ -1471,7 +1566,6 @@ export const ReportsPage: React.FC = () => {
                   onChartXAxisClick={handleChartLinkClick}
                   chartLinkSourceChartId={chartLinkSourceChartId}
                   onClearChartLink={() => {
-                    if (process.env.NODE_ENV === 'development') console.log('[ReportsPage] clear chartLink (onClearChartLink)');
                     flushSync(() => {
                       setChartLinkValue(null);
                       setChartLinkField(null);
@@ -1506,11 +1600,7 @@ export const ReportsPage: React.FC = () => {
         footer={null}
       >
         <Form form={createForm} onFinish={handleCreateDashboard} layout="vertical">
-          <Form.Item
-            name="name"
-            label="仪表盘名称"
-            rules={[{ required: true, message: '请输入仪表盘名称' }]}
-          >
+          <Form.Item name="name" label="仪表盘名称" rules={[{ required: true, message: '请输入仪表盘名称' }]}>
             <Input placeholder="输入仪表盘名称" />
           </Form.Item>
 
@@ -1520,10 +1610,12 @@ export const ReportsPage: React.FC = () => {
 
           <Form.Item>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => {
-                setCreateModalVisible(false);
-                createForm.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  setCreateModalVisible(false);
+                  createForm.resetFields();
+                }}
+              >
                 取消
               </Button>
               <Button type="primary" htmlType="submit">
@@ -1551,12 +1643,8 @@ export const ReportsPage: React.FC = () => {
             label="选择要添加的仪表盘"
             rules={[{ required: true, message: '请选择要添加的仪表盘' }]}
           >
-            <Select
-              placeholder="请选择一个仪表盘"
-              showSearch
-              optionFilterProp="children"
-            >
-              {availableDashboardsForAdd.map(d => (
+            <Select placeholder="请选择一个仪表盘" showSearch optionFilterProp="children">
+              {availableDashboardsForAdd.map((d) => (
                 <Option key={d.id} value={d.id}>
                   {d.name}
                 </Option>

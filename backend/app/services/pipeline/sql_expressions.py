@@ -4,11 +4,10 @@ SQL 表达式构建工具模块
 
 从 engine.py 提取的 SQL 构建函数，便于维护和测试。
 """
-import re
-import logging
-from typing import List, Optional, Dict, Any, Tuple, Set
 
-from app.services.pipeline.validator import canonical_pipeline_node_type
+import logging
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +15,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # 基础工具函数
 # ============================================================
+
 
 def _safe_identifier(name: str) -> str:
     """安全地包裹表名/列名，白名单校验"""
@@ -27,8 +27,8 @@ def _safe_identifier(name: str) -> str:
     # MySQL 允许标识符以字母、下划线、中文开头，也可以数字开头
     # 第一个正则：允许字母、下划线、中文开头
     # 第二个正则：允许数字开头（MySQL 允许，但需要反引号包裹）
-    if not re.match(r'^[a-zA-Z_\u4e00-\u9fff][\w\u4e00-\u9fff.]*$', clean):
-        if not re.match(r'^\d[\w\u4e00-\u9fff.]*$', clean):
+    if not re.match(r"^[a-zA-Z_\u4e00-\u9fff][\w\u4e00-\u9fff.]*$", clean):
+        if not re.match(r"^\d[\w\u4e00-\u9fff.]*$", clean):
             raise ValueError(f"非法标识符: {name}")
     parts = [p for p in clean.split(".") if p]
     escaped = [p.replace("`", "``") for p in parts]
@@ -46,13 +46,13 @@ def _escape_like_value(value: str) -> str:
     return escaped.replace("%", "\\%").replace("_", "\\_")
 
 
-def _split_select_columns(sql: str) -> List[str]:
+def _split_select_columns(sql: str) -> list[str]:
     """将 SELECT ... FROM 之间的列表达式按顶层逗号分割（处理字符串字面量）"""
     m = re.match(r"^SELECT\s+(.*?)\s+FROM\s+", sql, re.IGNORECASE | re.DOTALL)
     if not m:
         return []
     cols_str = m.group(1)
-    parts: List[str] = []
+    parts: list[str] = []
     depth = 0
     in_str = False
     str_char = ""
@@ -74,14 +74,14 @@ def _split_select_columns(sql: str) -> List[str]:
                 depth -= 1
             elif c == "," and depth == 0:
                 parts.append(cols_str[:i].strip())
-                cols_str = cols_str[i + 1:]
+                cols_str = cols_str[i + 1 :]
                 i = -1
         i += 1
     parts.append(cols_str.strip())
     return parts
 
 
-def _extract_columns_from_select(sql: str) -> List[str]:
+def _extract_columns_from_select(sql: str) -> list[str]:
     """从 SELECT ... FROM (...) 中提取列名（支持复杂表达式和 AS 别名）"""
     sql_stripped = sql.strip()
     if not sql_stripped.upper().startswith("SELECT"):
@@ -93,7 +93,7 @@ def _extract_columns_from_select(sql: str) -> List[str]:
     if cols_str == "*":
         return []
 
-    cols: List[str] = []
+    cols: list[str] = []
     depth = 0
     buf = ""
     for ch in cols_str:
@@ -132,7 +132,7 @@ def _extract_columns_from_select(sql: str) -> List[str]:
     return [c.strip() for c in cols if c.strip()]
 
 
-def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> List[str]:
+def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> list[str]:
     """递归从嵌套 SELECT 提取列名"""
     if max_depth <= 0:
         return []
@@ -151,14 +151,14 @@ def _extract_columns_from_nested_select(sql: str, max_depth: int = 10) -> List[s
             elif ch == ")":
                 depth -= 1
                 if depth == 0 and start != -1:
-                    inner = sql[start + 1:i]
+                    inner = sql[start + 1 : i]
                     return _extract_columns_from_nested_select(f"SELECT {inner}", max_depth - 1)
     return []
 
 
-def _extract_sql_aliases(sql: str) -> List[str]:
+def _extract_sql_aliases(sql: str) -> list[str]:
     """从 SELECT 语句中提取每个列表达式的最终列名"""
-    aliases: List[str] = []
+    aliases: list[str] = []
     parts = _split_select_columns(sql)
     for part in parts:
         part = part.strip()
@@ -172,7 +172,7 @@ def _extract_sql_aliases(sql: str) -> List[str]:
     return aliases
 
 
-def source_table_name(config: Dict[str, Any]) -> str:
+def source_table_name(config: dict[str, Any]) -> str:
     """解析源表名：config.tableName / table_name，或节点 sql 字段中的 FROM `tbl`"""
     for key in ("tableName", "table_name"):
         v = config.get(key)
@@ -190,6 +190,7 @@ def source_table_name(config: Dict[str, Any]) -> str:
 # JOIN 相关函数
 # ============================================================
 
+
 def join_on_equality_sql(left_col: str, right_col: str) -> str:
     """ON 条件两侧统一 COLLATE，避免 MySQL 1267 错误"""
     la = f"a.{_safe_identifier(left_col)}"
@@ -199,9 +200,9 @@ def join_on_equality_sql(left_col: str, right_col: str) -> str:
 
 
 def join_explicit_select_list(
-    left_cols: Optional[List[str]],
-    right_cols: Optional[List[str]],
-    on_right_cols: Optional[List[str]] = None,
+    left_cols: list[str] | None,
+    right_cols: list[str] | None,
+    on_right_cols: list[str] | None = None,
 ) -> str:
     """生成 JOIN 的显式列选择列表，自动处理同名列冲突"""
     if left_cols is None and right_cols is None:
@@ -212,7 +213,7 @@ def join_explicit_select_list(
         return ", ".join(f"a.{_safe_identifier(c)}" for c in left_cols)
 
     on_set = set(on_right_cols) if on_right_cols else set()
-    parts: List[str] = []
+    parts: list[str] = []
 
     for c in left_cols:
         parts.append(f"a.{_safe_identifier(c)}")
@@ -233,18 +234,18 @@ def join_explicit_select_list(
                     if suf is None:
                         max_suffix = max(max_suffix, 0)
                     else:
-                        val = ord(suf) - ord('a') + 1
+                        val = ord(suf) - ord("a") + 1
                         max_suffix = max(max_suffix, val)
-            next_suffix = chr(ord('a') + max_suffix)
+            next_suffix = chr(ord("a") + max_suffix)
             b_alias = _safe_identifier(f"{c}_{next_suffix}")
             parts.append(f"b.{_safe_identifier(c)} AS {b_alias}")
 
     return ", ".join(parts)
 
 
-def extract_join_on_right_column_names_from_sql(sql: str) -> List[str]:
+def extract_join_on_right_column_names_from_sql(sql: str) -> list[str]:
     """从 JOIN SQL 中提取 ON 条件的右表列名"""
-    result: List[str] = []
+    result: list[str] = []
     pattern = r"ON\s+[a-z]\.([^=\s]+)\s*=\s*[a-z]\.([^=\s]+)"
     for m in re.finditer(pattern, sql, re.IGNORECASE):
         result.append(m.group(2))
@@ -253,12 +254,12 @@ def extract_join_on_right_column_names_from_sql(sql: str) -> List[str]:
 
 def expand_join_select_stars(
     sql: str,
-    left_cols: Optional[List[str]],
-    right_cols: Optional[List[str]],
-    on_right_cols: Optional[List[str]] = None,
+    left_cols: list[str] | None,
+    right_cols: list[str] | None,
+    on_right_cols: list[str] | None = None,
 ) -> str:
     """将 JOIN SQL 中的 SELECT * 展开为显式列列表"""
-    left_parts: List[str] = []
+    left_parts: list[str] = []
     if left_cols:
         left_parts = [f"a.{_safe_identifier(c)}" for c in left_cols]
 
@@ -266,7 +267,7 @@ def expand_join_select_stars(
         return sql
 
     on_set = set(on_right_cols) if on_right_cols else set()
-    right_parts: List[str] = []
+    right_parts: list[str] = []
     for c in right_cols:
         if c in on_set:
             continue
@@ -281,7 +282,9 @@ def expand_join_select_stars(
     all_parts = left_parts + right_parts
     select_clause = ", ".join(all_parts)
 
-    pattern = r"SELECT\s+\*\s+FROM\s+\((.+?)\)\s+AS\s+[ab]\s+(INNER|LEFT|RIGHT|FULL|OUTER)?\s*JOIN\s+\((.+?)\)\s+AS\s+[ab]"
+    pattern = (
+        r"SELECT\s+\*\s+FROM\s+\((.+?)\)\s+AS\s+[ab]\s+(INNER|LEFT|RIGHT|FULL|OUTER)?\s*JOIN\s+\((.+?)\)\s+AS\s+[ab]"
+    )
 
     def make_replacement(m):
         g1, g2, g3 = m.group(1), m.group(2), m.group(3)
@@ -304,11 +307,11 @@ def expand_join_select_stars(
 
 def join_preview_allowed_sql_columns(
     join_type: str,
-    left_cols: Optional[List[str]],
-    right_cols: Optional[List[str]],
-    on_right_cols: Optional[List[str]],
-    symmetric_union_plan: Optional[List[Any]] = None,
-) -> Optional[Set[str]]:
+    left_cols: list[str] | None,
+    right_cols: list[str] | None,
+    on_right_cols: list[str] | None,
+    symmetric_union_plan: list[Any] | None = None,
+) -> set[str] | None:
     """计算 JOIN 预览中实际可用的列名集合"""
     jt = (join_type or "inner").lower()
     on_set = set(on_right_cols) if on_right_cols else set()
@@ -320,7 +323,7 @@ def join_preview_allowed_sql_columns(
     if jt == "symmetric_diff":
         plan = symmetric_union_plan
         if isinstance(plan, list) and plan:
-            outs: List[str] = []
+            outs: list[str] = []
             for row in plan:
                 if isinstance(row, dict):
                     o = str(row.get("out") or row.get("alias") or "").strip()
@@ -336,7 +339,7 @@ def join_preview_allowed_sql_columns(
 
     if left_cols is not None and right_cols is not None:
         left_set = set(left_cols)
-        names: List[str] = list(left_cols)
+        names: list[str] = list(left_cols)
         for c in right_cols:
             if c in on_set:
                 continue
@@ -353,15 +356,15 @@ def join_preview_allowed_sql_columns(
                         if suf is None:
                             max_suffix = max(max_suffix, 0)
                         else:
-                            val = ord(suf) - ord('a') + 1
+                            val = ord(suf) - ord("a") + 1
                             max_suffix = max(max_suffix, val)
-                next_suffix = chr(ord('a') + max_suffix)
+                next_suffix = chr(ord("a") + max_suffix)
                 names.append(f"{c}_{next_suffix}")
         return set(names)
 
     if left_cols is not None and right_cols is None and jt in ("left", "right") and on_right_cols:
         names = list(left_cols)
-        for c in (right_cols or []):
+        for c in right_cols or []:
             if c not in on_set:
                 names.append(f"{c}_b")
         return set(names)
@@ -375,12 +378,12 @@ def symmetric_diff_union_sql(
     on_clause: str,
     null_b: str,
     null_a: str,
-    join_keys: List[Dict[str, Any]],
-    plan: Optional[List[Dict[str, Any]]],
+    join_keys: list[dict[str, Any]],
+    plan: list[dict[str, Any]] | None,
 ) -> str:
     """对称差 UNION ALL：两侧 SELECT * 统一 COLLATE 避免 MySQL 1267 错误"""
     coll = "utf8mb4_unicode_ci"
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     if plan:
         for p in plan:
             if not isinstance(p, dict):
@@ -406,7 +409,7 @@ def symmetric_diff_union_sql(
             f"SELECT b.* FROM ({left_ref}) AS a RIGHT JOIN ({right_ref}) AS b ON {on_clause} WHERE {null_a}"
         )
 
-    def _cast_a(row: Dict[str, Any]) -> str:
+    def _cast_a(row: dict[str, Any]) -> str:
         lc = str(row.get("L") or "").strip()
         out = str(row.get("out") or lc or "c").strip()
         safe_out = _safe_identifier(out)
@@ -416,7 +419,7 @@ def symmetric_diff_union_sql(
             expr = f"CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE {coll}"
         return f"{expr} AS {safe_out}"
 
-    def _cast_b(row: Dict[str, Any]) -> str:
+    def _cast_b(row: dict[str, Any]) -> str:
         rc = str(row.get("R") or "").strip()
         out = str(row.get("out") or rc or "c").strip()
         safe_out = _safe_identifier(out)
@@ -439,12 +442,14 @@ def symmetric_diff_union_sql(
 # 日期快捷选项
 # ============================================================
 
-def get_date_preset_expression(preset: str) -> Optional[Tuple[str, str]]:
+
+def get_date_preset_expression(preset: str) -> tuple[str, str] | None:
     """根据快捷日期选项获取开始和结束日期（SQL 格式）"""
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
+
     from dateutil.relativedelta import relativedelta
 
-    today = datetime.now().date()
+    today = datetime.now(UTC).date()
     yesterday = today - timedelta(days=1)
     fmt = "%Y-%m-%d"
 
@@ -454,16 +459,19 @@ def get_date_preset_expression(preset: str) -> Optional[Tuple[str, str]]:
         "last_7_days": (today - timedelta(days=6), today),
         "last_30_days": (today - timedelta(days=29), today),
         "this_month": (today.replace(day=1), (today + relativedelta(months=1) - timedelta(days=1))),
-        "last_month": ((today - relativedelta(months=1)).replace(day=1),
-                      (today - timedelta(days=today.day))),
+        "last_month": ((today - relativedelta(months=1)).replace(day=1), (today - timedelta(days=today.day))),
         "this_year": (today.replace(month=1, day=1), today.replace(month=12, day=31)),
-        "last_year": ((today.replace(year=today.year - 1, month=1, day=1)),
-                     (today.replace(year=today.year - 1, month=12, day=31))),
+        "last_year": (
+            (today.replace(year=today.year - 1, month=1, day=1)),
+            (today.replace(year=today.year - 1, month=12, day=31)),
+        ),
         "yesterday_last_7_days": (yesterday - timedelta(days=6), yesterday),
         "yesterday_last_30_days": (yesterday - timedelta(days=29), yesterday),
         "yesterday_last_90_days": (yesterday - timedelta(days=89), yesterday),
-        "yesterday_last_month": ((yesterday - relativedelta(months=1)).replace(day=1),
-                                (yesterday - timedelta(days=yesterday.day))),
+        "yesterday_last_month": (
+            (yesterday - relativedelta(months=1)).replace(day=1),
+            (yesterday - timedelta(days=yesterday.day)),
+        ),
     }
 
     dates = presets.get(preset)
@@ -476,9 +484,10 @@ def get_date_preset_expression(preset: str) -> Optional[Tuple[str, str]]:
 # 过滤和聚合
 # ============================================================
 
+
 def build_filter_sql(
     table_ref: str,
-    conditions: List[Dict[str, Any]],
+    conditions: list[dict[str, Any]],
     logic: str = "AND",
 ) -> str:
     """根据可视化配置构建 WHERE 子句"""
@@ -557,9 +566,7 @@ def build_filter_sql(
         elif op == "isNotNull":
             clauses.append(f"{col} IS NOT NULL")
         elif op == "in":
-            items = ", ".join(
-                f"'{_escape_sql_string(v.strip())}'" for v in val.split(",") if v.strip()
-            )
+            items = ", ".join(f"'{_escape_sql_string(v.strip())}'" for v in val.split(",") if v.strip())
             if not items:
                 continue
             clauses.append(f"{col} IN ({items})")
@@ -569,7 +576,7 @@ def build_filter_sql(
     return f" WHERE {sep.join(clauses)}"
 
 
-def aggregation_sql_fragment(agg: Dict[str, Any]) -> Optional[str]:
+def aggregation_sql_fragment(agg: dict[str, Any]) -> str | None:
     """单条聚合配置 -> SELECT 片段"""
     fn = str(agg.get("func", "count") or "count").lower().strip()
     col_raw = agg.get("column")
@@ -582,10 +589,7 @@ def aggregation_sql_fragment(agg: Dict[str, Any]) -> Optional[str]:
     if fn == "count_distinct":
         if not col:
             return None
-        return (
-            f"COUNT(DISTINCT {_safe_identifier(col)}) "
-            f"AS {_safe_identifier(alias)}"
-        )
+        return f"COUNT(DISTINCT {_safe_identifier(col)}) AS {_safe_identifier(alias)}"
     if fn == "count":
         if not col or col == "*":
             return f"COUNT(*) AS {_safe_identifier(alias)}"
@@ -602,7 +606,7 @@ def aggregation_sql_fragment(agg: Dict[str, Any]) -> Optional[str]:
     return f"{sql_fn}({_safe_identifier(col)}) AS {_safe_identifier(alias)}"
 
 
-def apply_row_filter(sql: str, config: Dict[str, Any]) -> str:
+def apply_row_filter(sql: str, config: dict[str, Any]) -> str:
     """若 config 中含 rowFilterConditions，对已有 sql 包装 SELECT * FROM (...) WHERE ..."""
     if not sql:
         return ""
@@ -620,25 +624,24 @@ def apply_row_filter(sql: str, config: Dict[str, Any]) -> str:
 # 列格式和重命名
 # ============================================================
 
+
 def build_column_format_expr(col_expr: str, col_name: str, fmt: str) -> str:
     """根据预览格式生成 MySQL 表达式"""
     safe_name = _safe_identifier(col_name)
-    if fmt == 'date':
+    if fmt == "date" or fmt == "datetime":
         return f"DATE({col_expr}) AS {safe_name}"
-    elif fmt == 'datetime':
-        return f"DATE({col_expr}) AS {safe_name}"
-    elif fmt == 'percent':
+    elif fmt == "percent":
         return f"({col_expr} * 100) AS {safe_name}"
-    elif fmt == 'number':
+    elif fmt == "number":
         return f"{col_expr} AS {safe_name}"
-    elif fmt == 'string':
+    elif fmt == "string":
         return f"CAST({col_expr} AS CHAR) AS {safe_name}"
     return col_expr
 
 
-def apply_column_formats(sql: str, config: Dict[str, Any]) -> str:
+def apply_column_formats(sql: str, config: dict[str, Any]) -> str:
     """根据 previewColumnFormats 对 SELECT 列应用格式转换"""
-    formats: Dict[str, str] = config.get("previewColumnFormats", {})
+    formats: dict[str, str] = config.get("previewColumnFormats", {})
     if not formats:
         return sql
 
@@ -654,25 +657,25 @@ def apply_column_formats(sql: str, config: Dict[str, Any]) -> str:
     if not cols_to_format:
         return sql
 
-    select_parts: List[str] = []
+    select_parts: list[str] = []
     for col in cols:
         safe_col = _safe_identifier(col)
         fmt = formats.get(col)
-        if fmt and fmt != 'auto':
+        if fmt and fmt != "auto":
             expr = build_column_format_expr(safe_col, col, fmt)
             select_parts.append(expr)
         else:
             select_parts.append(safe_col)
 
     cols_str = ", ".join(select_parts)
-    m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"(\s+FROM\s+.+)$", sql_stripped, re.IGNORECASE | re.DOTALL)
     if not m:
         return sql
     from_part = m.group(1)
     return f"SELECT {cols_str}{from_part}"
 
 
-def apply_column_renames(sql: str, renames: Dict[str, str]) -> str:
+def apply_column_renames(sql: str, renames: dict[str, str]) -> str:
     """应用列重命名映射"""
     if not renames:
         return sql
@@ -690,8 +693,8 @@ def apply_column_renames(sql: str, renames: Dict[str, str]) -> str:
     if not cols_to_rename:
         return sql
 
-    select_parts: List[str] = []
-    current_renames: Dict[str, str] = {}
+    select_parts: list[str] = []
+    current_renames: dict[str, str] = {}
 
     for col in cols:
         if col in renames:
@@ -704,7 +707,7 @@ def apply_column_renames(sql: str, renames: Dict[str, str]) -> str:
             select_parts.append(_safe_identifier(col))
 
     cols_str = ", ".join(select_parts)
-    m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"(\s+FROM\s+.+)$", sql_stripped, re.IGNORECASE | re.DOTALL)
     if not m:
         return sql
     from_part = m.group(1)
@@ -731,10 +734,11 @@ def apply_column_renames(sql: str, renames: Dict[str, str]) -> str:
 # 列投影
 # ============================================================
 
+
 def apply_column_projection(
     sql: str,
-    config: Dict[str, Any],
-    allowed_proj: Optional[Set[str]] = None,
+    config: dict[str, Any],
+    allowed_proj: set[str] | None = None,
     is_last_layer: bool = False,
 ) -> str:
     """根据 outputColumnKeys 和 insertedColumns 应用列投影"""
@@ -745,9 +749,9 @@ def apply_column_projection(
     if not sql_stripped.upper().startswith("SELECT"):
         return sql
 
-    output_keys: List[str] = config.get("outputColumnKeys", []) or []
-    inserted_cols: List[Dict[str, Any]] = config.get("insertedColumns", []) or []
-    rename_map: Dict[str, str] = dict(config.get("renameMap") or {})
+    output_keys: list[str] = config.get("outputColumnKeys", []) or []
+    inserted_cols: list[dict[str, Any]] = config.get("insertedColumns", []) or []
+    rename_map: dict[str, str] = dict(config.get("renameMap") or {})
 
     # 检查是否有需要处理的
     if not output_keys and not inserted_cols and not rename_map:
@@ -758,11 +762,11 @@ def apply_column_projection(
     if not cols:
         return sql
 
-    select_parts: List[str] = []
-    seen_aliases: Set[str] = set()
-    new_cols_added: List[str] = []
+    select_parts: list[str] = []
+    seen_aliases: set[str] = set()
+    new_cols_added: list[str] = []
 
-    def _is_column_in_output(col: str) -> Optional[str]:
+    def _is_column_in_output(col: str) -> str | None:
         """检查列是否在输出中，返回输出时的列名"""
         if col in output_keys:
             return rename_map.get(col, col)
@@ -817,7 +821,7 @@ def apply_column_projection(
         return sql
 
     cols_str = ", ".join(select_parts)
-    m = re.search(r'(\s+FROM\s+.+)$', sql_stripped, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"(\s+FROM\s+.+)$", sql_stripped, re.IGNORECASE | re.DOTALL)
     if not m:
         return sql
     from_part = m.group(1)
@@ -828,12 +832,13 @@ def apply_column_projection(
 # Inserted Columns 构建
 # ============================================================
 
+
 def build_single_inserted_column_expr(
     method: str,
     source_column: str,
-    method_config: Dict[str, Any],
-    all_available_columns: List[str],
-) -> Optional[str]:
+    method_config: dict[str, Any],
+    all_available_columns: list[str],
+) -> str | None:
     """构建单条 insertedColumn 的 SQL 表达式"""
     if not method:
         return None
@@ -860,15 +865,15 @@ def build_single_inserted_column_expr(
 
 def build_calculation_expr(
     source_column: str,
-    method_config: Dict[str, Any],
-    all_available_columns: List[str],
-) -> Optional[str]:
+    method_config: dict[str, Any],
+    all_available_columns: list[str],
+) -> str | None:
     """构建计算表达式"""
     expression = method_config.get("expression", "")
     if not expression:
         return None
 
-    col_pattern = r'\b([a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]*)\b'
+    col_pattern = r"\b([a-zA-Z_\u4e00-\u9fff][a-zA-Z0-9_\u4e00-\u9fff]*)\b"
     matches = re.findall(col_pattern, expression)
     sql_formula = expression
     for col in matches:
@@ -877,7 +882,7 @@ def build_calculation_expr(
     return f"({sql_formula})"
 
 
-def build_split_expr(source_column: str, method_config: Dict[str, Any]) -> Optional[str]:
+def build_split_expr(source_column: str, method_config: dict[str, Any]) -> str | None:
     """构建字符串分割表达式"""
     delimiter = str(method_config.get("delimiter", ",")).strip()
     index = int(method_config.get("index", 0))
@@ -887,14 +892,14 @@ def build_split_expr(source_column: str, method_config: Dict[str, Any]) -> Optio
 
 def build_function_expr(
     source_column: str,
-    method_config: Dict[str, Any],
-    all_available_columns: List[str],
-) -> Optional[str]:
+    method_config: dict[str, Any],
+    all_available_columns: list[str],
+) -> str | None:
     """构建通用函数表达式"""
     func_name = str(method_config.get("function", "")).strip().upper()
     args = method_config.get("args", [])
 
-    sql_args: List[str] = []
+    sql_args: list[str] = []
     for arg in args:
         if isinstance(arg, str) and arg in all_available_columns:
             sql_args.append(_safe_identifier(arg))
@@ -935,10 +940,10 @@ def build_function_expr(
         return f"{mysql_func}({arg_str})"
 
 
-def build_lookup_expr(source_column: str, method_config: Dict[str, Any]) -> Optional[str]:
+def build_lookup_expr(source_column: str, method_config: dict[str, Any]) -> str | None:
     """构建查找表达式"""
     lookup_map = method_config.get("map", {})
-    when_parts: List[str] = []
+    when_parts: list[str] = []
 
     for key, value in lookup_map.items():
         safe_key = str(key).replace("'", "''")
@@ -950,7 +955,7 @@ def build_lookup_expr(source_column: str, method_config: Dict[str, Any]) -> Opti
     return None
 
 
-def build_rank_expr(source_column: str, method_config: Dict[str, Any]) -> Optional[str]:
+def build_rank_expr(source_column: str, method_config: dict[str, Any]) -> str | None:
     """构建排名表达式"""
     order_by = method_config.get("orderBy", "asc")
     partition_by = method_config.get("partitionBy", "")
@@ -977,11 +982,11 @@ def build_rank_expr(source_column: str, method_config: Dict[str, Any]) -> Option
     return f"{rank_fn} OVER (ORDER BY {source_column} {order_dir})"
 
 
-def build_category_expr(source_column: str, method_config: Dict[str, Any]) -> Optional[str]:
+def build_category_expr(source_column: str, method_config: dict[str, Any]) -> str | None:
     """构建分类表达式"""
     categories = method_config.get("categories", [])
 
-    when_parts: List[str] = []
+    when_parts: list[str] = []
     for cat in categories:
         if not isinstance(cat, dict):
             continue
@@ -1008,7 +1013,7 @@ def build_category_expr(source_column: str, method_config: Dict[str, Any]) -> Op
     return None
 
 
-def build_bin_expr(source_column: str, method_config: Dict[str, Any]) -> Optional[str]:
+def build_bin_expr(source_column: str, method_config: dict[str, Any]) -> str | None:
     """构建分箱表达式"""
     bin_type = method_config.get("binType", "fixed")
     bin_count = int(method_config.get("binCount", 5))
@@ -1021,9 +1026,7 @@ def build_bin_expr(source_column: str, method_config: Dict[str, Any]) -> Optiona
         for i in range(bin_count):
             start = i * width
             end = (i + 1) * width
-            when_parts.append(
-                f"WHEN {source_column} >= {start} AND {source_column} < {end} THEN {start}"
-            )
+            when_parts.append(f"WHEN {source_column} >= {start} AND {source_column} < {end} THEN {start}")
         if when_parts:
             return f"CASE {' '.join(when_parts)} ELSE {source_column} END"
 
@@ -1055,12 +1058,13 @@ def build_bin_expr(source_column: str, method_config: Dict[str, Any]) -> Optiona
 # UNION 分支
 # ============================================================
 
+
 def union_branches_from_plan(
-    upstream_refs: List[Tuple[str, str]],
-    plan: List[Any],
-) -> List[str]:
+    upstream_refs: list[tuple[str, str]],
+    plan: list[Any],
+) -> list[str]:
     """根据 unionColumnPlan 构建 UNION 分支 SQL"""
-    branches: List[str] = []
+    branches: list[str] = []
     for i, (ref, alias) in enumerate(upstream_refs):
         if isinstance(plan, list) and i < len(plan):
             row = plan[i]
@@ -1068,9 +1072,7 @@ def union_branches_from_plan(
                 cols = row.get("columns") or row.get("cols")
                 if isinstance(cols, list) and cols:
                     parts = [f"{_safe_identifier(src)} AS {_safe_identifier(out)}" for src, out in cols]
-                    branches.append(
-                        f"SELECT {', '.join(parts)} FROM ({ref}) AS _um{i}"
-                    )
+                    branches.append(f"SELECT {', '.join(parts)} FROM ({ref}) AS _um{i}")
                     continue
         branches.append(f"SELECT * FROM ({ref}) AS _um{i}")
     return branches

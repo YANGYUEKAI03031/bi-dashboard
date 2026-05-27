@@ -32,7 +32,7 @@ function symmetricDiffPersistedSql(
   onClause: string,
   rk0: string,
   lk0: string,
-  plan: SymmetricUnionPlanRow[] | undefined
+  plan: SymmetricUnionPlanRow[] | undefined,
 ): string {
   const cast = (side: 'a' | 'b', col: string | null | undefined, alias: string) => {
     const a = escIdent(alias);
@@ -44,19 +44,19 @@ function symmetricDiffPersistedSql(
     return `CAST(${pref}.\`${c}\` AS CHAR CHARACTER SET utf8mb4) COLLATE ${COLLATE_UNIFY} AS \`${a}\``;
   };
 
-  let rows = plan?.filter(r => r.out || r.L || r.R) ?? [];
+  let rows = plan?.filter((r) => r.out || r.L || r.R) ?? [];
   if (rows.length === 0) {
     rows = [{ out: lk0 || rk0 || 'k', L: lk0 || null, R: rk0 || null }];
   }
 
   const selL = rows
-    .map(r => {
+    .map((r) => {
       const alias = r.out || r.L || r.R || 'col';
       return cast('a', r.L ?? null, alias);
     })
     .join(', ');
   const selR = rows
-    .map(r => {
+    .map((r) => {
       const alias = r.out || r.L || r.R || 'col';
       return cast('b', r.R ?? null, alias);
     })
@@ -72,18 +72,18 @@ function symmetricDiffPersistedSql(
 export function buildJoinPersistedSql(
   joinType: string,
   keys: Array<{ leftCol?: string; rightCol?: string }>,
-  symmetricUnionPlan?: SymmetricUnionPlanRow[]
+  symmetricUnionPlan?: SymmetricUnionPlanRow[],
 ): string {
-  const valid = keys.filter(k => k.leftCol && k.rightCol);
+  const valid = keys.filter((k) => k.leftCol && k.rightCol);
   if (valid.length === 0) {
     return 'SELECT * FROM {upstream_table_0} AS a INNER JOIN {upstream_table_1} AS b ON 1=0';
   }
   const onClause = valid
-          .map(
-            k =>
-              `a.\`${escIdent(String(k.leftCol))}\` COLLATE utf8mb4_unicode_ci = b.\`${escIdent(String(k.rightCol))}\` COLLATE utf8mb4_unicode_ci`
-          )
-          .join(' AND ');
+    .map(
+      (k) =>
+        `a.\`${escIdent(String(k.leftCol))}\` COLLATE utf8mb4_unicode_ci = b.\`${escIdent(String(k.rightCol))}\` COLLATE utf8mb4_unicode_ci`,
+    )
+    .join(' AND ');
   const rk0 = escIdent(String(valid[0].rightCol));
   const lk0 = escIdent(String(valid[0].leftCol));
 
@@ -114,14 +114,7 @@ export function buildJoinPersistedSql(
 
 export type JoinVennRegions = { left: boolean; inner: boolean; right: boolean };
 
-export type JoinDerivedType =
-  | 'inner'
-  | 'left'
-  | 'right'
-  | 'full'
-  | 'left_anti'
-  | 'right_anti'
-  | 'symmetric_diff';
+export type JoinDerivedType = 'inner' | 'left' | 'right' | 'full' | 'left_anti' | 'right_anti' | 'symmetric_diff';
 
 export function regionsToJoinType(r: JoinVennRegions): JoinDerivedType {
   const { left: L, inner: I, right: R } = r;

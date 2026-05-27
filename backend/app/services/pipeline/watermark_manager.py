@@ -3,15 +3,15 @@
 
 用于追踪每个管道节点的增量进度，避免重复拉取全量数据。
 """
-import re
-import logging
-from typing import Optional, List, Dict, Any
 
-from sqlalchemy import select, and_
+import logging
+import re
+from typing import Any
+
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time_utils import utc_now
-
 from app.models.pipeline import PipelineWatermark
 
 logger = logging.getLogger(__name__)
@@ -29,11 +29,7 @@ class WatermarkManager:
         """
         self.session = session
 
-    async def get_watermark(
-        self,
-        pipeline_id: int,
-        node_id: str
-    ) -> Optional[str]:
+    async def get_watermark(self, pipeline_id: int, node_id: str) -> str | None:
         """
         获取当前水位线值
 
@@ -46,10 +42,7 @@ class WatermarkManager:
         """
         try:
             stmt = select(PipelineWatermark).where(
-                and_(
-                    PipelineWatermark.pipeline_id == pipeline_id,
-                    PipelineWatermark.node_id == node_id
-                )
+                and_(PipelineWatermark.pipeline_id == pipeline_id, PipelineWatermark.node_id == node_id)
             )
             result = await self.session.execute(stmt)
             watermark = result.scalar_one_or_none()
@@ -61,11 +54,7 @@ class WatermarkManager:
             logger.error(f"获取水位线失败: pipeline_id={pipeline_id}, node_id={node_id}, error={e}")
             return None
 
-    async def get_watermark_record(
-        self,
-        pipeline_id: int,
-        node_id: str
-    ) -> Optional[PipelineWatermark]:
+    async def get_watermark_record(self, pipeline_id: int, node_id: str) -> PipelineWatermark | None:
         """
         获取水位线记录
 
@@ -78,10 +67,7 @@ class WatermarkManager:
         """
         try:
             stmt = select(PipelineWatermark).where(
-                and_(
-                    PipelineWatermark.pipeline_id == pipeline_id,
-                    PipelineWatermark.node_id == node_id
-                )
+                and_(PipelineWatermark.pipeline_id == pipeline_id, PipelineWatermark.node_id == node_id)
             )
             result = await self.session.execute(stmt)
             return result.scalar_one_or_none()
@@ -89,13 +75,7 @@ class WatermarkManager:
             logger.error(f"获取水位线记录失败: {e}")
             return None
 
-    async def update_watermark(
-        self,
-        pipeline_id: int,
-        node_id: str,
-        watermark_field: str,
-        value: str
-    ) -> bool:
+    async def update_watermark(self, pipeline_id: int, node_id: str, watermark_field: str, value: str) -> bool:
         """
         更新水位线
 
@@ -111,10 +91,7 @@ class WatermarkManager:
         try:
             # 查找现有记录
             stmt = select(PipelineWatermark).where(
-                and_(
-                    PipelineWatermark.pipeline_id == pipeline_id,
-                    PipelineWatermark.node_id == node_id
-                )
+                and_(PipelineWatermark.pipeline_id == pipeline_id, PipelineWatermark.node_id == node_id)
             )
             result = await self.session.execute(stmt)
             watermark = result.scalar_one_or_none()
@@ -130,7 +107,7 @@ class WatermarkManager:
                     node_id=node_id,
                     watermark_field=watermark_field,
                     last_value=value,
-                    last_processed_at=utc_now()
+                    last_processed_at=utc_now(),
                 )
                 self.session.add(watermark)
 
@@ -143,11 +120,7 @@ class WatermarkManager:
             await self.session.rollback()
             return False
 
-    async def delete_watermark(
-        self,
-        pipeline_id: int,
-        node_id: str
-    ) -> bool:
+    async def delete_watermark(self, pipeline_id: int, node_id: str) -> bool:
         """
         删除水位线记录
 
@@ -160,10 +133,7 @@ class WatermarkManager:
         """
         try:
             stmt = select(PipelineWatermark).where(
-                and_(
-                    PipelineWatermark.pipeline_id == pipeline_id,
-                    PipelineWatermark.node_id == node_id
-                )
+                and_(PipelineWatermark.pipeline_id == pipeline_id, PipelineWatermark.node_id == node_id)
             )
             result = await self.session.execute(stmt)
             watermark = result.scalar_one_or_none()
@@ -179,10 +149,7 @@ class WatermarkManager:
             await self.session.rollback()
             return False
 
-    async def get_all_watermarks(
-        self,
-        pipeline_id: int
-    ) -> List[Dict[str, Any]]:
+    async def get_all_watermarks(self, pipeline_id: int) -> list[dict[str, Any]]:
         """
         获取管道所有节点的水位线
 
@@ -193,9 +160,7 @@ class WatermarkManager:
             水位线列表
         """
         try:
-            stmt = select(PipelineWatermark).where(
-                PipelineWatermark.pipeline_id == pipeline_id
-            )
+            stmt = select(PipelineWatermark).where(PipelineWatermark.pipeline_id == pipeline_id)
             result = await self.session.execute(stmt)
             watermarks = result.scalars().all()
 
@@ -204,7 +169,7 @@ class WatermarkManager:
                     "node_id": w.node_id,
                     "watermark_field": w.watermark_field,
                     "last_value": w.last_value,
-                    "last_processed_at": w.last_processed_at.isoformat() if w.last_processed_at else None
+                    "last_processed_at": w.last_processed_at.isoformat() if w.last_processed_at else None,
                 }
                 for w in watermarks
             ]
@@ -213,11 +178,7 @@ class WatermarkManager:
             return []
 
     def build_incremental_sql(
-        self,
-        original_sql: str,
-        watermark_field: str,
-        watermark_value: str,
-        operator: str = ">"
+        self, original_sql: str, watermark_field: str, watermark_value: str, operator: str = ">"
     ) -> str:
         """
         为 SQL 添加增量条件
@@ -258,34 +219,24 @@ class WatermarkManager:
             where_pos = sql_upper.find(" WHERE ")
             # 在 WHERE 后插入条件
             original_sql = (
-                original_sql[:where_pos + 7] +  # 保留 "WHERE "
-                "(" + incremental_condition + ") AND "
-                + original_sql[where_pos + 7:]
+                original_sql[: where_pos + 7]  # 保留 "WHERE "
+                + "("
+                + incremental_condition
+                + ") AND "
+                + original_sql[where_pos + 7 :]
             )
         elif " GROUP BY " in sql_upper:
             # 有 GROUP BY 但没有 WHERE，在 GROUP BY 前添加
             group_pos = sql_upper.find(" GROUP BY ")
-            original_sql = (
-                original_sql[:group_pos]
-                + " WHERE " + incremental_condition
-                + original_sql[group_pos:]
-            )
+            original_sql = original_sql[:group_pos] + " WHERE " + incremental_condition + original_sql[group_pos:]
         elif " ORDER BY " in sql_upper:
             # 有 ORDER BY 但没有 WHERE，在 ORDER BY 前添加
             order_pos = sql_upper.find(" ORDER BY ")
-            original_sql = (
-                original_sql[:order_pos]
-                + " WHERE " + incremental_condition
-                + original_sql[order_pos:]
-            )
+            original_sql = original_sql[:order_pos] + " WHERE " + incremental_condition + original_sql[order_pos:]
         elif " LIMIT " in sql_upper:
             # 有 LIMIT 但没有 WHERE，在 LIMIT 前添加
             limit_pos = sql_upper.find(" LIMIT ")
-            original_sql = (
-                original_sql[:limit_pos]
-                + " WHERE " + incremental_condition
-                + original_sql[limit_pos:]
-            )
+            original_sql = original_sql[:limit_pos] + " WHERE " + incremental_condition + original_sql[limit_pos:]
         else:
             # 没有 WHERE，直接追加
             original_sql = original_sql + " WHERE " + incremental_condition
@@ -302,7 +253,7 @@ class WatermarkManager:
         # 去除自带反引号
         clean = name.replace("`", "").strip()
         # 白名单: 字母/数字/下划线/点号(支持schema.table)
-        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_.]*$', clean):
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_.]*$", clean):
             raise ValueError(f"非法标识符: {name}")
         if len(clean) > 64:
             raise ValueError(f"标识符过长: {name}")
@@ -318,7 +269,7 @@ class WatermarkManager:
 
         # 尝试检测值类型
         # 如果是数字，严格校验
-        if re.match(r'^-?\d+(\.\d+)?$', value):
+        if re.match(r"^-?\d+(\.\d+)?$", value):
             return value
 
         # 如果是日期时间格式，加引号并转义单引号

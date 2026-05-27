@@ -1,6 +1,8 @@
 # app/schemas/user.py
+from typing import Literal
+
 from pydantic import BaseModel
-from typing import Optional, Literal
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -10,8 +12,8 @@ class LoginRequest(BaseModel):
 class CreateUserRequest(BaseModel):
     accountname: str
     password: str
-    state: Optional[int] = 1  # 1=启用, 0=禁用
-    role: Optional[Literal["admin", "user"]] = "user"
+    state: int | None = 1  # 1=启用, 0=禁用
+    role: Literal["admin", "user"] | None = "user"
 
 
 class CreateUserResponse(BaseModel):

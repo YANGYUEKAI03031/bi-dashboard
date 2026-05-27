@@ -3,9 +3,7 @@
  * Removes duplicate rows based on selected columns (similar to pandas drop_duplicates).
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import {
-  Checkbox, Button, Divider, Typography, Alert, Space, Tag,
-} from 'antd';
+import { Checkbox, Button, Divider, Typography, Alert, Space, Tag } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -47,19 +45,20 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
   // 获取上游节点和数据源 ID
   const upstreamNode = upstreamNodes[0];
   const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
-  const upstreamDsId = upstreamPn
-    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
-    : undefined;
+  const upstreamDsId = upstreamPn ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null) : undefined;
 
   const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview();
 
   // 签名用于检测上游变化
   const nodesSignature = useMemo(
-    () => JSON.stringify(allNodes.map(n => ({
-      id: n.id,
-      pn: (n.data.pipelineNode as PipelineNode),
-    }))),
-    [allNodes]
+    () =>
+      JSON.stringify(
+        allNodes.map((n) => ({
+          id: n.id,
+          pn: n.data.pipelineNode as PipelineNode,
+        })),
+      ),
+    [allNodes],
   );
 
   // 加载上游预览
@@ -72,12 +71,15 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
     if (key === loadKeyRef.current) return;
     loadKeyRef.current = key;
     clearPreview();
-    loadPreview({
-      node: upstreamNode,
-      allNodes,
-      pipelineDataSourceId: upstreamDsId,
-      limit: 50,
-    }, true);
+    loadPreview(
+      {
+        node: upstreamNode,
+        allNodes,
+        pipelineDataSourceId: upstreamDsId,
+        limit: 50,
+      },
+      true,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNode?.id, nodesSignature, upstreamDsId, loadPreview, clearPreview]);
 
@@ -111,14 +113,14 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
     if (checked) {
       newColumns = [...selectedColumns, colName];
     } else {
-      newColumns = selectedColumns.filter(c => c !== colName);
+      newColumns = selectedColumns.filter((c) => c !== colName);
     }
     setSelectedColumns(newColumns);
     updateConfig({ dedupColumns: newColumns });
   };
 
   const handleSelectAll = () => {
-    const allColNames = allColumns.map(c => c.name);
+    const allColNames = allColumns.map((c) => c.name);
     setSelectedColumns(allColNames);
     updateConfig({ dedupColumns: allColNames });
   };
@@ -151,13 +153,7 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
   }
 
   if (previewLoading) {
-    return (
-      <Alert
-        type="info"
-        message="正在加载上游字段信息..."
-        style={{ marginBottom: 12 }}
-      />
-    );
+    return <Alert type="info" message="正在加载上游字段信息..." style={{ marginBottom: 12 }} />;
   }
 
   if (allColumns.length === 0 && !previewLoading) {
@@ -180,9 +176,7 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
           去重方式
         </Text>
         <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-          {selectedColumns.length > 0
-            ? `基于 ${selectedColumns.length} 个字段`
-            : '请选择去重依据字段'}
+          {selectedColumns.length > 0 ? `基于 ${selectedColumns.length} 个字段` : '请选择去重依据字段'}
         </Text>
       </div>
 
@@ -211,9 +205,7 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
         </Space>
         <div style={{ marginTop: 4 }}>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            {keepMode === 'first'
-              ? '对于重复的行，只保留第一次出现的记录'
-              : '对于重复的行，只保留最后一次出现的记录'}
+            {keepMode === 'first' ? '对于重复的行，只保留第一次出现的记录' : '对于重复的行，只保留最后一次出现的记录'}
           </Text>
         </div>
       </div>
@@ -235,14 +227,16 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
         </div>
       </div>
 
-      <div style={{
-        border: '1px solid #f0f0f0',
-        borderRadius: 6,
-        maxHeight: 280,
-        overflowY: 'auto',
-        background: '#fafafa',
-      }}>
-        {allColumns.map(col => {
+      <div
+        style={{
+          border: '1px solid #f0f0f0',
+          borderRadius: 6,
+          maxHeight: 280,
+          overflowY: 'auto',
+          background: '#fafafa',
+        }}
+      >
+        {allColumns.map((col) => {
           const isSelected = selectedColumns.includes(col.name);
           const typeInfo = getDataTypeInfo(col.type);
           return (
@@ -262,16 +256,18 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
                 onChange={(e) => handleColumnToggle(col.name, e.target.checked)}
                 disabled={readOnly}
               />
-              <Tag style={{
-                background: typeInfo.bg,
-                color: typeInfo.text,
-                border: 'none',
-                fontSize: 9,
-                padding: '0 3px',
-                lineHeight: '14px',
-                minWidth: 24,
-                textAlign: 'center',
-              }}>
+              <Tag
+                style={{
+                  background: typeInfo.bg,
+                  color: typeInfo.text,
+                  border: 'none',
+                  fontSize: 9,
+                  padding: '0 3px',
+                  lineHeight: '14px',
+                  minWidth: 24,
+                  textAlign: 'center',
+                }}
+              >
                 {typeInfo.label}
               </Tag>
               <Text
@@ -302,16 +298,14 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
       <Divider style={{ margin: '12px 0 8px' }} />
 
       {/* 保留所有列选项 */}
-      <div style={{
-        padding: '8px 12px',
-        background: '#f5f7fa',
-        borderRadius: 6,
-      }}>
-        <Checkbox
-          checked={keepAllColumns}
-          onChange={(e) => handleKeepAllChange(e.target.checked)}
-          disabled={readOnly}
-        >
+      <div
+        style={{
+          padding: '8px 12px',
+          background: '#f5f7fa',
+          borderRadius: 6,
+        }}
+      >
+        <Checkbox checked={keepAllColumns} onChange={(e) => handleKeepAllChange(e.target.checked)} disabled={readOnly}>
           <div>
             <Text style={{ fontSize: 12 }}>保留所有列</Text>
             <div>
@@ -326,27 +320,34 @@ export const DeduplicateNodeConfig: React.FC<DeduplicateNodeConfigProps> = ({
       <Divider style={{ margin: '12px 0 8px' }} />
 
       {/* SQL 预览 */}
-      <Text type="secondary" style={{ fontSize: 11 }}>生成的查询：</Text>
-      <div style={{
-        marginTop: 4,
-        padding: '6px 10px',
-        background: '#f5f7fa',
-        borderRadius: 4,
-        fontFamily: 'monospace',
-        fontSize: 11,
-        color: '#595959',
-        minHeight: 28,
-      }}>
+      <Text type="secondary" style={{ fontSize: 11 }}>
+        生成的查询：
+      </Text>
+      <div
+        style={{
+          marginTop: 4,
+          padding: '6px 10px',
+          background: '#f5f7fa',
+          borderRadius: 4,
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: '#595959',
+          minHeight: 28,
+        }}
+      >
         {selectedColumns.length === 0 ? (
           <span style={{ color: '#bfbfbf' }}>SELECT DISTINCT * FROM upstream</span>
         ) : (
           <span>
             SELECT *
-            <br />FROM (
-            <br />  SELECT *, ROW_NUMBER() OVER (PARTITION BY {selectedColumns.map(c => `\`${c}\``).join(', ')} ORDER BY 1) AS _rn
-            <br />  FROM upstream
+            <br />
+            FROM (
+            <br /> SELECT *, ROW_NUMBER() OVER (PARTITION BY {selectedColumns.map((c) => `\`${c}\``).join(', ')} ORDER
+            BY 1) AS _rn
+            <br /> FROM upstream
             <br />) AS t
-            <br />WHERE _rn = 1
+            <br />
+            WHERE _rn = 1
           </span>
         )}
       </div>

@@ -1,6 +1,19 @@
 // e:\bi-dashboard\frontend\bi-dashboard\src\pages\ChartsManagementPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Button, Space, message, Spin, Input, Table, Modal, Typography, Select, Checkbox, Popconfirm, Switch } from 'antd';
+import {
+  Button,
+  Space,
+  message,
+  Spin,
+  Input,
+  Table,
+  Modal,
+  Typography,
+  Select,
+  Checkbox,
+  Popconfirm,
+  Switch,
+} from 'antd';
 import { DataSourceService } from '../services/dataSourceService';
 import { EyeOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,7 +34,7 @@ interface ChartItem {
   name: string;
   chart_type: string;
   database_id: number;
-  table_name?: string;  // 新增：表名字段
+  table_name?: string; // 新增：表名字段
   pipeline_id?: number | null;
   focus_node_id?: string | null;
   created_at: string;
@@ -41,13 +54,13 @@ interface ChartItem {
     sort_by?: 'x' | 'y';
     sort_order?: 'asc' | 'desc';
     // 后端格式的字段（用于兼容）
-    "graph.dimensions"?: string[];
-    "graph.metrics"?: string[];
-    "graph.x_axis.title"?: string;
-    "graph.y_axis.title"?: string;
-    "graph.show_legend"?: boolean;
-    "graph.show_tooltip"?: boolean;
-    "graph.colors"?: string[];
+    'graph.dimensions'?: string[];
+    'graph.metrics'?: string[];
+    'graph.x_axis.title'?: string;
+    'graph.y_axis.title'?: string;
+    'graph.show_legend'?: boolean;
+    'graph.show_tooltip'?: boolean;
+    'graph.colors'?: string[];
   };
 }
 
@@ -57,22 +70,20 @@ export const ChartsManagementPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [editingChart, setEditingChart] = useState<ChartItem | null>(null);
-  
+
   // 字段数据状态
   const [xFields, setXFields] = useState<any[]>([]);
   const [yFields, setYFields] = useState<any[]>([]);
   const [colorFields, setColorFields] = useState<any[]>([]);
-  
+
   // 预览数据状态
   const [previewData, setPreviewData] = useState<any[]>([]);
-  
+
   const PREVIEW_ROW_LIMIT = 200;
 
   // 加载预览数据
   const loadPreviewData = async (databaseId: number, tableName: string | undefined, chart?: ChartItem) => {
     try {
-      console.log('开始加载预览数据:', { databaseId, tableName });
-
       // 优先走与仪表盘相同的图表查询：管道图会得到节点输出列名（如 count_distinct_xxx），
       // 与 X/Y 配置一致；若仍用源表 SELECT *，列名对不上则柱形图为空。
       if (chart?.id) {
@@ -80,7 +91,6 @@ export const ChartsManagementPage: React.FC = () => {
           const rows = await ChartService.executeChartQuery(chart.id);
           if (Array.isArray(rows)) {
             const limited = rows.slice(0, PREVIEW_ROW_LIMIT);
-            console.log('预览数据结果(图表查询):', { row_count: limited.length });
             setPreviewData(limited);
             return;
           }
@@ -94,7 +104,7 @@ export const ChartsManagementPage: React.FC = () => {
       // 如果表名为空但图表关联了管道，从管道节点追溯源表名
       if (!actualTableName && chart?.id) {
         const chartDetail = await fetch(`${API_BASE_URL}/visualization/charts/${chart.id}`, {
-          headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
         }).catch(() => null);
         let chartData: any = null;
         if (chartDetail?.ok) {
@@ -118,12 +128,12 @@ export const ChartsManagementPage: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/visualization/query`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${AuthService.getAuthToken()}`,
+          Authorization: `Bearer ${AuthService.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           data_source_id: databaseId.toString(),
-          query: query
+          query: query,
         }),
       });
 
@@ -132,7 +142,6 @@ export const ChartsManagementPage: React.FC = () => {
       }
 
       const result = await response.json();
-      console.log('预览数据结果(源表采样):', result);
 
       setPreviewData(result.rows || []);
     } catch (error) {
@@ -146,16 +155,19 @@ export const ChartsManagementPage: React.FC = () => {
   useEffect(() => {
     if (editingChart && previewData.length > 0) {
       // 强制触发重新渲染
-      setPreviewData(prev => [...prev]);
+      setPreviewData((prev) => [...prev]);
     }
-  }, [editingChart?.visualization_settings?.sort_by, editingChart?.visualization_settings?.sort_order, editingChart, previewData.length]);
+  }, [
+    editingChart?.visualization_settings?.sort_by,
+    editingChart?.visualization_settings?.sort_order,
+    editingChart,
+    previewData.length,
+  ]);
 
   /** 从源节点 SQL 中解析表名（config 未写 tableName 时的兜底，如 SELECT * FROM `shop_reviews`） */
   const parseTableFromSql = (sql: unknown): string | null => {
     if (typeof sql !== 'string' || !sql.trim()) return null;
-    const m = sql.match(
-      /\bFROM\s+(?:(?:`([^`]+)`|(\w+))\s*\.\s*)?(?:`([^`]+)`|(\w+))/i
-    );
+    const m = sql.match(/\bFROM\s+(?:(?:`([^`]+)`|(\w+))\s*\.\s*)?(?:`([^`]+)`|(\w+))/i);
     if (!m) return null;
     const schema = m[1] || m[2];
     const table = m[3] || m[4];
@@ -167,7 +179,7 @@ export const ChartsManagementPage: React.FC = () => {
   const loadSourceTableName = async (pipelineId: number, focusNodeId: string): Promise<string | null> => {
     try {
       const res = await fetch(`${API_BASE_URL}/pipeline/${pipelineId}`, {
-        headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
       });
       if (!res.ok) return null;
       const pipeline = await res.json();
@@ -179,12 +191,7 @@ export const ChartsManagementPage: React.FC = () => {
         const node = nodes.find((n: any) => n.id === nodeId);
         if (!node) return null;
         if (node.type === 'source') {
-          return (
-            node.config?.tableName ||
-            node.config?.table_name ||
-            parseTableFromSql(node.sql) ||
-            null
-          );
+          return node.config?.tableName || node.config?.table_name || parseTableFromSql(node.sql) || null;
         }
         const upIds: string[] = node.upstream || [];
         for (const upId of upIds) {
@@ -209,7 +216,7 @@ export const ChartsManagementPage: React.FC = () => {
 
       if (chart?.id) {
         const chartDetail = await fetch(`${API_BASE_URL}/visualization/charts/${chart.id}`, {
-          headers: { 'Authorization': `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${AuthService.getAuthToken()}`, 'Content-Type': 'application/json' },
         }).catch(() => null);
         let chartData: any = null;
         if (chartDetail?.ok) {
@@ -227,14 +234,10 @@ export const ChartsManagementPage: React.FC = () => {
         if (resolved) {
           actualTableName = resolved;
           if (chart?.id) {
-            setEditingChart(prev =>
-              prev && prev.id === chart.id ? { ...prev, table_name: resolved } : prev
-            );
+            setEditingChart((prev) => (prev && prev.id === chart.id ? { ...prev, table_name: resolved } : prev));
           }
         }
       }
-
-      console.log('开始加载字段数据:', { databaseId, tableName: actualTableName, pipelineId, focusNodeId });
 
       if (!actualTableName) {
         // 仍然没有表名，提示用户
@@ -245,57 +248,51 @@ export const ChartsManagementPage: React.FC = () => {
         return;
       }
 
-      console.log('使用的表名:', actualTableName);
-      
       // 获取表的列信息：根据图表绑定的 databaseId 访问对应数据源
       const columns = await DataSourceService.getTableColumns(databaseId.toString(), actualTableName);
-      console.log('获取到的列信息:', columns);
-      
+
       if (columns && columns.length > 0) {
         // 按类型分类字段
-        const categoryFields = columns.filter(col => 
-          col.type.toLowerCase().includes('varchar') || 
-          col.type.toLowerCase().includes('text') || 
-          col.type.toLowerCase().includes('char') ||
-          col.type.toLowerCase().includes('enum') || 
-          col.type.toLowerCase().includes('string')
-        );
-        
-        const dateFields = columns.filter(col => 
-          col.type.toLowerCase().includes('date') || 
-          col.type.toLowerCase().includes('datetime') || 
-          col.type.toLowerCase().includes('timestamp')
-        );
-        
-        const numericFields = columns.filter(col => 
-          col.type.toLowerCase().includes('int') || 
-          col.type.toLowerCase().includes('float') || 
-          col.type.toLowerCase().includes('double') ||
-          col.type.toLowerCase().includes('decimal') || 
-          col.type.toLowerCase().includes('numeric')
+        const categoryFields = columns.filter(
+          (col) =>
+            col.type.toLowerCase().includes('varchar') ||
+            col.type.toLowerCase().includes('text') ||
+            col.type.toLowerCase().includes('char') ||
+            col.type.toLowerCase().includes('enum') ||
+            col.type.toLowerCase().includes('string'),
         );
 
-        console.log('分类后的字段:', { 
-          categoryFields: categoryFields.length,
-          dateFields: dateFields.length, 
-          numericFields: numericFields.length 
-        });
+        const dateFields = columns.filter(
+          (col) =>
+            col.type.toLowerCase().includes('date') ||
+            col.type.toLowerCase().includes('datetime') ||
+            col.type.toLowerCase().includes('timestamp'),
+        );
+
+        const numericFields = columns.filter(
+          (col) =>
+            col.type.toLowerCase().includes('int') ||
+            col.type.toLowerCase().includes('float') ||
+            col.type.toLowerCase().includes('double') ||
+            col.type.toLowerCase().includes('decimal') ||
+            col.type.toLowerCase().includes('numeric'),
+        );
 
         setXFields([...categoryFields, ...dateFields]);
         setYFields(numericFields);
         setColorFields([...categoryFields, ...numericFields]);
-        
+
         // 智能设置默认字段（如果当前没有设置）
-        setEditingChart(prev => {
+        setEditingChart((prev) => {
           if (prev) {
             const currentSettings = prev.visualization_settings || {};
             const hasXField = currentSettings.x_field;
             const hasYFields = currentSettings.y_fields && currentSettings.y_fields.length > 0;
-            
+
             // 如果没有设置字段，则自动设置默认值
             if (!hasXField || !hasYFields) {
               const newSettings = { ...currentSettings };
-              
+
               // 设置X轴字段
               if (!hasXField && categoryFields.length > 0) {
                 newSettings.x_field = categoryFields[0].name;
@@ -304,17 +301,17 @@ export const ChartsManagementPage: React.FC = () => {
                 newSettings.x_field = dateFields[0].name;
                 newSettings.x_axis_title = dateFields[0].name || 'X轴';
               }
-              
+
               // 设置Y轴字段
               if (!hasYFields && numericFields.length > 0) {
-                const defaultYFields = numericFields.slice(0, Math.min(3, numericFields.length)).map(f => f.name);
+                const defaultYFields = numericFields.slice(0, Math.min(3, numericFields.length)).map((f) => f.name);
                 newSettings.y_fields = defaultYFields;
-                newSettings.y_axis_title = defaultYFields.length > 1 ? '汇总' : (defaultYFields[0] || 'Y轴');
+                newSettings.y_axis_title = defaultYFields.length > 1 ? '汇总' : defaultYFields[0] || 'Y轴';
               }
-              
+
               return {
                 ...prev,
-                visualization_settings: newSettings
+                visualization_settings: newSettings,
               };
             }
           }
@@ -363,48 +360,46 @@ export const ChartsManagementPage: React.FC = () => {
 
   // 编辑图表
   const handleEdit = async (chart: ChartItem) => {
-    console.log('编辑图表数据:', chart);
-    console.log('visualization_settings:', chart.visualization_settings);
-    
     // 处理后端格式到前端格式的转换
     let chartWithFrontendSettings = { ...chart };
-    
+
     // 确保visualization_settings存在
     if (!chartWithFrontendSettings.visualization_settings) {
       chartWithFrontendSettings.visualization_settings = {};
     }
-    
+
     const settings = chartWithFrontendSettings.visualization_settings;
-    
+
     // 尝试各种可能的字段名（使用类型断言避免编译错误）
-    const graphDimensions = (settings as any)["graph.dimensions"] || 
-                           (settings as any)["graph_dimensions"] || 
-                           (settings as any).graphDimensions;
-    
-    const graphMetrics = (settings as any)["graph.metrics"] || 
-                        (settings as any)["graph_metrics"] || 
-                        (settings as any).graphMetrics;
-    
-    const xAxisTitle = (settings as any)["graph.x_axis.title"] || 
-                      (settings as any)["graph_x_axis_title"] || 
-                      (settings as any).xAxisTitle ||
-                      (settings as any)["x_axis_title"];
-    
-    const yAxisTitle = (settings as any)["graph.y_axis.title"] || 
-                      (settings as any)["graph_y_axis_title"] || 
-                      (settings as any).yAxisTitle ||
-                      (settings as any)["y_axis_title"];
+    const graphDimensions =
+      (settings as any)['graph.dimensions'] ||
+      (settings as any)['graph_dimensions'] ||
+      (settings as any).graphDimensions;
 
-    const yAggMethod = (settings as any)["y_agg_method"] ||
-                      (settings as any)["graph.y_agg_method"];
+    const graphMetrics =
+      (settings as any)['graph.metrics'] || (settings as any)['graph_metrics'] || (settings as any).graphMetrics;
 
-    const xGroupByEnabled = (settings as any)["x_group_by_enabled"];
+    const xAxisTitle =
+      (settings as any)['graph.x_axis.title'] ||
+      (settings as any)['graph_x_axis_title'] ||
+      (settings as any).xAxisTitle ||
+      (settings as any)['x_axis_title'];
+
+    const yAxisTitle =
+      (settings as any)['graph.y_axis.title'] ||
+      (settings as any)['graph_y_axis_title'] ||
+      (settings as any).yAxisTitle ||
+      (settings as any)['y_axis_title'];
+
+    const yAggMethod = (settings as any)['y_agg_method'] || (settings as any)['graph.y_agg_method'];
+
+    const xGroupByEnabled = (settings as any)['x_group_by_enabled'];
 
     // 设置X轴字段
     if (graphDimensions && Array.isArray(graphDimensions) && graphDimensions.length > 0) {
       chartWithFrontendSettings.visualization_settings = {
         ...settings,
-        x_field: graphDimensions[0]
+        x_field: graphDimensions[0],
       };
     }
 
@@ -412,7 +407,7 @@ export const ChartsManagementPage: React.FC = () => {
     if (graphMetrics && Array.isArray(graphMetrics)) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        y_fields: graphMetrics
+        y_fields: graphMetrics,
       };
     }
 
@@ -420,14 +415,14 @@ export const ChartsManagementPage: React.FC = () => {
     if (xAxisTitle) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        x_axis_title: xAxisTitle
+        x_axis_title: xAxisTitle,
       };
     }
 
     if (yAxisTitle) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        y_axis_title: yAxisTitle
+        y_axis_title: yAxisTitle,
       };
     }
 
@@ -435,13 +430,13 @@ export const ChartsManagementPage: React.FC = () => {
     if (yAggMethod) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        y_agg_method: yAggMethod
+        y_agg_method: yAggMethod,
       };
     } else {
       // 老图表默认 Y 轴聚合方式为 sum
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        y_agg_method: 'sum'
+        y_agg_method: 'sum',
       };
     }
 
@@ -449,13 +444,13 @@ export const ChartsManagementPage: React.FC = () => {
     if (typeof xGroupByEnabled === 'boolean') {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        x_group_by_enabled: xGroupByEnabled
+        x_group_by_enabled: xGroupByEnabled,
       };
     } else {
       // 老图表默认开启 X 轴聚合（散点图除外）
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        x_group_by_enabled: (chart.chart_type || '').toLowerCase() !== 'scatter'
+        x_group_by_enabled: (chart.chart_type || '').toLowerCase() !== 'scatter',
       };
     }
 
@@ -463,20 +458,19 @@ export const ChartsManagementPage: React.FC = () => {
     if (!chartWithFrontendSettings.visualization_settings.sort_by) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        sort_by: 'x'
+        sort_by: 'x',
       };
     }
-    
+
     if (!chartWithFrontendSettings.visualization_settings.sort_order) {
       chartWithFrontendSettings.visualization_settings = {
         ...(chartWithFrontendSettings.visualization_settings || {}),
-        sort_order: 'asc'
+        sort_order: 'asc',
       };
     }
-    
-    console.log('处理后的图表数据:', chartWithFrontendSettings);
+
     setEditingChart(chartWithFrontendSettings);
-    
+
     // 加载字段数据
     if (chart.database_id) {
       await loadFields(chart.database_id, chart.table_name, chart);
@@ -509,15 +503,8 @@ export const ChartsManagementPage: React.FC = () => {
           : `SELECT ${selectFields.join(', ')} FROM \`${editingChart.table_name || ''}\``;
 
         let resolvedSourceTable: string | null = null;
-        if (
-          isPipelineChart &&
-          editingChart.pipeline_id &&
-          editingChart.focus_node_id
-        ) {
-          resolvedSourceTable = await loadSourceTableName(
-            editingChart.pipeline_id,
-            editingChart.focus_node_id
-          );
+        if (isPipelineChart && editingChart.pipeline_id && editingChart.focus_node_id) {
+          resolvedSourceTable = await loadSourceTableName(editingChart.pipeline_id, editingChart.focus_node_id);
         }
 
         const updateData = {
@@ -527,11 +514,13 @@ export const ChartsManagementPage: React.FC = () => {
           pipeline_id: editingChart.pipeline_id ?? undefined,
           focus_node_id: editingChart.focus_node_id ?? undefined,
           // 管道图：写入真实源表名，便于列表/元数据展示；占位 SQL 无法解析出表名
-          table_name: isPipelineChart ? resolvedSourceTable ?? null : editingChart.table_name?.trim() || undefined,
+          table_name: isPipelineChart ? (resolvedSourceTable ?? null) : editingChart.table_name?.trim() || undefined,
           visualization_settings: {
             // 使用后端期望的原始字段名
             chartType: editingChart.chart_type,
-            graph_dimensions: editingChart.visualization_settings?.x_field ? [editingChart.visualization_settings.x_field] : [],
+            graph_dimensions: editingChart.visualization_settings?.x_field
+              ? [editingChart.visualization_settings.x_field]
+              : [],
             graph_metrics: editingChart.visualization_settings?.y_fields || [],
             x_axis_title: editingChart.visualization_settings?.x_axis_title || 'X轴',
             y_axis_title: editingChart.visualization_settings?.y_axis_title || 'Y轴',
@@ -551,14 +540,20 @@ export const ChartsManagementPage: React.FC = () => {
           dataset_query: {
             type: 'native',
             native: {
-              query: querySql
-            }
-          }
+              query: querySql,
+            },
+          },
         };
 
         const updated = await ChartService.updateChart(editingChart.id, updateData);
         message.success('图表更新成功');
-        setCharts(prev => prev.map(c => c.id === editingChart.id ? { ...c, ...updated, visualization_settings: updated.visualization_settings ?? c.visualization_settings } : c));
+        setCharts((prev) =>
+          prev.map((c) =>
+            c.id === editingChart.id
+              ? { ...c, ...updated, visualization_settings: updated.visualization_settings ?? c.visualization_settings }
+              : c,
+          ),
+        );
         await fetchCharts();
         setEditingChart(null);
       } catch (error) {
@@ -574,9 +569,10 @@ export const ChartsManagementPage: React.FC = () => {
   };
 
   // 搜索过滤
-  const filteredCharts = charts.filter(chart =>
-    chart.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    chart.chart_type.toLowerCase().includes(searchText.toLowerCase())
+  const filteredCharts = charts.filter(
+    (chart) =>
+      chart.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      chart.chart_type.toLowerCase().includes(searchText.toLowerCase()),
   );
 
   // 表格列定义
@@ -596,9 +592,7 @@ export const ChartsManagementPage: React.FC = () => {
       title: '数据源',
       dataIndex: 'database_id',
       key: 'database_id',
-      render: (databaseId: number) => (
-        <span className="chart-datasource">数据库 #{databaseId}</span>
-      ),
+      render: (databaseId: number) => <span className="chart-datasource">数据库 #{databaseId}</span>,
     },
     {
       title: '创建时间',
@@ -613,12 +607,7 @@ export const ChartsManagementPage: React.FC = () => {
       fixed: 'right' as const,
       render: (_: any, record: ChartItem) => (
         <Space size="small" wrap>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-          >
+          <Button type="link" icon={<EyeOutlined />} onClick={() => handleEdit(record)} size="small">
             预览
           </Button>
           <Popconfirm
@@ -650,7 +639,9 @@ export const ChartsManagementPage: React.FC = () => {
       <div className="page-header">
         <div className="header-content">
           <div>
-            <Title level={2} className="header-title">图表管理</Title>
+            <Title level={2} className="header-title">
+              图表管理
+            </Title>
             <Text type="secondary">管理和维护您的所有可视化图表</Text>
           </div>
           <div className="header-actions">
@@ -664,10 +655,10 @@ export const ChartsManagementPage: React.FC = () => {
               onSearch={(value) => setSearchText(value)}
               className="search-input"
             />
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               icon={<PlusOutlined />}
-              onClick={() => window.location.href = '/visualization-builder'}
+              onClick={() => (window.location.href = '/visualization-builder')}
             >
               创建新图表
             </Button>
@@ -714,20 +705,16 @@ export const ChartsManagementPage: React.FC = () => {
             <Button key="cancel" onClick={handleEditCancel}>
               取消
             </Button>,
-            <Button 
-              key="save" 
-              type="primary" 
-              onClick={handleEditSave}
-            >
+            <Button key="save" type="primary" onClick={handleEditSave}>
               保存修改
-            </Button>
+            </Button>,
           ]}
           width={800}
         >
           <div style={{ marginBottom: 16 }}>
             <label>图表名称:</label>
-            <Input 
-              defaultValue={editingChart.name} 
+            <Input
+              defaultValue={editingChart.name}
               onChange={(e) => {
                 const newChart = { ...editingChart, name: e.target.value };
                 setEditingChart(newChart);
@@ -735,10 +722,10 @@ export const ChartsManagementPage: React.FC = () => {
               style={{ marginTop: 8 }}
             />
           </div>
-          
+
           <div style={{ marginBottom: 16 }}>
             <label>图表类型:</label>
-            <Select 
+            <Select
               defaultValue={editingChart.chart_type}
               onChange={(value) => {
                 const newChart = { ...editingChart, chart_type: value };
@@ -757,34 +744,66 @@ export const ChartsManagementPage: React.FC = () => {
               <Option value="stacked_bar">堆积柱形图</Option>
             </Select>
           </div>
-          
+
           <div style={{ marginBottom: 16 }}>
             <label>数据源:</label>
-            <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#f5f5f5', borderRadius: '4px', border: '1px solid #d9d9d9' }}>
-              <div><strong>数据库ID:</strong> #{editingChart?.database_id}</div>
-              <div><strong>表名:</strong> {editingChart?.table_name || '未指定'}</div>
+            <div
+              style={{
+                marginTop: 8,
+                padding: '8px 12px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '4px',
+                border: '1px solid #d9d9d9',
+              }}
+            >
+              <div>
+                <strong>数据库ID:</strong> #{editingChart?.database_id}
+              </div>
+              <div>
+                <strong>表名:</strong> {editingChart?.table_name || '未指定'}
+              </div>
             </div>
           </div>
 
           {/* 调试信息区域 */}
-          <div style={{ marginBottom: 16, padding: '12px', backgroundColor: '#f0f8ff', border: '1px solid #d0e6ff', borderRadius: '4px' }}>
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '12px',
+              backgroundColor: '#f0f8ff',
+              border: '1px solid #d0e6ff',
+              borderRadius: '4px',
+            }}
+          >
             <h4 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>调试信息</h4>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              <div><strong>当前图表ID:</strong> {editingChart?.id}</div>
-              <div><strong>X轴字段数量:</strong> {xFields.length}</div>
-              <div><strong>Y轴字段数量:</strong> {yFields.length}</div>
-              <div><strong>颜色字段数量:</strong> {colorFields.length}</div>
-              <div><strong>当前X轴设置:</strong> {editingChart?.visualization_settings?.x_field || '未设置'}</div>
-              <div><strong>当前Y轴设置:</strong> {editingChart?.visualization_settings?.y_fields?.join(', ') || '未设置'}</div>
+              <div>
+                <strong>当前图表ID:</strong> {editingChart?.id}
+              </div>
+              <div>
+                <strong>X轴字段数量:</strong> {xFields.length}
+              </div>
+              <div>
+                <strong>Y轴字段数量:</strong> {yFields.length}
+              </div>
+              <div>
+                <strong>颜色字段数量:</strong> {colorFields.length}
+              </div>
+              <div>
+                <strong>当前X轴设置:</strong> {editingChart?.visualization_settings?.x_field || '未设置'}
+              </div>
+              <div>
+                <strong>当前Y轴设置:</strong> {editingChart?.visualization_settings?.y_fields?.join(', ') || '未设置'}
+              </div>
             </div>
           </div>
           <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
             <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>坐标轴配置</h3>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label>X轴字段:</label>
-                <Select 
+                <Select
                   defaultValue={editingChart.visualization_settings?.x_field || ''}
                   onChange={(value) => {
                     const newSettings = { ...editingChart.visualization_settings, x_field: value };
@@ -793,19 +812,19 @@ export const ChartsManagementPage: React.FC = () => {
                   }}
                   style={{ marginTop: 8, width: '100%' }}
                   placeholder="选择X轴字段"
-                  notFoundContent={xFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
+                  notFoundContent={xFields.length === 0 ? '未加载到可用字段' : '无匹配字段'}
                 >
-                  {xFields.map(field => (
+                  {xFields.map((field) => (
                     <Option key={field.name} value={field.name}>
                       {field.name}
                     </Option>
                   ))}
                 </Select>
               </div>
-              
+
               <div>
                 <label>Y轴字段 (可多选):</label>
-                <Select 
+                <Select
                   mode="multiple"
                   defaultValue={editingChart.visualization_settings?.y_fields || []}
                   onChange={(values) => {
@@ -815,9 +834,9 @@ export const ChartsManagementPage: React.FC = () => {
                   }}
                   style={{ marginTop: 8, width: '100%' }}
                   placeholder="选择一个或多个Y轴字段"
-                  notFoundContent={yFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
+                  notFoundContent={yFields.length === 0 ? '未加载到可用字段' : '无匹配字段'}
                 >
-                  {yFields.map(field => (
+                  {yFields.map((field) => (
                     <Option key={field.name} value={field.name}>
                       {field.name}
                     </Option>
@@ -828,23 +847,21 @@ export const ChartsManagementPage: React.FC = () => {
 
             <div style={{ marginTop: 16 }}>
               <label>Y轴统计方式:</label>
-              <Select 
+              <Select
                 value={editingChart.visualization_settings?.y_agg_method || 'sum'}
                 onChange={(value) => {
                   const newSettings = { ...editingChart.visualization_settings, y_agg_method: value };
                   const newChart = { ...editingChart, visualization_settings: newSettings };
                   setEditingChart(newChart);
                 }}
-                disabled={
-                  (() => {
-                    const vs = editingChart.visualization_settings || {};
-                    const enabled =
-                      typeof vs.x_group_by_enabled === 'boolean'
-                        ? vs.x_group_by_enabled
-                        : (editingChart.chart_type || '').toLowerCase() !== 'scatter';
-                    return !enabled;
-                  })()
-                }
+                disabled={(() => {
+                  const vs = editingChart.visualization_settings || {};
+                  const enabled =
+                    typeof vs.x_group_by_enabled === 'boolean'
+                      ? vs.x_group_by_enabled
+                      : (editingChart.chart_type || '').toLowerCase() !== 'scatter';
+                  return !enabled;
+                })()}
                 style={{ marginTop: 8, width: '100%' }}
                 placeholder="选择Y轴统计方式"
               >
@@ -855,7 +872,7 @@ export const ChartsManagementPage: React.FC = () => {
                 <Option value="median">中位数</Option>
               </Select>
             </div>
-            
+
             <div style={{ marginTop: 16 }}>
               <label>按X轴聚合（group by）:</label>
               <Switch
@@ -872,10 +889,10 @@ export const ChartsManagementPage: React.FC = () => {
                 style={{ marginLeft: 8 }}
               />
             </div>
-            
+
             <div style={{ marginTop: 16 }}>
               <label>颜色字段:</label>
-              <Select 
+              <Select
                 defaultValue={editingChart.visualization_settings?.color_field || ''}
                 onChange={(value) => {
                   const newSettings = { ...editingChart.visualization_settings, color_field: value };
@@ -884,9 +901,9 @@ export const ChartsManagementPage: React.FC = () => {
                 }}
                 style={{ marginTop: 8, width: '100%' }}
                 placeholder="选择颜色字段"
-                notFoundContent={colorFields.length === 0 ? "未加载到可用字段" : "无匹配字段"}
+                notFoundContent={colorFields.length === 0 ? '未加载到可用字段' : '无匹配字段'}
               >
-                {colorFields.map(field => (
+                {colorFields.map((field) => (
                   <Option key={field.name} value={field.name}>
                     {field.name}
                   </Option>
@@ -898,11 +915,11 @@ export const ChartsManagementPage: React.FC = () => {
           {/* 高级设置区域 */}
           <div style={{ marginBottom: 24, padding: '16px', border: '1px solid #e8e8e8', borderRadius: '4px' }}>
             <h3 style={{ marginBottom: 12, fontWeight: 600, color: '#333' }}>高级设置</h3>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label>X轴标题:</label>
-                <Input 
+                <Input
                   defaultValue={editingChart.visualization_settings?.x_axis_title || 'X轴'}
                   onChange={(e) => {
                     const newSettings = { ...editingChart.visualization_settings, x_axis_title: e.target.value };
@@ -912,10 +929,10 @@ export const ChartsManagementPage: React.FC = () => {
                   style={{ marginTop: 8 }}
                 />
               </div>
-              
+
               <div>
                 <label>Y轴标题:</label>
-                <Input 
+                <Input
                   defaultValue={editingChart.visualization_settings?.y_axis_title || 'Y轴'}
                   onChange={(e) => {
                     const newSettings = { ...editingChart.visualization_settings, y_axis_title: e.target.value };
@@ -926,9 +943,9 @@ export const ChartsManagementPage: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Checkbox 
+              <Checkbox
                 checked={editingChart.visualization_settings?.show_legend !== false}
                 onChange={(e) => {
                   const newSettings = { ...editingChart.visualization_settings, show_legend: e.target.checked };
@@ -938,8 +955,8 @@ export const ChartsManagementPage: React.FC = () => {
               >
                 显示图例
               </Checkbox>
-              
-              <Checkbox 
+
+              <Checkbox
                 checked={editingChart.visualization_settings?.show_tooltip !== false}
                 onChange={(e) => {
                   const newSettings = { ...editingChart.visualization_settings, show_tooltip: e.target.checked };
@@ -950,14 +967,14 @@ export const ChartsManagementPage: React.FC = () => {
                 显示提示
               </Checkbox>
             </div>
-            
+
             {/* 排序设置区域 */}
             <div style={{ marginTop: 16 }}>
               <h4 style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>排序设置</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label>排序方式:</label>
-                  <Select 
+                  <Select
                     value={(editingChart.visualization_settings as any)?.sort_by || 'x'}
                     onChange={(value) => {
                       const newSettings = { ...(editingChart.visualization_settings as any), sort_by: value };
@@ -971,10 +988,10 @@ export const ChartsManagementPage: React.FC = () => {
                     <Option value="y">按Y轴排序</Option>
                   </Select>
                 </div>
-                
+
                 <div>
                   <label>排序顺序:</label>
-                  <Select 
+                  <Select
                     value={(editingChart.visualization_settings as any)?.sort_order || 'asc'}
                     onChange={(value) => {
                       const newSettings = { ...(editingChart.visualization_settings as any), sort_order: value };
@@ -1000,72 +1017,79 @@ export const ChartsManagementPage: React.FC = () => {
                 <div>
                   {previewData.length > 0 ? (
                     <ChartFactory
-                      config={
-                        {
-                          type: editingChart.chart_type,
-                          title: editingChart.name,
-                          xField: editingChart.visualization_settings?.x_field || '',
-                          yFields: editingChart.visualization_settings?.y_fields || [],
-                          colorField: editingChart.visualization_settings?.color_field || '',
-                          // 预览时按所选统计方式聚合 Y 轴
-                          y_agg_method: (editingChart.visualization_settings as any)?.y_agg_method,
-                          x_group_by_enabled:
-                            typeof (editingChart.visualization_settings as any)?.x_group_by_enabled === 'boolean'
-                              ? (editingChart.visualization_settings as any).x_group_by_enabled
-                              : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
-                          sort_by: (editingChart.visualization_settings as any)?.sort_by,
-                          sort_order: (editingChart.visualization_settings as any)?.sort_order,
-                          line_y_fields: (editingChart.visualization_settings as any)?.line_y_fields,
-                          y_axis_right_title: (editingChart.visualization_settings as any)?.y_axis_right_title,
-                          metric_mode:
-                            (editingChart.visualization_settings as any)?.metric_mode === 'cell'
-                              ? 'cell'
-                              : 'aggregate',
-                          metric_filter_field:
-                            (editingChart.visualization_settings as any)?.metric_filter_field != null
-                              ? String((editingChart.visualization_settings as any).metric_filter_field)
-                              : '',
-                          metric_filter_value:
-                            (editingChart.visualization_settings as any)?.metric_filter_value != null
-                              ? String((editingChart.visualization_settings as any).metric_filter_value)
-                              : '',
-                          metric_unit:
-                            (editingChart.visualization_settings as any)?.metric_unit != null
-                              ? String((editingChart.visualization_settings as any).metric_unit)
-                              : '',
-                          metric_decimals:
-                            typeof (editingChart.visualization_settings as any)?.metric_decimals === 'number'
-                              ? (editingChart.visualization_settings as any).metric_decimals
-                              : 2,
-                          metric_label:
-                            (editingChart.visualization_settings as any)?.metric_label != null
-                              ? String((editingChart.visualization_settings as any).metric_label)
-                              : '',
-                          metric_filters: Array.isArray((editingChart.visualization_settings as any)?.metric_filters)
-                            ? (editingChart.visualization_settings as any).metric_filters
-                            : [],
-                          metric_filter_expr: (editingChart.visualization_settings as any)?.metric_filter_expr,
-                          xAxis: {
-                            name: editingChart.visualization_settings?.x_axis_title || 'X轴'
-                          },
-                          yAxis: {
-                            name: editingChart.visualization_settings?.y_axis_title || 'Y轴'
-                          },
-                          series: [] // 添加空的series数组以满足类型要求
-                        }
-                      }
+                      config={{
+                        type: editingChart.chart_type,
+                        title: editingChart.name,
+                        xField: editingChart.visualization_settings?.x_field || '',
+                        yFields: editingChart.visualization_settings?.y_fields || [],
+                        colorField: editingChart.visualization_settings?.color_field || '',
+                        // 预览时按所选统计方式聚合 Y 轴
+                        y_agg_method: (editingChart.visualization_settings as any)?.y_agg_method,
+                        x_group_by_enabled:
+                          typeof (editingChart.visualization_settings as any)?.x_group_by_enabled === 'boolean'
+                            ? (editingChart.visualization_settings as any).x_group_by_enabled
+                            : (editingChart.chart_type || '').toLowerCase() !== 'scatter',
+                        sort_by: (editingChart.visualization_settings as any)?.sort_by,
+                        sort_order: (editingChart.visualization_settings as any)?.sort_order,
+                        line_y_fields: (editingChart.visualization_settings as any)?.line_y_fields,
+                        y_axis_right_title: (editingChart.visualization_settings as any)?.y_axis_right_title,
+                        metric_mode:
+                          (editingChart.visualization_settings as any)?.metric_mode === 'cell' ? 'cell' : 'aggregate',
+                        metric_filter_field:
+                          (editingChart.visualization_settings as any)?.metric_filter_field != null
+                            ? String((editingChart.visualization_settings as any).metric_filter_field)
+                            : '',
+                        metric_filter_value:
+                          (editingChart.visualization_settings as any)?.metric_filter_value != null
+                            ? String((editingChart.visualization_settings as any).metric_filter_value)
+                            : '',
+                        metric_unit:
+                          (editingChart.visualization_settings as any)?.metric_unit != null
+                            ? String((editingChart.visualization_settings as any).metric_unit)
+                            : '',
+                        metric_decimals:
+                          typeof (editingChart.visualization_settings as any)?.metric_decimals === 'number'
+                            ? (editingChart.visualization_settings as any).metric_decimals
+                            : 2,
+                        metric_label:
+                          (editingChart.visualization_settings as any)?.metric_label != null
+                            ? String((editingChart.visualization_settings as any).metric_label)
+                            : '',
+                        metric_filters: Array.isArray((editingChart.visualization_settings as any)?.metric_filters)
+                          ? (editingChart.visualization_settings as any).metric_filters
+                          : [],
+                        metric_filter_expr: (editingChart.visualization_settings as any)?.metric_filter_expr,
+                        xAxis: {
+                          name: editingChart.visualization_settings?.x_axis_title || 'X轴',
+                        },
+                        yAxis: {
+                          name: editingChart.visualization_settings?.y_axis_title || 'Y轴',
+                        },
+                        series: [], // 添加空的series数组以满足类型要求
+                      }}
                       data={previewData}
                       style={{ height: '400px', width: '100%' }}
                     />
                   ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#f9f9f9',
+                        borderRadius: '4px',
+                      }}
+                    >
                       <div style={{ textAlign: 'center', padding: '20px' }}>
                         {editingChart.visualization_settings?.x_field &&
                         editingChart.visualization_settings?.y_fields &&
                         editingChart.visualization_settings.y_fields.length > 0 ? (
                           <>
                             <div style={{ fontSize: '16px', color: '#999', marginBottom: '8px' }}>暂无预览数据</div>
-                            <div style={{ fontSize: '14px', color: '#666' }}>已选坐标轴但查询结果为空，请检查表是否有数据或数据源连接</div>
+                            <div style={{ fontSize: '14px', color: '#666' }}>
+                              已选坐标轴但查询结果为空，请检查表是否有数据或数据源连接
+                            </div>
                           </>
                         ) : (
                           <>

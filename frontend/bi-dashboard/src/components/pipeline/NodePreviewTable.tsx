@@ -9,14 +9,8 @@ import { LeftOutlined, RightOutlined, DownloadOutlined, PlusOutlined } from '@an
 import type { ColumnsType } from 'antd/es/table';
 import { getDataTypeInfo } from '../../utils/nodeTypeRegistry';
 import type { PreviewData } from '../../hooks/useNodePreview';
-import {
-  PREVIEW_COLUMN_DISPLAY_AUTO,
-  PREVIEW_COLUMN_DISPLAY_OPTIONS,
-} from '../../constants/previewColumnDisplay';
-import {
-  resolvePreviewColumnDisplayType,
-  formatPreviewCellValue,
-} from '../../utils/previewDisplayUtils';
+import { PREVIEW_COLUMN_DISPLAY_AUTO, PREVIEW_COLUMN_DISPLAY_OPTIONS } from '../../constants/previewColumnDisplay';
+import { resolvePreviewColumnDisplayType, formatPreviewCellValue } from '../../utils/previewDisplayUtils';
 import { isNil } from '../../utils/isNil';
 import { InsertedColumnConfig } from './InsertColumnModal';
 
@@ -53,10 +47,7 @@ interface NodePreviewTableProps {
   onEditInsertColumn?: (config: InsertedColumnConfig) => void;
 }
 
-function currentFormatSelectValue(
-  columnKey: string,
-  overrides: Record<string, string> | undefined,
-): string {
+function currentFormatSelectValue(columnKey: string, overrides: Record<string, string> | undefined): string {
   if (!overrides) {
     return PREVIEW_COLUMN_DISPLAY_AUTO;
   }
@@ -110,15 +101,11 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
   const displayRows = hasData ? (compact ? data.rows.slice(0, 3) : data.rows) : [];
   const maxPage = Math.max(1, Math.ceil((hasData ? data.rows.length : 0) / pageSize));
   const startIdx = (page - 1) * pageSize;
-  const pagedRows = compact ? displayRows : (hasData ? data.rows.slice(startIdx, startIdx + pageSize) : []);
-  const colList = columnsOrdered.length ? columnsOrdered : (hasData ? data.columns : []);
+  const pagedRows = compact ? displayRows : hasData ? data.rows.slice(startIdx, startIdx + pageSize) : [];
+  const colList = columnsOrdered.length ? columnsOrdered : hasData ? data.columns : [];
 
   if (!hasData) {
-    return (
-      <div style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>
-        暂无数据
-      </div>
-    );
+    return <div style={{ textAlign: 'center', padding: 24, color: '#9CA3AF' }}>暂无数据</div>;
   }
 
   const getContextMenuItems = (column: string): MenuProps['items'] => {
@@ -166,7 +153,7 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
               onDeleteColumn(column);
             }
           },
-        }
+        },
       );
     }
 
@@ -175,12 +162,7 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
 
   const columns: ColumnsType<Record<string, unknown>> = colList.map((col) => {
     const ti = data.columns.indexOf(col);
-    const resolvedType = resolvePreviewColumnDisplayType(
-      col,
-      ti,
-      data.columnTypes,
-      columnFormatOverrides,
-    );
+    const resolvedType = resolvePreviewColumnDisplayType(col, ti, data.columnTypes, columnFormatOverrides);
     const typeInfo = getDataTypeInfo(resolvedType);
     const typeTag = (
       <Tag
@@ -226,31 +208,20 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
               }
             }}
           >
-            <Tooltip title={`${resolvedType} · 点击选择列显示格式`}>
-              {typeTag}
-            </Tooltip>
+            <Tooltip title={`${resolvedType} · 点击选择列显示格式`}>{typeTag}</Tooltip>
           </span>
         </Dropdown>
       );
     } else {
-      typeChip = (
-        <Tooltip title={resolvedType}>
-          {typeTag}
-        </Tooltip>
-      );
+      typeChip = <Tooltip title={resolvedType}>{typeTag}</Tooltip>;
     }
     // 获取重命名后的显示名称
     const displayName = columnRenames?.[col] || col;
-    
+
     return {
       title: (
-        <Dropdown
-          menu={{ items: getContextMenuItems(col) }}
-          trigger={['contextMenu']}
-        >
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}
-          >
+        <Dropdown menu={{ items: getContextMenuItems(col) }} trigger={['contextMenu']}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
             {typeChip}
             <span style={{ fontSize: 12 }}>{displayName}</span>
           </div>
@@ -344,7 +315,9 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             />
-            <Text style={{ fontSize: 12 }}>{page} / {maxPage}</Text>
+            <Text style={{ fontSize: 12 }}>
+              {page} / {maxPage}
+            </Text>
             <Button
               size="small"
               icon={<RightOutlined />}
@@ -363,17 +336,19 @@ export const NodePreviewTable: React.FC<NodePreviewTableProps> = ({
               const csv = [
                 colList.join(','),
                 ...data.rows.map((row) =>
-                  colList.map((c) => {
-                    const v = row[c];
-                    if (isNil(v)) {
-                      return '';
-                    }
-                    const s = String(v);
-                    if (s.includes(',') || s.includes('"')) {
-                      return `"${s.replace(/"/g, '""')}"`;
-                    }
-                    return s;
-                  }).join(','),
+                  colList
+                    .map((c) => {
+                      const v = row[c];
+                      if (isNil(v)) {
+                        return '';
+                      }
+                      const s = String(v);
+                      if (s.includes(',') || s.includes('"')) {
+                        return `"${s.replace(/"/g, '""')}"`;
+                      }
+                      return s;
+                    })
+                    .join(','),
                 ),
               ].join('\n');
               const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });

@@ -1,27 +1,48 @@
 // frontend/bi-dashboard/src/pages/PipelineTestPage.tsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Card, Button, Table, Modal, Form, Input, Space, Tag, message,
-  Popconfirm, Drawer, Descriptions, Tabs, Divider, Alert, Tooltip,
+  Card,
+  Button,
+  Table,
+  Modal,
+  Form,
+  Input,
+  Space,
+  Tag,
+  message,
+  Popconfirm,
+  Drawer,
+  Descriptions,
+  Tabs,
+  Divider,
+  Alert,
+  Tooltip,
+  Typography,
 } from 'antd';
 import {
-  PlusOutlined, PlayCircleOutlined, DeleteOutlined, EyeOutlined,
-  ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined,
-  ClockCircleOutlined, EditOutlined
+  PlusOutlined,
+  PlayCircleOutlined,
+  DeleteOutlined,
+  EyeOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+  ClockCircleOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { PipelineService, PipelineResponse, ExecutionResponse, PipelineNode } from '../services/pipelineService';
 import { DataSourceService } from '../services/dataSourceService';
 import { PipelineFlowEditor, PipelineFlowEditorHandle } from '../components/pipeline/PipelineFlowEditor';
-import {
-  getFirstSourceDataSourceId,
-  hydrateSourceNodesWithPipelineDataSource,
-} from '../utils/pipelineDataSourceUtils';
+import { getFirstSourceDataSourceId, hydrateSourceNodesWithPipelineDataSource } from '../utils/pipelineDataSourceUtils';
 
 /**
  * 从节点列表中提取第一个启用了自动触发的源节点配置
  * 返回触发器配置，如果没有启用自动触发的节点则返回 null
  */
+const { Title } = Typography;
+
 function extractTriggerConfig(nodes: PipelineNode[]): {
   source_table: string;
   watermark_field: string;
@@ -29,9 +50,7 @@ function extractTriggerConfig(nodes: PipelineNode[]): {
   enabled: boolean;
 } | null {
   // 找到第一个 type 为 source 且启用了 autoTriggerEnabled 的节点
-  const sourceNode = nodes.find(
-    (n) => n.type === 'source' && n.config?.autoTriggerEnabled
-  );
+  const sourceNode = nodes.find((n) => n.type === 'source' && n.config?.autoTriggerEnabled);
   if (!sourceNode) return null;
 
   const tableName = sourceNode.config?.tableName;
@@ -102,10 +121,7 @@ export const PipelineTestPage: React.FC = () => {
   }, [dataSources]);
 
   /** 从图中源节点 config 解析管道级数据源 ID（用于预览回退等） */
-  const pipelineDsFromNodes = useMemo(
-    () => getFirstSourceDataSourceId(editorNodes),
-    [editorNodes]
-  );
+  const pipelineDsFromNodes = useMemo(() => getFirstSourceDataSourceId(editorNodes), [editorNodes]);
 
   useEffect(() => {
     loadPipelines();
@@ -173,7 +189,7 @@ export const PipelineTestPage: React.FC = () => {
       void loadExecutions(pid);
     }, 2000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailDrawerVisible, selectedPipeline]);
 
   const loadExecutions = useCallback(async (pipelineId: number) => {
@@ -243,9 +259,7 @@ export const PipelineTestPage: React.FC = () => {
       key: 'is_active',
       width: 80,
       render: (_, record) => (
-        <Tag color={record.is_active ? 'green' : 'default'}>
-          {record.is_active ? '启用' : '禁用'}
-        </Tag>
+        <Tag color={record.is_active ? 'green' : 'default'}>{record.is_active ? '启用' : '禁用'}</Tag>
       ),
     },
     {
@@ -273,11 +287,7 @@ export const PipelineTestPage: React.FC = () => {
           >
             运行
           </Button>
-          <Button
-            icon={<EyeOutlined />}
-            size="small"
-            onClick={() => openDetailDrawer(record)}
-          >
+          <Button icon={<EyeOutlined />} size="small" onClick={() => openDetailDrawer(record)}>
             详情
           </Button>
         </Space>
@@ -334,43 +344,44 @@ export const PipelineTestPage: React.FC = () => {
       dataIndex: 'execution_time_ms',
       key: 'execution_time_ms',
       width: 100,
-      render: (ms?: number) => ms ? `${(ms / 1000).toFixed(2)}s` : '-',
+      render: (ms?: number) => (ms ? `${(ms / 1000).toFixed(2)}s` : '-'),
     },
     {
       title: '开始时间',
       dataIndex: 'started_at',
       key: 'started_at',
       width: 180,
-      render: (text) => text ? new Date(text).toLocaleString('zh-CN') : '-',
+      render: (text) => (text ? new Date(text).toLocaleString('zh-CN') : '-'),
     },
     {
       title: '完成时间',
       dataIndex: 'completed_at',
       key: 'completed_at',
       width: 180,
-      render: (text) => text ? new Date(text).toLocaleString('zh-CN') : '-',
+      render: (text) => (text ? new Date(text).toLocaleString('zh-CN') : '-'),
     },
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <Card
-        title="数据管道测试"
-        extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingPipelineId(null);
-              form.resetFields();
-              setEditorNodes([]);
-              setCreateModalVisible(true);
-            }}
-          >
-            创建管道
-          </Button>
-        }
-      >
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Title level={3} style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+          数据管道测试
+        </Title>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setEditingPipelineId(null);
+            form.resetFields();
+            setEditorNodes([]);
+            setCreateModalVisible(true);
+          }}
+        >
+          创建管道
+        </Button>
+      </div>
+      <Card>
         <Table
           columns={pipelineColumns}
           dataSource={pipelines}
@@ -393,152 +404,164 @@ export const PipelineTestPage: React.FC = () => {
         footer={null}
         width="min(1400px, 96vw)"
         style={{ top: 12, paddingBottom: 0 }}
-        styles={{ body: { padding: 0, height: 'min(92vh, calc(100vh - 64px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1 }}>
-          <Form form={form} layout="vertical" style={{ padding: '16px 24px', flexShrink: 0 }}>
-          <Space style={{ width: '100%', marginBottom: 12 }} size="large">
-            <Form.Item
-              name="name"
-              label="管道名称"
-              rules={[{ required: true, message: '请输入管道名称' }]}
-              style={{ flex: 1, marginBottom: 0 }}
-            >
-              <Input placeholder="请输入管道名称" />
-            </Form.Item>
-            <Form.Item
-              name="description"
-              label="描述"
-              style={{ flex: 1, marginBottom: 0 }}
-            >
-              <Input placeholder="请输入描述（可选）" />
-            </Form.Item>
-          </Space>
-          </Form>
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            borderTop: '1px solid #e8e8e8',
+        styles={{
+          body: {
+            padding: 0,
+            height: 'min(92vh, calc(100vh - 64px))',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-          }}
-        >
-          <PipelineFlowEditor
-            key={editingPipelineId ?? 'new'}
-            ref={flowEditorRef}
-            nodes={editorNodes}
-            pipelineDataSourceId={pipelineDsFromNodes ?? undefined}
-            onSave={handleEditorSave}
-            onCancel={() => {
-              setCreateModalVisible(false);
-              setEditorNodes([]);
-              setEditingPipelineId(null);
-              form.resetFields();
+          },
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1 }}>
+          <Form form={form} layout="vertical" style={{ padding: '16px 24px', flexShrink: 0 }}>
+            <Space style={{ width: '100%', marginBottom: 12 }} size="large">
+              <Form.Item
+                name="name"
+                label="管道名称"
+                rules={[{ required: true, message: '请输入管道名称' }]}
+                style={{ flex: 1, marginBottom: 0 }}
+              >
+                <Input placeholder="请输入管道名称" />
+              </Form.Item>
+              <Form.Item name="description" label="描述" style={{ flex: 1, marginBottom: 0 }}>
+                <Input placeholder="请输入描述（可选）" />
+              </Form.Item>
+            </Space>
+          </Form>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              borderTop: '1px solid #e8e8e8',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
             }}
-          />
-        </div>
-        <div style={{ padding: '12px 24px', borderTop: '1px solid #e8e8e8', textAlign: 'right', flexShrink: 0, background: '#fff' }}>
-          <Space>
-            <Button
-              onClick={() => {
+          >
+            <PipelineFlowEditor
+              key={editingPipelineId ?? 'new'}
+              ref={flowEditorRef}
+              nodes={editorNodes}
+              pipelineDataSourceId={pipelineDsFromNodes ?? undefined}
+              onSave={handleEditorSave}
+              onCancel={() => {
                 setCreateModalVisible(false);
                 setEditorNodes([]);
                 setEditingPipelineId(null);
                 form.resetFields();
               }}
-            >
-              取消
-            </Button>
-            <Button
-              type="primary"
-              onClick={async () => {
-                const values = form.getFieldsValue();
-                if (!values.name) {
-                  message.error('请输入管道名称');
-                  return;
-                }
-                if (!pipelineDataSources.length && !editingPipelineId) {
-                  message.error('请先在数据源管理中配置至少一个数据源');
-                  return;
-                }
-                const snap = flowEditorRef.current?.getPipelineSnapshot();
-                const nodesPayload = snap?.nodes ?? editorNodes;
-                if (nodesPayload.length === 0) {
-                  message.error('请至少添加一个节点');
-                  return;
-                }
-                const pipelineDsId = getFirstSourceDataSourceId(nodesPayload);
-                if (pipelineDsId == null) {
-                  message.error('请在数据源节点中选择业务数据源（业务库）');
-                  return;
-                }
-
-                // 提取触发器配置
-                const triggerConfig = extractTriggerConfig(nodesPayload);
-
-                try {
-                  let savedPipeline: PipelineResponse;
-
-                  if (editingPipelineId) {
-                    await PipelineService.updatePipeline(editingPipelineId, {
-                      name: values.name,
-                      description: values.description,
-                      nodes: nodesPayload,
-                      source_data_source_id: pipelineDsId,
-                    });
-                    savedPipeline = await PipelineService.getPipeline(editingPipelineId);
-                    message.success('管道更新成功');
-                  } else {
-                    savedPipeline = await PipelineService.createPipeline({
-                      name: values.name,
-                      description: values.description,
-                      source_data_source_id: pipelineDsId,
-                      nodes: nodesPayload,
-                      is_public: false,
-                    });
-                    message.success('管道创建成功');
-                  }
-
-                  // 同步触发器配置到数据库
-                  if (triggerConfig) {
-                    try {
-                      await PipelineService.savePipelineTrigger(savedPipeline.id, triggerConfig);
-                      message.info('触发器配置已同步');
-                    } catch (triggerErr: any) {
-                      console.error('触发器同步失败:', triggerErr);
-                      message.warning('触发器配置同步失败: ' + triggerErr.message);
-                    }
-                  } else {
-                    // 如果之前有触发器配置但现在没有启用，则删除
-                    try {
-                      const existingTrigger = await PipelineService.getPipelineTrigger(savedPipeline.id);
-                      if (existingTrigger) {
-                        await PipelineService.deletePipelineTrigger(savedPipeline.id);
-                      }
-                    } catch {
-                      // 忽略删除失败的错误
-                    }
-                  }
-
+            />
+          </div>
+          <div
+            style={{
+              padding: '12px 24px',
+              borderTop: '1px solid #e8e8e8',
+              textAlign: 'right',
+              flexShrink: 0,
+              background: '#fff',
+            }}
+          >
+            <Space>
+              <Button
+                onClick={() => {
                   setCreateModalVisible(false);
                   setEditorNodes([]);
                   setEditingPipelineId(null);
                   form.resetFields();
-                  loadPipelines();
-                  if (editingPipelineId) {
-                    setDetailDrawerVisible(false);
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type="primary"
+                onClick={async () => {
+                  const values = form.getFieldsValue();
+                  if (!values.name) {
+                    message.error('请输入管道名称');
+                    return;
                   }
-                } catch (error: any) {
-                  message.error(error.message || (editingPipelineId ? '更新管道失败' : '创建管道失败'));
-                }
-              }}
-            >
-              {editingPipelineId ? '保存更新' : '创建'}
-            </Button>
-          </Space>
-        </div>
+                  if (!pipelineDataSources.length && !editingPipelineId) {
+                    message.error('请先在数据源管理中配置至少一个数据源');
+                    return;
+                  }
+                  const snap = flowEditorRef.current?.getPipelineSnapshot();
+                  const nodesPayload = snap?.nodes ?? editorNodes;
+                  if (nodesPayload.length === 0) {
+                    message.error('请至少添加一个节点');
+                    return;
+                  }
+                  const pipelineDsId = getFirstSourceDataSourceId(nodesPayload);
+                  if (pipelineDsId == null) {
+                    message.error('请在数据源节点中选择业务数据源（业务库）');
+                    return;
+                  }
+
+                  // 提取触发器配置
+                  const triggerConfig = extractTriggerConfig(nodesPayload);
+
+                  try {
+                    let savedPipeline: PipelineResponse;
+
+                    if (editingPipelineId) {
+                      await PipelineService.updatePipeline(editingPipelineId, {
+                        name: values.name,
+                        description: values.description,
+                        nodes: nodesPayload,
+                        source_data_source_id: pipelineDsId,
+                      });
+                      savedPipeline = await PipelineService.getPipeline(editingPipelineId);
+                      message.success('管道更新成功');
+                    } else {
+                      savedPipeline = await PipelineService.createPipeline({
+                        name: values.name,
+                        description: values.description,
+                        source_data_source_id: pipelineDsId,
+                        nodes: nodesPayload,
+                        is_public: false,
+                      });
+                      message.success('管道创建成功');
+                    }
+
+                    // 同步触发器配置到数据库
+                    if (triggerConfig) {
+                      try {
+                        await PipelineService.savePipelineTrigger(savedPipeline.id, triggerConfig);
+                        message.info('触发器配置已同步');
+                      } catch (triggerErr: any) {
+                        console.error('触发器同步失败:', triggerErr);
+                        message.warning('触发器配置同步失败: ' + triggerErr.message);
+                      }
+                    } else {
+                      // 如果之前有触发器配置但现在没有启用，则删除
+                      try {
+                        const existingTrigger = await PipelineService.getPipelineTrigger(savedPipeline.id);
+                        if (existingTrigger) {
+                          await PipelineService.deletePipelineTrigger(savedPipeline.id);
+                        }
+                      } catch {
+                        // 忽略删除失败的错误
+                      }
+                    }
+
+                    setCreateModalVisible(false);
+                    setEditorNodes([]);
+                    setEditingPipelineId(null);
+                    form.resetFields();
+                    loadPipelines();
+                    if (editingPipelineId) {
+                      setDetailDrawerVisible(false);
+                    }
+                  } catch (error: any) {
+                    message.error(error.message || (editingPipelineId ? '更新管道失败' : '创建管道失败'));
+                  }
+                }}
+              >
+                {editingPipelineId ? '保存更新' : '创建'}
+              </Button>
+            </Space>
+          </div>
         </div>
       </Modal>
 
@@ -546,7 +569,10 @@ export const PipelineTestPage: React.FC = () => {
       <Modal
         title="运行管道"
         open={runModalVisible}
-        onCancel={() => { setRunModalVisible(false); runForm.resetFields(); }}
+        onCancel={() => {
+          setRunModalVisible(false);
+          runForm.resetFields();
+        }}
         footer={null}
       >
         {selectedPipeline && (
@@ -559,7 +585,14 @@ export const PipelineTestPage: React.FC = () => {
               style={{ marginBottom: 16 }}
             />
             <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-              <Button onClick={() => { setRunModalVisible(false); runForm.resetFields(); }}>取消</Button>
+              <Button
+                onClick={() => {
+                  setRunModalVisible(false);
+                  runForm.resetFields();
+                }}
+              >
+                取消
+              </Button>
               <Button
                 type="primary"
                 icon={<PlayCircleOutlined />}
@@ -610,8 +643,8 @@ export const PipelineTestPage: React.FC = () => {
                   setEditorNodes(
                     hydrateSourceNodesWithPipelineDataSource(
                       selectedPipeline.nodes || [],
-                      selectedPipeline.source_data_source_id
-                    )
+                      selectedPipeline.source_data_source_id,
+                    ),
                   );
                   setDetailDrawerVisible(false);
                   setCreateModalVisible(true);
@@ -637,7 +670,9 @@ export const PipelineTestPage: React.FC = () => {
               <Descriptions column={2} bordered size="small">
                 <Descriptions.Item label="ID">{selectedPipeline.id}</Descriptions.Item>
                 <Descriptions.Item label="名称">{selectedPipeline.name}</Descriptions.Item>
-                <Descriptions.Item label="描述" span={2}>{selectedPipeline.description || '-'}</Descriptions.Item>
+                <Descriptions.Item label="描述" span={2}>
+                  {selectedPipeline.description || '-'}
+                </Descriptions.Item>
                 <Descriptions.Item label="数据源ID">{selectedPipeline.source_data_source_id}</Descriptions.Item>
                 <Descriptions.Item label="节点数">{selectedPipeline.nodes?.length || 0}</Descriptions.Item>
                 <Descriptions.Item label="状态">
@@ -675,9 +710,7 @@ export const PipelineTestPage: React.FC = () => {
                     onClick: () => setSelectedExecution(record),
                     style: {
                       cursor: 'pointer',
-                      ...(selectedExecution?.id === record.id
-                        ? { background: '#e6f4ff' }
-                        : {}),
+                      ...(selectedExecution?.id === record.id ? { background: '#e6f4ff' } : {}),
                     },
                   })}
                 />
@@ -690,85 +723,98 @@ export const PipelineTestPage: React.FC = () => {
                 selectedExecution.status === 'failed' ||
                 selectedExecution.status === 'running' ||
                 selectedExecution.status === 'pending') && (
-              <TabPane tab="执行详情" key="logs">
-                {(selectedExecution.status === 'running' || selectedExecution.status === 'pending') && (
-                  <>
+                <TabPane tab="执行详情" key="logs">
+                  {(selectedExecution.status === 'running' || selectedExecution.status === 'pending') && (
+                    <>
+                      <Alert
+                        type="info"
+                        message="执行进行中（每 2 秒自动刷新）"
+                        description={
+                          <span>
+                            当前步骤：<b>{selectedExecution.current_step_id ?? '—'}</b> ，已写入行数：
+                            <b>{selectedExecution.current_step_rows ?? 0}</b> 。 若长期停在此页面且无行数变化，说明 SQL
+                            查询耗时较长（大数据量 / 缺少索引 / 网络延迟）。
+                          </span>
+                        }
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                      />
+                      <Descriptions column={1} bordered size="small" style={{ marginBottom: 12 }}>
+                        <Descriptions.Item label="当前步骤">
+                          {selectedExecution.current_step_id ?? '—'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="已写入行数">
+                          {selectedExecution.current_step_rows ?? 0}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="阶段">
+                          {(() => {
+                            const sid = selectedExecution.current_step_id;
+                            const sp = sid ? selectedExecution.step_progress?.[sid] : undefined;
+                            return (
+                              sp?.phase_message ||
+                              (sp?.rows && sp.rows > 0 ? '正在分批写入临时表' : 'SQL 查询中（请耐心等待）')
+                            );
+                          })()}
+                        </Descriptions.Item>
+                      </Descriptions>
+                      <Divider plain>各步骤进度（实时）</Divider>
+                      <pre
+                        style={{
+                          maxHeight: 240,
+                          overflow: 'auto',
+                          background: '#f5f5f5',
+                          padding: 12,
+                          borderRadius: 4,
+                          fontSize: 12,
+                        }}
+                      >
+                        {JSON.stringify(selectedExecution.step_progress ?? {}, null, 2)}
+                      </pre>
+                    </>
+                  )}
+                  {selectedExecution.status === 'failed' && (
                     <Alert
-                      type="info"
-                      message="执行进行中（每 2 秒自动刷新）"
+                      type="error"
+                      message="执行失败"
                       description={
-                        <span>
-                          当前步骤：<b>{selectedExecution.current_step_id ?? '—'}</b>
-                          {' '}，已写入行数：<b>{selectedExecution.current_step_rows ?? 0}</b>
-                          {' '}。
-                          若长期停在此页面且无行数变化，说明 SQL 查询耗时较长（大数据量 / 缺少索引 / 网络延迟）。
-                        </span>
+                        <pre
+                          style={{
+                            margin: 0,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            fontSize: 12,
+                          }}
+                        >
+                          {selectedExecution.error_message || '未记录具体错误信息，请查看下方日志。'}
+                        </pre>
                       }
                       showIcon
                       style={{ marginBottom: 16 }}
                     />
-                    <Descriptions column={1} bordered size="small" style={{ marginBottom: 12 }}>
-                      <Descriptions.Item label="当前步骤">{selectedExecution.current_step_id ?? '—'}</Descriptions.Item>
-                      <Descriptions.Item label="已写入行数">{selectedExecution.current_step_rows ?? 0}</Descriptions.Item>
-                      <Descriptions.Item label="阶段">
-                        {(() => {
-                          const sid = selectedExecution.current_step_id;
-                          const sp = sid ? selectedExecution.step_progress?.[sid] : undefined;
-                          return sp?.phase_message || (sp?.rows && sp.rows > 0 ? '正在分批写入临时表' : 'SQL 查询中（请耐心等待）');
-                        })()}
-                      </Descriptions.Item>
-                    </Descriptions>
-                    <Divider plain>各步骤进度（实时）</Divider>
-                    <pre style={{ maxHeight: 240, overflow: 'auto', background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
-                      {JSON.stringify(selectedExecution.step_progress ?? {}, null, 2)}
-                    </pre>
-                  </>
-                )}
-                {selectedExecution.status === 'failed' && (
-                  <Alert
-                    type="error"
-                    message="执行失败"
-                    description={
-                      <pre
-                        style={{
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          fontSize: 12,
-                        }}
-                      >
-                        {selectedExecution.error_message || '未记录具体错误信息，请查看下方日志。'}
+                  )}
+                  <Divider plain>日志</Divider>
+                  <pre
+                    style={{
+                      maxHeight: 500,
+                      overflow: 'auto',
+                      background: '#f5f5f5',
+                      padding: 12,
+                      borderRadius: 4,
+                      fontSize: 12,
+                    }}
+                  >
+                    {JSON.stringify(selectedExecution.logs ?? [], null, 2)}
+                  </pre>
+                  {selectedExecution.status === 'completed' && selectedExecution.result_summary && (
+                    <>
+                      <Divider>结果摘要</Divider>
+                      <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
+                        {JSON.stringify(selectedExecution.result_summary, null, 2)}
                       </pre>
-                    }
-                    showIcon
-                    style={{ marginBottom: 16 }}
-                  />
-                )}
-                <Divider plain>
-                  日志
-                </Divider>
-                <pre
-                  style={{
-                    maxHeight: 500,
-                    overflow: 'auto',
-                    background: '#f5f5f5',
-                    padding: 12,
-                    borderRadius: 4,
-                    fontSize: 12,
-                  }}
-                >
-                  {JSON.stringify(selectedExecution.logs ?? [], null, 2)}
-                </pre>
-                {selectedExecution.status === 'completed' && selectedExecution.result_summary && (
-                  <>
-                    <Divider>结果摘要</Divider>
-                    <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
-                      {JSON.stringify(selectedExecution.result_summary, null, 2)}
-                    </pre>
-                  </>
-                )}
-              </TabPane>
-            )}
+                    </>
+                  )}
+                </TabPane>
+              )}
           </Tabs>
         )}
       </Drawer>
@@ -781,11 +827,14 @@ export const PipelineTestPage: React.FC = () => {
         onClose={() => setPreviewDrawerVisible(false)}
         open={previewDrawerVisible}
         extra={
-          <Button icon={<ReloadOutlined />} onClick={() => {
-            if (selectedExecution?.completed_steps.length) {
-              loadStepPreview(selectedPipeline!.id, selectedExecution.completed_steps[0].step_id);
-            }
-          }}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              if (selectedExecution?.completed_steps.length) {
+                loadStepPreview(selectedPipeline!.id, selectedExecution.completed_steps[0].step_id);
+              }
+            }}
+          >
             刷新
           </Button>
         }
@@ -802,7 +851,7 @@ export const PipelineTestPage: React.FC = () => {
                 </div>
                 <Table
                   dataSource={previewData.rows}
-                  columns={previewData.columns.map(col => ({ title: col, dataIndex: col, key: col }))}
+                  columns={previewData.columns.map((col) => ({ title: col, dataIndex: col, key: col }))}
                   loading={previewLoading}
                   rowKey={(_, index) => index?.toString() || '0'}
                   size="small"

@@ -89,8 +89,9 @@
   border-radius: var(--radius-md);
   font-size: 15px;
   box-sizing: border-box;
-  transition: border-color var(--transition-fast),
-              box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
   background: #ffffff;
   color: var(--theme-text-primary);
   line-height: 1.6;
@@ -105,7 +106,7 @@
 .form-group input:focus {
   outline: none;
   border-color: var(--theme-primary);
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.10);
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 .form-group input:disabled {
@@ -163,8 +164,12 @@
 }
 
 @keyframes spin {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── 底部 ── */

@@ -46,9 +46,7 @@ const { Sider, Content } = Layout;
 const EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY = 'bi-dashboard.dashboardEditor.sidebarCollapsed';
 
 const getEditorSidebarCollapsedKey = (userId?: number | null) =>
-  userId
-    ? `${EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY}.${userId}`
-    : EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY;
+  userId ? `${EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY}.${userId}` : EDITOR_SIDEBAR_COLLAPSED_STORAGE_KEY;
 
 const parseCollapsed = (raw: string | null): boolean | null => {
   if (raw == null) return null;
@@ -185,7 +183,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
     }
     return error.message || defaultMessage;
   }
-  
+
   // 如果是字符串，检查是否是 [object Object]
   if (typeof error === 'string') {
     if (error === '[object Object]') {
@@ -193,7 +191,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
     }
     return error;
   }
-  
+
   // 如果是对象，尝试提取错误消息
   if (error && typeof error === 'object') {
     // 优先使用常见的错误消息字段
@@ -212,7 +210,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
     if (error.msg && typeof error.msg === 'string') {
       return error.msg;
     }
-    
+
     // 如果 error.message 是对象，尝试递归提取
     if (error.message && typeof error.message === 'object') {
       const nestedMsg = getErrorMessage(error.message, '');
@@ -220,7 +218,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
         return nestedMsg;
       }
     }
-    
+
     // 尝试 JSON 序列化（避免 [object Object]）
     try {
       const jsonStr = JSON.stringify(error, null, 2);
@@ -231,7 +229,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
     } catch (e) {
       // JSON 序列化失败，继续尝试其他方法
     }
-    
+
     // 尝试调用 toString 方法
     if (typeof error.toString === 'function') {
       const str = error.toString();
@@ -240,7 +238,7 @@ const getErrorMessage = (error: any, defaultMessage: string): string => {
       }
     }
   }
-  
+
   // 如果都不行，返回默认消息
   return defaultMessage;
 };
@@ -313,11 +311,15 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   // 所有图表的X轴字段列表（用于筛选器关联字段名下拉选择）
   const [chartXFields, setChartXFields] = useState<string[]>([]);
   // 筛选器下拉选项（按筛选器ID索引）
-  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>({});
+  const [filterSelectOptions, setFilterSelectOptions] = useState<Record<number, { label: string; value: string }[]>>(
+    {},
+  );
 
   // 用于清理拖拽/缩放中途可能残留的定时器
   const layoutUpdateTimerRef = useRef<number | null>(null);
-  const widgetLayoutRef = useRef<Map<string, { card_row: number; card_col: number; size_x: number; size_y: number }>>(new Map());
+  const widgetLayoutRef = useRef<Map<string, { card_row: number; card_col: number; size_x: number; size_y: number }>>(
+    new Map(),
+  );
   const dashboardRef = useRef<Dashboard | null>(null);
   const widgetsRef = useRef<DashboardTitleWidget[]>([]);
   useEffect(() => {
@@ -329,7 +331,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     const cards = dashboard?.cards || [];
     const widgetList = widgets;
     return [
-      ...cards.map(card => ({
+      ...cards.map((card) => ({
         i: card.id.toString(),
         x: Number.isFinite(card.card_col) ? card.card_col : 0,
         y: Number.isFinite(card.card_row) ? card.card_row : 0,
@@ -338,14 +340,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         minW: MIN_CARD_COLS,
         minH: MIN_CARD_ROWS,
       })),
-      ...widgetList.map(w => {
+      ...widgetList.map((w) => {
         const refEntry = widgetLayoutRef.current.get(w.id);
         return {
           i: w.id,
-          x: refEntry ? refEntry.card_col : (Number.isFinite(w.card_col) ? w.card_col : 0),
-          y: refEntry ? refEntry.card_row : (Number.isFinite(w.card_row) ? w.card_row : 0),
-          w: refEntry ? refEntry.size_x : (Number.isFinite(w.size_x) ? w.size_x : 12),
-          h: refEntry ? refEntry.size_y : (Number.isFinite(w.size_y) ? w.size_y : 2),
+          x: refEntry ? refEntry.card_col : Number.isFinite(w.card_col) ? w.card_col : 0,
+          y: refEntry ? refEntry.card_row : Number.isFinite(w.card_row) ? w.card_row : 0,
+          w: refEntry ? refEntry.size_x : Number.isFinite(w.size_x) ? w.size_x : 12,
+          h: refEntry ? refEntry.size_y : Number.isFinite(w.size_y) ? w.size_y : 2,
           minW: 2,
           minH: 1,
         };
@@ -354,77 +356,83 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   }, [dashboard?.cards, widgets]);
 
   // 提交布局变化到后端（只由 onDragStop / onResizeStop 调用，onLayoutChange 只做内部同步）
-  const commitLayoutChanges = React.useCallback(async (layoutItems: any[]) => {
-    const latestDashboard = dashboardRef.current;
-    if (!latestDashboard) return;
+  const commitLayoutChanges = React.useCallback(
+    async (layoutItems: any[]) => {
+      const latestDashboard = dashboardRef.current;
+      if (!latestDashboard) return;
 
-    const cardMap = new Map(latestDashboard.cards.map(card => [card.id.toString(), card]));
-    const cardChanges: Array<{ cardId: number; updates: any }> = [];
-    const latestWidgets = widgetsRef.current;
-    let widgetLayoutDirty = false;
+      const cardMap = new Map(latestDashboard.cards.map((card) => [card.id.toString(), card]));
+      const cardChanges: Array<{ cardId: number; updates: any }> = [];
+      const latestWidgets = widgetsRef.current;
+      let widgetLayoutDirty = false;
 
-    layoutItems.forEach((item: any) => {
-      const idStr = String(item.i);
-      if (idStr === '__dropping-elem__') return;
+      layoutItems.forEach((item: any) => {
+        const idStr = String(item.i);
+        if (idStr === '__dropping-elem__') return;
 
-      if (idStr.startsWith('title_')) {
-        const nx = Math.round(item.x);
-        const ny = Math.round(item.y);
-        const nw = Math.round(item.w);
-        const nh = Math.round(item.h);
-        widgetLayoutRef.current.set(idStr, { card_row: ny, card_col: nx, size_x: nw, size_y: nh });
-        const w = latestWidgets.find(ww => ww.id === idStr);
-        if (w && (w.card_row !== ny || w.card_col !== nx || w.size_x !== nw || w.size_y !== nh)) {
-          widgetLayoutDirty = true;
+        if (idStr.startsWith('title_')) {
+          const nx = Math.round(item.x);
+          const ny = Math.round(item.y);
+          const nw = Math.round(item.w);
+          const nh = Math.round(item.h);
+          widgetLayoutRef.current.set(idStr, { card_row: ny, card_col: nx, size_x: nw, size_y: nh });
+          const w = latestWidgets.find((ww) => ww.id === idStr);
+          if (w && (w.card_row !== ny || w.card_col !== nx || w.size_x !== nw || w.size_y !== nh)) {
+            widgetLayoutDirty = true;
+          }
+        } else if (/^\d+$/.test(idStr)) {
+          const card = cardMap.get(idStr);
+          if (!card) return;
+          const updates: any = {};
+          if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
+          if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
+          if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
+          if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
+          if (Object.keys(updates).length > 0) {
+            cardChanges.push({ cardId: card.id, updates });
+          }
         }
-      } else if (/^\d+$/.test(idStr)) {
-        const card = cardMap.get(idStr);
-        if (!card) return;
-        const updates: any = {};
-        if (card.card_row !== item.y) updates.card_row = Math.round(item.y);
-        if (card.card_col !== item.x) updates.card_col = Math.round(item.x);
-        if (card.size_x !== item.w) updates.size_x = Math.round(item.w);
-        if (card.size_y !== item.h) updates.size_y = Math.round(item.h);
-        if (Object.keys(updates).length > 0) {
-          cardChanges.push({ cardId: card.id, updates });
+      });
+
+      try {
+        if (cardChanges.length > 0) {
+          const results = await Promise.allSettled(
+            cardChanges.map((c) => DashboardService.updateDashboardCard(c.cardId, c.updates)),
+          );
+          const hasRejected = results.some((r) => r.status === 'rejected');
+          if (hasRejected) message.error('部分卡片更新失败，请稍后重试');
+          const updatedCards = latestDashboard.cards.map((card) => {
+            const change = cardChanges.find((c) => c.cardId === card.id);
+            return change ? { ...card, ...change.updates } : card;
+          });
+          const updatedDashboard = { ...latestDashboard, cards: updatedCards };
+          setDashboard(updatedDashboard);
+          dashboardRef.current = updatedDashboard;
         }
-      }
-    });
 
-    try {
-      if (cardChanges.length > 0) {
-        const results = await Promise.allSettled(
-          cardChanges.map(c => DashboardService.updateDashboardCard(c.cardId, c.updates))
-        );
-        const hasRejected = results.some(r => r.status === 'rejected');
-        if (hasRejected) message.error('部分卡片更新失败，请稍后重试');
-        const updatedCards = latestDashboard.cards.map(card => {
-          const change = cardChanges.find(c => c.cardId === card.id);
-          return change ? { ...card, ...change.updates } : card;
-        });
-        const updatedDashboard = { ...latestDashboard, cards: updatedCards };
-        setDashboard(updatedDashboard);
-        dashboardRef.current = updatedDashboard;
+        if (widgetLayoutDirty && latestWidgets.length > 0) {
+          const updatedWidgets = latestWidgets.map((w) => {
+            const ref = widgetLayoutRef.current.get(w.id);
+            if (!ref) return w;
+            return { ...w, card_row: ref.card_row, card_col: ref.card_col, size_x: ref.size_x, size_y: ref.size_y };
+          });
+          await persistWidgets(updatedWidgets);
+          setWidgets(updatedWidgets);
+        }
+      } catch (e: any) {
+        console.error('保存布局失败:', e);
+        message.error(e?.message || '保存布局失败');
       }
-
-      if (widgetLayoutDirty && latestWidgets.length > 0) {
-        const updatedWidgets = latestWidgets.map(w => {
-          const ref = widgetLayoutRef.current.get(w.id);
-          if (!ref) return w;
-          return { ...w, card_row: ref.card_row, card_col: ref.card_col, size_x: ref.size_x, size_y: ref.size_y };
-        });
-        await persistWidgets(updatedWidgets);
-        setWidgets(updatedWidgets);
-      }
-    } catch (e: any) {
-      console.error('保存布局失败:', e);
-      message.error(e?.message || '保存布局失败');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    dashboard, widgets, dashboardRef, widgetLayoutRef,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistWidgets 内部使用 ref，不直接依赖
-  ]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [
+      dashboard,
+      widgets,
+      dashboardRef,
+      widgetLayoutRef,
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- persistWidgets 内部使用 ref，不直接依赖
+    ],
+  );
 
   const isEditMode = mode === 'edit';
 
@@ -435,9 +443,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
    */
   const hydrateDashboardCards = (d: Dashboard, latestCharts: Chart[], preferLatestChart = false): Dashboard => {
     if (!d?.cards || d.cards.length === 0) return d;
-    const chartMap = new Map<number, Chart>(latestCharts.map(c => [c.id, c]));
+    const chartMap = new Map<number, Chart>(latestCharts.map((c) => [c.id, c]));
 
-    const nextCards = d.cards.map(card => {
+    const nextCards = d.cards.map((card) => {
       const hydrated = chartMap.get(card.chart_id);
       // 初次加载时若已有 card.chart 可保留以减少重绘；刷新时用 preferLatestChart 强制用最新图表配置
       if (!preferLatestChart && card.chart && !hydrated) return card;
@@ -454,9 +462,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
     return (
       <div ref={containerRef} style={{ width: '100%' }}>
-        {mounted && width > 0 && (
-          <ReactGridLayout width={width} {...props} />
-        )}
+        {mounted && width > 0 && <ReactGridLayout width={width} {...props} />}
       </div>
     );
   };
@@ -498,14 +504,15 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   useEffect(() => {
     if (filterModalOpen && editingFilterId) {
       // 打开编辑弹窗时刷新筛选器数据
-      DashboardService.getDashboard(dashboard!.id).then(updated => {
-        if (updated?.filters) {
-          setFilters(updated.filters);
-        }
-      }).catch(console.error);
+      DashboardService.getDashboard(dashboard!.id)
+        .then((updated) => {
+          if (updated?.filters) {
+            setFilters(updated.filters);
+          }
+        })
+        .catch(console.error);
     }
   }, [filterModalOpen, editingFilterId, dashboard]);
-
 
   // 页面从后台重新可见时刷新仪表盘和图表（编辑后返回本页能看到最新配置）
   const refreshDashboardAndCharts = React.useCallback(async () => {
@@ -522,7 +529,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       const xFieldsSet = new Set<string>();
       convertedCharts.forEach((chart: Chart) => {
         const vizSettings = chart.visualization_settings || {};
-        const xField = vizSettings.x_field ||
+        const xField =
+          vizSettings.x_field ||
           (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
           (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
         if (xField) xFieldsSet.add(xField);
@@ -553,9 +561,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
         // 提取所有图表的X轴字段（去重）
         const xFieldsSet = new Set<string>();
-        convertedCharts.forEach(chart => {
+        convertedCharts.forEach((chart) => {
           const vizSettings = chart.visualization_settings || {};
-          const xField = vizSettings.x_field || 
+          const xField =
+            vizSettings.x_field ||
             (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
             (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
           if (xField) {
@@ -590,13 +599,13 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   type: 'title',
                   title: String(w.title ?? ''),
                   subtitle: w.subtitle ? String(w.subtitle) : undefined,
-                  align: (w.align === 'center' || w.align === 'right') ? w.align : 'left',
-                  level: (w.level === 2 || w.level === 3) ? w.level : 1,
+                  align: w.align === 'center' || w.align === 'right' ? w.align : 'left',
+                  level: w.level === 2 || w.level === 3 ? w.level : 1,
                   size_x: Number.isFinite(w.size_x) ? w.size_x : 12,
                   size_y: Number.isFinite(w.size_y) ? w.size_y : 2,
                   card_row: Number.isFinite(w.card_row) ? w.card_row : 0,
                   card_col: Number.isFinite(w.card_col) ? w.card_col : 0,
-                }))
+                })),
             );
             widgetLayoutRef.current.clear();
           } else {
@@ -643,7 +652,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
   // 当筛选器列表变化时，加载需要选项的筛选器（初始无条件加载）
   useEffect(() => {
-    filters.forEach(filter => {
+    filters.forEach((filter) => {
       if (filter.filter_type === 'select' || filter.filter_type === 'multi_select') {
         if (!filterSelectOptions[filter.id]) {
           loadFilterOptions(filter, undefined);
@@ -657,19 +666,17 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   const prevFilterValuesRef = useRef<Record<number | string, any>>({});
   useEffect(() => {
     const prev = prevFilterValuesRef.current;
-    const hasChanged = Object.keys({ ...prev, ...filterValues }).some(
-      key => prev[key] !== filterValues[key as any]
-    );
+    const hasChanged = Object.keys({ ...prev, ...filterValues }).some((key) => prev[key] !== filterValues[key as any]);
     if (!hasChanged) return;
     prevFilterValuesRef.current = filterValues;
 
     // 对每个 select/multi_select 筛选器，用「其他筛选器的当前值」作为级联条件重新加载
-    filters.forEach(filter => {
+    filters.forEach((filter) => {
       if (filter.filter_type !== 'select' && filter.filter_type !== 'multi_select') return;
 
       // 构建级联条件：除当前筛选器自身外，所有已有值的筛选器
       const cascadeConditions: Record<string, any> = {};
-      filters.forEach(f => {
+      filters.forEach((f) => {
         if (f.id === filter.id) return;
         const val = filterValues[f.id];
         if (val === undefined || val === null || val === '') return;
@@ -695,11 +702,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       // 命中缓存时也要刷新 UI，防止上一次级联缩小的选项还留在界面上
       const cached = filterOptionsCache[filter.id];
       const selectOpts = cached.map((opt: string) => ({ label: String(opt), value: String(opt) }));
-      setFilterSelectOptions(prev => ({ ...prev, [filter.id]: selectOpts }));
+      setFilterSelectOptions((prev) => ({ ...prev, [filter.id]: selectOpts }));
       return cached;
     }
 
-    setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: true }));
+    setFilterOptionsLoading((prev) => ({ ...prev, [filter.id]: true }));
 
     try {
       let options: string[] = [];
@@ -717,9 +724,8 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       } else {
         // ② 根据绑定的图表自动推断
         const firstBinding = filter.bindings?.[0];
-        const boundCard = firstBinding && dashboard?.cards
-          ? dashboard.cards.find(c => c.id === firstBinding.card_id)
-          : undefined;
+        const boundCard =
+          firstBinding && dashboard?.cards ? dashboard.cards.find((c) => c.id === firstBinding.card_id) : undefined;
         let chartId = boundCard?.chart?.id ?? boundCard?.chart_id;
 
         // ③ 没有绑定时，遍历仪表盘内所有图表，找第一个能返回选项的
@@ -760,18 +766,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
       // 无级联条件时才写入缓存
       if (!hasCascade) {
-        setFilterOptionsCache(prev => ({ ...prev, [filter.id]: options }));
+        setFilterOptionsCache((prev) => ({ ...prev, [filter.id]: options }));
       }
 
       const selectOptions = options.map((opt: string) => ({ label: String(opt), value: String(opt) }));
-      setFilterSelectOptions(prev => ({ ...prev, [filter.id]: selectOptions }));
+      setFilterSelectOptions((prev) => ({ ...prev, [filter.id]: selectOptions }));
 
       return options;
     } catch (error) {
       console.error('[FilterDebug] 加载筛选器选项失败:', error);
       return [];
     } finally {
-      setFilterOptionsLoading(prev => ({ ...prev, [filter.id]: false }));
+      setFilterOptionsLoading((prev) => ({ ...prev, [filter.id]: false }));
     }
   };
 
@@ -869,17 +875,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         return;
       }
       const subtitle = String(values.subtitle || '').trim();
-      const align: TitleWidgetAlign =
-        values.align === 'center' || values.align === 'right' ? values.align : 'left';
+      const align: TitleWidgetAlign = values.align === 'center' || values.align === 'right' ? values.align : 'left';
       const level: 1 | 2 | 3 = values.level === 2 || values.level === 3 ? values.level : 1;
 
       setWidgetSaving(true);
       let nextWidgets: DashboardTitleWidget[];
       if (editingWidgetId) {
-        nextWidgets = widgets.map(w =>
-          w.id === editingWidgetId
-            ? { ...w, title, subtitle: subtitle || undefined, align, level }
-            : w
+        nextWidgets = widgets.map((w) =>
+          w.id === editingWidgetId ? { ...w, title, subtitle: subtitle || undefined, align, level } : w,
         );
       } else {
         const id = `title_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -921,7 +924,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     if (!dashboard) return;
     try {
       widgetLayoutRef.current.delete(widgetId);
-      const nextWidgets = widgets.filter(w => w.id !== widgetId);
+      const nextWidgets = widgets.filter((w) => w.id !== widgetId);
       setWidgets(nextWidgets);
       const updated = await persistWidgets(nextWidgets);
       if (updated) {
@@ -949,7 +952,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         size_y: Math.round(MIN_CARD_ROWS),
       });
 
-      const chartData = charts.find(c => c.id === chartId);
+      const chartData = charts.find((c) => c.id === chartId);
       const cardWithChart: DashboardCard = {
         ...newCard,
         chart: chartData,
@@ -979,7 +982,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         try {
           const allProps = Object.getOwnPropertyNames(error);
           console.error('[DashboardEditor] All error properties:', allProps);
-          allProps.forEach(prop => {
+          allProps.forEach((prop) => {
             try {
               console.error(`[DashboardEditor] Error.${prop}:`, (error as any)[prop]);
             } catch (e) {
@@ -998,10 +1001,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   };
 
-  const handleAddChartAt = async (
-    chartId: number,
-    pos: { x: number; y: number; w?: number; h?: number }
-  ) => {
+  const handleAddChartAt = async (chartId: number, pos: { x: number; y: number; w?: number; h?: number }) => {
     if (!dashboard) {
       message.warning('请先在左侧保存仪表盘基本信息');
       return;
@@ -1017,7 +1017,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         size_y: Math.round(Math.max(pos.h ?? MIN_CARD_ROWS, MIN_CARD_ROWS)),
       });
 
-      const chartData = charts.find(c => c.id === chartId);
+      const chartData = charts.find((c) => c.id === chartId);
       const cardWithChart: DashboardCard = {
         ...newCard,
         chart: chartData,
@@ -1038,13 +1038,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     }
   };
 
-  const filteredCharts = charts.filter(c => {
+  const filteredCharts = charts.filter((c) => {
     const q = chartSearchText.trim().toLowerCase();
     if (!q) return true;
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.chart_type.toLowerCase().includes(q)
-    );
+    return c.name.toLowerCase().includes(q) || c.chart_type.toLowerCase().includes(q);
   });
 
   const renderDraggableChartItem = (chart: Chart) => (
@@ -1054,14 +1051,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       draggable={true}
       onDragStart={(e) => {
         try {
-          console.log('[DashboardEditor] DragStart for chart:', chart.id);
           e.dataTransfer.effectAllowed = 'copy';
           e.dataTransfer.dropEffect = 'copy';
           // 设置多种格式的数据，确保兼容性
           e.dataTransfer.setData('chartId', chart.id.toString());
           e.dataTransfer.setData('text/plain', chart.id.toString());
           e.dataTransfer.setData('application/json', JSON.stringify({ chartId: chart.id }));
-          console.log('[DashboardEditor] DragStart data set:', chart.id.toString());
         } catch (error) {
           console.error('[DashboardEditor] DragStart error:', error);
         }
@@ -1094,7 +1089,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
       await DashboardService.removeChartFromDashboard(cardId);
       const updatedDashboard: Dashboard = {
         ...dashboard,
-        cards: (dashboard.cards || []).filter(card => card.id !== cardId),
+        cards: (dashboard.cards || []).filter((card) => card.id !== cardId),
       };
       setDashboard(updatedDashboard);
       dashboardRef.current = updatedDashboard;
@@ -1105,11 +1100,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   // 图表卡片组件 - 加载并显示图表数据
-  const ChartCardComponent: React.FC<{ card: DashboardCard; filterValues?: Record<string, any>; allFilters?: DashboardFilter[] }> = ({ card, filterValues = {}, allFilters = [] }) => {
+  const ChartCardComponent: React.FC<{
+    card: DashboardCard;
+    filterValues?: Record<string, any>;
+    allFilters?: DashboardFilter[];
+  }> = ({ card, filterValues = {}, allFilters = [] }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const loggedRef = useRef<string | null>(null);
     // 跟踪是否已成功加载过数据
     const hasLoadedDataRef = useRef(false);
 
@@ -1143,7 +1141,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           const filteredFilterValues: Record<string, any> = {};
 
           if (!isMetricChart) {
-            allFiltersRef.current.forEach(filter => {
+            allFiltersRef.current.forEach((filter) => {
               const filterValue = filterValuesRef.current[filter.id];
               if (filterValue === undefined || filterValue === null) return;
               if (filterValue === '') return;
@@ -1242,22 +1240,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         String(viz?.y_agg_method ?? viz?.['graph.y_agg_method'] ?? ''),
         String(typeof viz?.x_group_by_enabled === 'boolean' ? viz.x_group_by_enabled : 'unset'),
       ].join('|');
-      if (loggedRef.current !== logKey) {
-        loggedRef.current = logKey;
-        console.log('[DashboardEditorPage] ChartFactory input', {
-          chart_id: card.chart.id,
-          chart_type: card.chart.chart_type,
-          xField,
-          yFields,
-          y_agg_method: viz?.y_agg_method ?? viz?.['graph.y_agg_method'],
-          x_group_by_enabled: viz?.x_group_by_enabled,
-          sortBy,
-          sortOrder,
-          rowsSample: chartData.slice(0, 5),
-          rowsCount: chartData.length,
-          viz,
-        });
-      }
     }
 
     return (
@@ -1273,9 +1255,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             }}
           >
             <Spin tip="加载数据中..." />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              正在执行查询...
-            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>正在执行查询...</div>
           </div>
         ) : error ? (
           <div
@@ -1337,13 +1317,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               line_y_fields: viz.line_y_fields,
               y_axis_right_title: viz.y_axis_right_title,
               metric_mode: viz.metric_mode === 'cell' ? 'cell' : 'aggregate',
-              metric_filter_field:
-                viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
-              metric_filter_value:
-                viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
+              metric_filter_field: viz.metric_filter_field != null ? String(viz.metric_filter_field) : '',
+              metric_filter_value: viz.metric_filter_value != null ? String(viz.metric_filter_value) : '',
               metric_unit: viz.metric_unit != null ? String(viz.metric_unit) : '',
-              metric_decimals:
-                typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
+              metric_decimals: typeof viz.metric_decimals === 'number' ? viz.metric_decimals : 2,
               metric_label: viz.metric_label != null ? String(viz.metric_label) : '',
               metric_filters: Array.isArray(viz.metric_filters) ? viz.metric_filters : [],
               metric_filter_expr: viz.metric_filter_expr,
@@ -1377,7 +1354,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
   };
 
   return (
-    <Layout className="dashboard-editor-dark" style={{ height: '100%', minHeight: 0, background: '#0b1120', display: 'flex', flexDirection: 'row' }}>
+    <Layout
+      className="dashboard-editor-dark"
+      style={{ height: '100%', minHeight: 0, background: '#0b1120', display: 'flex', flexDirection: 'row' }}
+    >
       <Sider
         collapsed={collapsed}
         collapsedWidth={0}
@@ -1393,48 +1373,32 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         }}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            onClick={handleBack}
-            style={{ width: '100%' }}
-          >
+          <Button icon={<ArrowLeftOutlined />} onClick={handleBack} style={{ width: '100%' }}>
             返回仪表盘列表
           </Button>
 
           {!isEditMode && (
             <Card title="基本信息" size="small">
-            <Form
-              layout="vertical"
-              form={form}
-              initialValues={{
-                name: dashboard?.name,
-                description: dashboard?.description,
-              }}
-            >
-              <Form.Item
-                label="仪表盘标题"
-                name="name"
-                rules={[{ required: true, message: '请输入仪表盘标题' }]}
+              <Form
+                layout="vertical"
+                form={form}
+                initialValues={{
+                  name: dashboard?.name,
+                  description: dashboard?.description,
+                }}
               >
-                <Input placeholder="例如：销售分析仪表盘" />
-              </Form.Item>
-              <Form.Item label="描述" name="description">
-                <Input.TextArea
-                  rows={3}
-                  placeholder="简单描述这个仪表盘的用途"
-                />
-              </Form.Item>
-              <Form.Item>
-                <Button
-                  type="primary"
-                  block
-                  loading={saving}
-                  onClick={handleSaveBasicInfo}
-                >
-                  {isEditMode ? '保存修改' : '创建仪表盘'}
-                </Button>
-              </Form.Item>
-            </Form>
+                <Form.Item label="仪表盘标题" name="name" rules={[{ required: true, message: '请输入仪表盘标题' }]}>
+                  <Input placeholder="例如：销售分析仪表盘" />
+                </Form.Item>
+                <Form.Item label="描述" name="description">
+                  <Input.TextArea rows={3} placeholder="简单描述这个仪表盘的用途" />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" block loading={saving} onClick={handleSaveBasicInfo}>
+                    {isEditMode ? '保存修改' : '创建仪表盘'}
+                  </Button>
+                </Form.Item>
+              </Form>
             </Card>
           )}
 
@@ -1447,9 +1411,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               </Button>
             }
           >
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              用于添加章节标题/说明文字（无需绑定图表）。
-            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>用于添加章节标题/说明文字（无需绑定图表）。</div>
           </Card>
 
           {dashboard && (
@@ -1472,12 +1434,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               }
             >
               {filters.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                  暂无筛选器，点击"新建"添加筛选器。
-                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>暂无筛选器，点击"新建"添加筛选器。</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {filters.map(filter => (
+                  {filters.map((filter) => (
                     <div
                       key={filter.id}
                       className="dashboard-editor-filter-list-item"
@@ -1524,7 +1484,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           onConfirm={async () => {
                             try {
                               await DashboardService.deleteFilter(filter.id);
-                              setFilters(prevFilters => prevFilters.filter(f => f.id !== filter.id));
+                              setFilters((prevFilters) => prevFilters.filter((f) => f.id !== filter.id));
                               message.success('筛选器已删除');
                             } catch (error: any) {
                               message.error(getErrorMessage(error, '删除筛选器失败'));
@@ -1555,9 +1515,10 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     setCharts(converted);
                     // 更新图表X轴字段列表
                     const xFieldsSet = new Set<string>();
-                    converted.forEach(chart => {
+                    converted.forEach((chart) => {
                       const vizSettings = chart.visualization_settings || {};
-                      const xField = vizSettings.x_field || 
+                      const xField =
+                        vizSettings.x_field ||
                         (Array.isArray(vizSettings.graph_dimensions) ? vizSettings.graph_dimensions[0] : null) ||
                         (Array.isArray(vizSettings['graph.dimensions']) ? vizSettings['graph.dimensions'][0] : null);
                       if (xField) {
@@ -1566,7 +1527,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     });
                     setChartXFields(Array.from(xFieldsSet).sort());
                     // Important: do NOT reset canvas cards; only hydrate missing card.chart.
-                    setDashboard(prev => (prev ? hydrateDashboardCards(prev, converted) : prev));
+                    setDashboard((prev) => (prev ? hydrateDashboardCards(prev, converted) : prev));
                     message.success('图表列表已刷新');
                   } catch (e: any) {
                     message.error(getErrorMessage(e, '刷新图表列表失败'));
@@ -1578,9 +1539,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             }
           >
             {charts.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                暂无可用图表，请先在"图表管理"中创建图表。
-              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>暂无可用图表，请先在"图表管理"中创建图表。</div>
             ) : (
               <div className="dashboard-editor-chart-search-panel">
                 <Input
@@ -1600,9 +1559,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到匹配图表" />
                   </div>
                 ) : (
-                  <div className="dashboard-editor-chart-list">
-                    {filteredCharts.map(renderDraggableChartItem)}
-                  </div>
+                  <div className="dashboard-editor-chart-list">{filteredCharts.map(renderDraggableChartItem)}</div>
                 )}
               </div>
             )}
@@ -1632,7 +1589,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           extra={
             <Button
               type="text"
-              onClick={() => setCollapsed(v => !v)}
+              onClick={() => setCollapsed((v) => !v)}
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             >
               {collapsed ? '展开侧栏' : '收起侧栏'}
@@ -1655,9 +1612,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               }}
             >
               <Spin size="large" tip="加载仪表盘画布中..." />
-              <div style={{ fontSize: 13, color: '#94a3b8' }}>
-                正在加载图表列表与仪表盘配置…
-              </div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>正在加载图表列表与仪表盘配置…</div>
             </div>
           ) : !dashboard ? (
             <div
@@ -1672,26 +1627,37 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
             >
               <div style={{ fontSize: 32, marginBottom: 12 }}>🖼️</div>
               <div style={{ marginBottom: 8 }}>请先在左侧填写并保存仪表盘信息</div>
-              <div style={{ fontSize: 12 }}>
-                创建完成后，可以在这里添加并排布图表。
-              </div>
+              <div style={{ fontSize: 12 }}>创建完成后，可以在这里添加并排布图表。</div>
             </div>
           ) : (
             <div className="dashboard-editor-grid">
               {/* 筛选器渲染区域 */}
               {filters.length > 0 && (
-                <div className="dashboard-editor-filter-bar" style={{
-                  marginBottom: 16,
-                  padding: '16px 20px',
-                }}>
+                <div
+                  className="dashboard-editor-filter-bar"
+                  style={{
+                    marginBottom: 16,
+                    padding: '16px 20px',
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <FilterOutlined style={{ color: '#1890ff', fontSize: 16 }} />
                     <span style={{ fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>筛选条件</span>
-                    {Object.keys(filterValues).some(k => filterValues[k] !== undefined && filterValues[k] !== null) && (
+                    {Object.keys(filterValues).some(
+                      (k) => filterValues[k] !== undefined && filterValues[k] !== null,
+                    ) && (
                       <button
                         type="button"
                         onClick={() => setFilterValues({})}
-                        style={{ marginLeft: 'auto', fontSize: 12, cursor: 'pointer', background: 'none', border: 'none', padding: 0, color: '#94a3b8' }}
+                        style={{
+                          marginLeft: 'auto',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          color: '#94a3b8',
+                        }}
                       >
                         重置全部
                       </button>
@@ -1701,7 +1667,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     {filters.map((filter, index) => {
                       const hasValue = filterValues[filter.id] !== undefined && filterValues[filter.id] !== null;
                       const handleFilterChange = (value: any) => {
-                        setFilterValues(prev => ({ ...prev, [filter.id]: value }));
+                        setFilterValues((prev) => ({ ...prev, [filter.id]: value }));
                       };
 
                       const getFilterIcon = () => {
@@ -1721,11 +1687,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
 
                       const getControlWidth = () => {
                         switch (filter.filter_type) {
-                          case 'date_range': return 260;
+                          case 'date_range':
+                            return 260;
                           case 'select':
                           case 'multi_select':
-                          case 'input': return 160;
-                          default: return 150;
+                          case 'input':
+                            return 160;
+                          default:
+                            return 150;
                         }
                       };
 
@@ -1751,10 +1720,14 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                             <DatePicker.RangePicker
                               size="small"
                               style={{ width: getControlWidth() }}
-                              value={filterValues[filter.id] ? [
-                                filterValues[filter.id].start ? dayjs(filterValues[filter.id].start) : null,
-                                filterValues[filter.id].end ? dayjs(filterValues[filter.id].end) : null
-                              ] : null}
+                              value={
+                                filterValues[filter.id]
+                                  ? [
+                                      filterValues[filter.id].start ? dayjs(filterValues[filter.id].start) : null,
+                                      filterValues[filter.id].end ? dayjs(filterValues[filter.id].end) : null,
+                                    ]
+                                  : null
+                              }
                               onChange={(dates) => {
                                 if (dates) {
                                   handleFilterChange({
@@ -1826,7 +1799,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 </div>
               )}
 
-
               <AutoWidthGridLayout
                 cols={12}
                 rowHeight={80}
@@ -1855,7 +1827,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 }}
                 onDrop={(layout: GridLayoutItem[], item: GridLayoutItem, e: DragEvent) => {
                   try {
-                    console.log('[DashboardEditor] onDrop triggered', { layout, item, e });
                     if (!e || !e.dataTransfer) {
                       console.warn('[DashboardEditor] No dataTransfer in drop event');
                       return;
@@ -1866,7 +1837,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     } catch (err) {
                       console.warn('[DashboardEditor] Failed to get data from dataTransfer:', err);
                     }
-                    console.log('[DashboardEditor] Drop data:', raw);
                     if (!raw) {
                       console.warn('[DashboardEditor] No chartId found in drop data');
                       message.warning('无法获取图表ID，请重试');
@@ -1878,7 +1848,6 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       message.warning('无效的图表ID');
                       return;
                     }
-                    console.log('[DashboardEditor] Adding chart at position:', { chartId, x: item.x, y: item.y, w: item.w, h: item.h });
                     handleAddChartAt(chartId, { x: item.x, y: item.y, w: item.w, h: item.h });
                   } catch (error) {
                     console.error('[DashboardEditor] Drop error:', error);
@@ -1886,7 +1855,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   }
                 }}
               >
-                {(dashboard.cards || []).map(card => (
+                {(dashboard.cards || []).map((card) => (
                   <div key={card.id.toString()}>
                     <Card
                       size="small"
@@ -1903,12 +1872,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                           cancelText="取消"
                           onConfirm={() => handleRemoveCard(card.id)}
                         >
-                          <Button
-                            type="text"
-                            icon={<DeleteOutlined />}
-                            size="small"
-                            danger
-                          />
+                          <Button type="text" icon={<DeleteOutlined />} size="small" danger />
                         </Popconfirm>
                       }
                       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
@@ -1923,7 +1887,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                     </Card>
                   </div>
                 ))}
-                {widgets.map(w => (
+                {widgets.map((w) => (
                   <div key={w.id}>
                     <Card
                       size="small"
@@ -1931,7 +1895,12 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                       bodyStyle={{ height: '100%' }}
                       extra={
                         <Space>
-                          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditTitleWidget(w)} />
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => openEditTitleWidget(w)}
+                          />
                           <Popconfirm
                             title="移除这个标题组件？"
                             okText="移除"
@@ -1979,11 +1948,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         cancelText="取消"
       >
         <Form form={widgetForm} layout="vertical">
-          <Form.Item
-            label="标题"
-            name="title"
-            rules={[{ required: true, message: '请输入标题' }]}
-          >
+          <Form.Item label="标题" name="title" rules={[{ required: true, message: '请输入标题' }]}>
             <Input placeholder="例如：销售概览" />
           </Form.Item>
           <Form.Item label="副标题（可选）" name="subtitle">
@@ -2033,7 +1998,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               await DashboardService.updateFilter(editingFilterId, basicInfo);
 
               // 处理绑定关系
-              const currentFilter = filters.find(f => f.id === editingFilterId);
+              const currentFilter = filters.find((f) => f.id === editingFilterId);
               const currentBindingCardIds = currentFilter?.bindings?.map((b: any) => b.card_id) || [];
               const newBindingCardIds = binding_card_ids || [];
 
@@ -2054,10 +2019,18 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               if (refreshed?.filters) {
                 const refreshedFilter = refreshed.filters.find((f: any) => f.id === editingFilterId);
                 if (refreshedFilter) {
-                  setFilters(prevFilters => prevFilters.map(f => f.id === editingFilterId ? refreshedFilter : f));
+                  setFilters((prevFilters) => prevFilters.map((f) => (f.id === editingFilterId ? refreshedFilter : f)));
                   // 清除该筛选器的选项缓存，触发重新加载
-                  setFilterOptionsCache(prev => { const n = { ...prev }; delete n[editingFilterId]; return n; });
-                  setFilterSelectOptions(prev => { const n = { ...prev }; delete n[editingFilterId]; return n; });
+                  setFilterOptionsCache((prev) => {
+                    const n = { ...prev };
+                    delete n[editingFilterId];
+                    return n;
+                  });
+                  setFilterSelectOptions((prev) => {
+                    const n = { ...prev };
+                    delete n[editingFilterId];
+                    return n;
+                  });
                 }
               }
               message.success('筛选器已更新');
@@ -2078,7 +2051,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 if (refreshed?.filters) {
                   const refreshedFilter = refreshed.filters.find((f: any) => f.id === created.id);
                   if (refreshedFilter) {
-                    setFilters(prevFilters => [...prevFilters.filter(f => f.id !== created.id), refreshedFilter]);
+                    setFilters((prevFilters) => [...prevFilters.filter((f) => f.id !== created.id), refreshedFilter]);
                     setFilterModalOpen(false);
                     message.success('筛选器已创建并绑定图表');
                     return;
@@ -2086,7 +2059,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                 }
               }
 
-              setFilters(prevFilters => [...prevFilters, created]);
+              setFilters((prevFilters) => [...prevFilters, created]);
               message.success('筛选器已创建');
             }
 
@@ -2104,19 +2077,11 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
         width={600}
       >
         <Form form={filterForm} layout="vertical">
-          <Form.Item
-            label="筛选器名称"
-            name="name"
-            rules={[{ required: true, message: '请输入筛选器名称' }]}
-          >
+          <Form.Item label="筛选器名称" name="name" rules={[{ required: true, message: '请输入筛选器名称' }]}>
             <Input placeholder="例如：日期筛选、地区筛选" />
           </Form.Item>
 
-          <Form.Item
-            label="筛选器类型"
-            name="filter_type"
-            rules={[{ required: true, message: '请选择筛选器类型' }]}
-          >
+          <Form.Item label="筛选器类型" name="filter_type" rules={[{ required: true, message: '请选择筛选器类型' }]}>
             <Select
               placeholder="选择筛选器类型"
               options={[
@@ -2137,9 +2102,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
           >
             <AutoComplete
               placeholder="例如：支付日期、省份、状态"
-              options={chartXFields.map(f => ({ value: f, label: f }))}
+              options={chartXFields.map((f) => ({ value: f, label: f }))}
               filterOption={(inputValue, option) =>
-                (option?.value as string || '').toLowerCase().includes(inputValue.toLowerCase())
+                ((option?.value as string) || '').toLowerCase().includes(inputValue.toLowerCase())
               }
               allowClear
             />
@@ -2155,28 +2120,17 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                   <Divider style={{ margin: '8px 0' }}>
                     <span style={{ fontSize: 12, color: '#888' }}>选项来源（可选，不填则自动从绑定图表推断）</span>
                   </Divider>
-                  <Form.Item
-                    label="数据源"
-                    name="data_source_id"
-                  >
+                  <Form.Item label="数据源" name="data_source_id">
                     <Select
                       placeholder="选择数据源"
                       allowClear
-                      options={dataSources.map(ds => ({ label: ds.name, value: ds.id }))}
+                      options={dataSources.map((ds) => ({ label: ds.name, value: ds.id }))}
                     />
                   </Form.Item>
-                  <Form.Item
-                    label="选项来源表"
-                    name="options_table"
-                    extra="留空则从绑定图表的 SQL 自动提取表名"
-                  >
+                  <Form.Item label="选项来源表" name="options_table" extra="留空则从绑定图表的 SQL 自动提取表名">
                     <Input placeholder="例如：shop_reviews" />
                   </Form.Item>
-                  <Form.Item
-                    label="选项来源字段"
-                    name="options_field"
-                    extra="留空则使用「关联字段名」"
-                  >
+                  <Form.Item label="选项来源字段" name="options_field" extra="留空则使用「关联字段名」">
                     <Input placeholder="留空则同关联字段名" />
                   </Form.Item>
                   <Divider style={{ margin: '8px 0' }}>
@@ -2194,7 +2148,7 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
                         placeholder="选择要绑定的图表（可不选）"
                         allowClear
                       >
-                        {dashboard.cards.map(card => (
+                        {dashboard.cards.map((card) => (
                           <Select.Option key={card.id} value={card.id}>
                             {card.chart?.name || `图表 #${card.chart_id}`}
                           </Select.Option>
@@ -2214,17 +2168,9 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
               if (ft === 'select' || ft === 'multi_select') return null;
               if (!dashboard?.cards || dashboard.cards.length === 0) return null;
               return (
-                <Form.Item
-                  label="绑定图表（可选）"
-                  name="binding_card_ids"
-                >
-                  <Select
-                    mode="multiple"
-                    style={{ width: '100%' }}
-                    placeholder="选择要绑定的图表"
-                    allowClear
-                  >
-                    {dashboard.cards.map(card => (
+                <Form.Item label="绑定图表（可选）" name="binding_card_ids">
+                  <Select mode="multiple" style={{ width: '100%' }} placeholder="选择要绑定的图表" allowClear>
+                    {dashboard.cards.map((card) => (
                       <Select.Option key={card.id} value={card.id}>
                         {card.chart?.name || `图表 #${card.chart_id}`}
                       </Select.Option>
@@ -2239,4 +2185,3 @@ export const DashboardEditorPage: React.FC<DashboardEditorPageProps> = ({ mode }
     </Layout>
   );
 };
-

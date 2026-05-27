@@ -6,10 +6,34 @@
  * config.rowFilterConditions / config.rowFilterLogic），均由后端折叠 SQL 时应用。
  */
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { Empty, Select, Spin, Typography, Button, Popover, Space, Tag,
-  Input, Tooltip, Alert, Checkbox, Divider, Modal, Radio, message,
-  DatePicker } from 'antd';
-import { CalendarOutlined, ReloadOutlined, FilterOutlined, DeleteOutlined, PlusOutlined, TableOutlined, BarChartOutlined } from '@ant-design/icons';
+import {
+  Empty,
+  Select,
+  Spin,
+  Typography,
+  Button,
+  Popover,
+  Space,
+  Tag,
+  Input,
+  Tooltip,
+  Alert,
+  Checkbox,
+  Divider,
+  Modal,
+  Radio,
+  message,
+  DatePicker,
+} from 'antd';
+import {
+  CalendarOutlined,
+  ReloadOutlined,
+  FilterOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  TableOutlined,
+  BarChartOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 
 import { GraphNode, GraphEdge } from '../../utils/graphUtils';
@@ -21,11 +45,7 @@ import { InsertColumnModal, InsertedColumnConfig } from './InsertColumnModal';
 import { ChartNodePreview } from './visual-nodes/ChartNodePreview';
 import { useNodePreview } from '../../hooks/useNodePreview';
 import { PREVIEW_COLUMN_DISPLAY_AUTO } from '../../constants/previewColumnDisplay';
-import {
-  ChartNodeConfig,
-  DEFAULT_CHART_CONFIG,
-  ChartType,
-} from '../../types/chartNode';
+import { ChartNodeConfig, DEFAULT_CHART_CONFIG, ChartType } from '../../types/chartNode';
 import { DATE_PRESETS } from './visual-nodes/FilterNodeConfig';
 
 const { Text } = Typography;
@@ -35,7 +55,7 @@ export interface Condition {
   column: string;
   operator: string;
   value: string;
-  preset?: string;  // 日期快捷选项
+  preset?: string; // 日期快捷选项
   rangeStart?: string;
   rangeEnd?: string;
 }
@@ -93,7 +113,7 @@ function ConditionRow({
 
   // 日期类型：使用日期专用操作符 + 标准操作符
   const availableOps = isDateType
-    ? [...DATE_FILTER_OPERATORS, ...FILTER_OPERATORS.filter(op => !['isNull', 'isNotNull'].includes(op.value))]
+    ? [...DATE_FILTER_OPERATORS, ...FILTER_OPERATORS.filter((op) => !['isNull', 'isNotNull'].includes(op.value))]
     : FILTER_OPERATORS;
 
   const needsValue = !['isNull', 'isNotNull'].includes(cond.operator);
@@ -113,7 +133,17 @@ function ConditionRow({
         placeholder="字段"
         style={{ width: 110 }}
         value={cond.column || undefined}
-        onChange={(v) => onChange({ ...cond, column: v, operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined })}
+        onChange={(v) =>
+          onChange({
+            ...cond,
+            column: v,
+            operator: '',
+            value: '',
+            preset: undefined,
+            rangeStart: undefined,
+            rangeEnd: undefined,
+          })
+        }
         options={columns.map((c) => ({ label: c, value: c }))}
         showSearch
         allowClear
@@ -124,8 +154,10 @@ function ConditionRow({
         placeholder="条件"
         style={{ width: 90 }}
         value={cond.operator || undefined}
-        onChange={(v) => onChange({ ...cond, operator: v, value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined })}
-        options={availableOps.map(op => ({ label: op.label, value: op.value }))}
+        onChange={(v) =>
+          onChange({ ...cond, operator: v, value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined })
+        }
+        options={availableOps.map((op) => ({ label: op.label, value: op.value }))}
         disabled={readOnly}
       />
       {showNormalInput && (
@@ -144,7 +176,15 @@ function ConditionRow({
           size="small"
           style={{ width: 130 }}
           value={dayjs(cond.value || cond.rangeStart)}
-          onChange={(date) => onChange({ ...cond, value: date?.format('YYYY-MM-DD') || '', rangeStart: undefined, rangeEnd: undefined, preset: undefined })}
+          onChange={(date) =>
+            onChange({
+              ...cond,
+              value: date?.format('YYYY-MM-DD') || '',
+              rangeStart: undefined,
+              rangeEnd: undefined,
+              preset: undefined,
+            })
+          }
           format="YYYY-MM-DD"
           placeholder="选择日期"
           disabled={readOnly}
@@ -158,7 +198,7 @@ function ConditionRow({
           style={{ width: 140 }}
           value={cond.preset || undefined}
           onChange={(v) => onChange({ ...cond, preset: v, value: '', rangeStart: '', rangeEnd: '' })}
-          options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+          options={DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }))}
           suffixIcon={<CalendarOutlined />}
           disabled={readOnly}
         />
@@ -187,15 +227,7 @@ function ConditionRow({
           />
         </Space>
       )}
-      {!readOnly && (
-        <Button
-          type="text"
-          size="small"
-          icon={<DeleteOutlined />}
-          onClick={onRemove}
-          danger
-        />
-      )}
+      {!readOnly && <Button type="text" size="small" icon={<DeleteOutlined />} onClick={onRemove} danger />}
     </Space>
   );
 }
@@ -226,12 +258,22 @@ function FilterEditor({
   const addCondition = () =>
     onConditionsChange([
       ...conditions,
-      { id: `cond_${Date.now()}`, column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined },
+      {
+        id: `cond_${Date.now()}`,
+        column: '',
+        operator: '',
+        value: '',
+        preset: undefined,
+        rangeStart: undefined,
+        rangeEnd: undefined,
+      },
     ]);
   return (
     <div style={{ width: 380 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Text strong style={{ fontSize: 12 }}>行筛选</Text>
+        <Text strong style={{ fontSize: 12 }}>
+          行筛选
+        </Text>
         <Text type="secondary" style={{ fontSize: 11 }}>
           {activeCount} 个条件
         </Text>
@@ -260,16 +302,22 @@ function FilterEditor({
             columns={columns}
             columnTypes={columnTypes}
             readOnly={readOnly}
-            onChange={(updated) =>
-              onConditionsChange(
-                conditions.map((c) => (c.id === updated.id ? updated : c))
-              )
-            }
+            onChange={(updated) => onConditionsChange(conditions.map((c) => (c.id === updated.id ? updated : c)))}
             onRemove={() =>
               onConditionsChange(
                 conditions.length > 1
                   ? conditions.filter((c) => c.id !== cond.id)
-                  : [{ id: cond.id, column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined }]
+                  : [
+                      {
+                        id: cond.id,
+                        column: '',
+                        operator: '',
+                        value: '',
+                        preset: undefined,
+                        rangeStart: undefined,
+                        rangeEnd: undefined,
+                      },
+                    ],
               )
             }
           />
@@ -338,28 +386,36 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const nodeDef = pipelineNode ? getNodeTypeDef(pipelineNode.type) : null;
   const resolvedDsId = useMemo(
     () => resolvePreviewDataSourceId(pipelineNode, pipelineDataSourceId),
-    [pipelineNode, pipelineDataSourceId]
+    [pipelineNode, pipelineDataSourceId],
   );
 
   const previewConfigKey = useMemo(() => {
     if (!previewNode) return '';
     const pn = previewNode.data.pipelineNode as PipelineNode | undefined;
     const config = pn?.config || {};
-    return JSON.stringify({
-      xField: config.xField,
-      yFields: config.yFields,
-      chartType: config.chartType,
-      previewColumnFormats: config.previewColumnFormats,
-      outputColumnKeys: config.outputColumnKeys,
-      rowFilterConditions: config.rowFilterConditions,
-      rowFilterLogic: config.rowFilterLogic,
-      insertedColumns: config.insertedColumns,
-    }) + `:tick:${refreshTick}`;
+    return (
+      JSON.stringify({
+        xField: config.xField,
+        yFields: config.yFields,
+        chartType: config.chartType,
+        previewColumnFormats: config.previewColumnFormats,
+        outputColumnKeys: config.outputColumnKeys,
+        rowFilterConditions: config.rowFilterConditions,
+        rowFilterLogic: config.rowFilterLogic,
+        insertedColumns: config.insertedColumns,
+      }) + `:tick:${refreshTick}`
+    );
   }, [previewNode, refreshTick]);
 
   const graphTopologySig = useMemo(() => {
-    const ids = allNodes.map((x) => x.id).sort().join(',');
-    const es = allEdges.map((x) => `${x.source}-${x.target}`).sort().join('|');
+    const ids = allNodes
+      .map((x) => x.id)
+      .sort()
+      .join(',');
+    const es = allEdges
+      .map((x) => `${x.source}-${x.target}`)
+      .sort()
+      .join('|');
     return `${ids}|${es}`;
   }, [allNodes, allEdges]);
 
@@ -376,7 +432,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         })
         .sort()
         .join('\n'),
-    [allNodes]
+    [allNodes],
   );
 
   const columnTypesMap = useMemo((): Record<string, string> => {
@@ -404,7 +460,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         pipelineDataSourceId: resolvedDsId,
         limit: 100,
       },
-      true
+      true,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -420,23 +476,46 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   ]);
 
   /** 节点 config 中的筛选/列选配置（由本组件写入，供后端折叠 SQL 时使用） */
-  const savedRowConditions = ((pipelineNode?.config as Record<string, unknown>)?.rowFilterConditions as Condition[]) || [];
+  const savedRowConditions =
+    ((pipelineNode?.config as Record<string, unknown>)?.rowFilterConditions as Condition[]) || [];
   const savedRowLogic = ((pipelineNode?.config as Record<string, unknown>)?.rowFilterLogic as string) || 'AND';
   const savedOutputKeys = useMemo(
     () => ((pipelineNode?.config as Record<string, unknown>)?.outputColumnKeys as string[]) || [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [previewConfigKey]
+    [previewConfigKey],
   );
 
   const [localConditions, setLocalConditions] = useState<Condition[]>([
-    { id: 'cond_0', column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined },
+    {
+      id: 'cond_0',
+      column: '',
+      operator: '',
+      value: '',
+      preset: undefined,
+      rangeStart: undefined,
+      rangeEnd: undefined,
+    },
   ]);
   const [localLogic, setLocalLogic] = useState<string>('AND');
 
   useEffect(() => {
     if (!previewNode) return;
     const conds = [...savedRowConditions];
-    setLocalConditions(conds.length > 0 ? conds : [{ id: 'cond_0', column: '', operator: '', value: '', preset: undefined, rangeStart: undefined, rangeEnd: undefined }]);
+    setLocalConditions(
+      conds.length > 0
+        ? conds
+        : [
+            {
+              id: 'cond_0',
+              column: '',
+              operator: '',
+              value: '',
+              preset: undefined,
+              rangeStart: undefined,
+              rangeEnd: undefined,
+            },
+          ],
+    );
     setLocalLogic(savedRowLogic || 'AND');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewNode?.id, previewConfigKey]);
@@ -459,7 +538,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     if (!previewNode || !allNodes) return undefined;
 
     // 首先收集当前节点的 formats
-    const currentFormats = ((pipelineNode?.config as Record<string, unknown>)?.previewColumnFormats) as Record<string, string> | undefined;
+    const currentFormats = (pipelineNode?.config as Record<string, unknown>)?.previewColumnFormats as
+      | Record<string, string>
+      | undefined;
     const result: Record<string, string> = {};
 
     // 如果当前节点有格式设置，优先使用
@@ -470,7 +551,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     // 如果结果已满（当前节点设置了所有列的格式），直接返回
     const colsSet = new Set(columnCatalog);
     const formattedCols = new Set(Object.keys(result));
-    if (formattedCols.size >= colsSet.size && [...colsSet].every(c => formattedCols.has(c))) {
+    if (formattedCols.size >= colsSet.size && [...colsSet].every((c) => formattedCols.has(c))) {
       return Object.keys(result).length > 0 ? result : undefined;
     }
 
@@ -478,7 +559,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
       if (visited.has(nodeId)) return [];
       visited.add(nodeId);
-      const node = allNodes.find(n => n.id === nodeId);
+      const node = allNodes.find((n) => n.id === nodeId);
       if (!node) return [];
       const pn = node.data.pipelineNode as PipelineNode | undefined;
       const upstream = pn?.upstream || [];
@@ -492,10 +573,12 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
     const upstreamIds = getUpstreamIds(previewNode.id);
     for (const upId of upstreamIds) {
-      const upNode = allNodes.find(n => n.id === upId);
+      const upNode = allNodes.find((n) => n.id === upId);
       if (!upNode) continue;
       const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
-      const upFormats = (upPn?.config as Record<string, unknown>)?.previewColumnFormats as Record<string, string> | undefined;
+      const upFormats = (upPn?.config as Record<string, unknown>)?.previewColumnFormats as
+        | Record<string, string>
+        | undefined;
       if (upFormats && typeof upFormats === 'object') {
         for (const [col, fmt] of Object.entries(upFormats)) {
           if (colsSet.has(col) && !(col in result)) {
@@ -530,7 +613,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     const getUpstreamIds = (nodeId: string, visited: Set<string> = new Set()): string[] => {
       if (visited.has(nodeId)) return [];
       visited.add(nodeId);
-      const node = allNodes.find(n => n.id === nodeId);
+      const node = allNodes.find((n) => n.id === nodeId);
       if (!node) return [];
       const pn = node.data.pipelineNode as PipelineNode | undefined;
       const upstream = pn?.upstream || [];
@@ -544,7 +627,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
     const upstreamIds = getUpstreamIds(previewNode.id);
     for (const upId of upstreamIds) {
-      const upNode = allNodes.find(n => n.id === upId);
+      const upNode = allNodes.find((n) => n.id === upId);
       if (!upNode) continue;
       const upPn = upNode.data.pipelineNode as PipelineNode | undefined;
       const upRenames = (upPn?.config as Record<string, unknown>)?.columnRenames as Record<string, string> | undefined;
@@ -594,24 +677,20 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     visibleColumnKeys.length === columnCatalog.length &&
     columnCatalog.every((c) => visibleColumnKeys.includes(c));
   const catalogIndeterminate =
-    visibleColumnKeys.length > 0 &&
-    visibleColumnKeys.length < columnCatalog.length &&
-    !catalogAllSelected;
+    visibleColumnKeys.length > 0 && visibleColumnKeys.length < columnCatalog.length && !catalogAllSelected;
 
   const handleColumnSelect = (keys: string[]) => {
     if (!previewNode) return;
     const catalog = columnCatalog;
     if (!catalog.length) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const isAll =
-      keys.length === 0 ||
-      (keys.length === catalog.length && catalog.every((c) => keys.includes(c)));
+    const isAll = keys.length === 0 || (keys.length === catalog.length && catalog.every((c) => keys.includes(c)));
     const persisted: string[] = isAll ? [] : [...keys];
     const nextVisible = isAll ? [...catalog] : [...keys];
     setVisibleColumnKeys(nextVisible);
     if (onNodeUpdate) {
       const newCfg = {
-        ...(pn.config as Record<string, unknown> || {}),
+        ...((pn.config as Record<string, unknown>) || {}),
         outputColumnKeys: persisted,
       };
       onNodeUpdate({
@@ -631,7 +710,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       return;
     }
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
     const prevRaw = cfg.previewColumnFormats;
     const nextFormats: Record<string, string> = {};
     if (prevRaw && Object.prototype.toString.call(prevRaw) === '[object Object]') {
@@ -669,7 +748,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
     const newCfg = {
-      ...(pn.config as Record<string, unknown> || {}),
+      ...((pn.config as Record<string, unknown>) || {}),
       rowFilterConditions: localConditions,
       rowFilterLogic: localLogic,
     };
@@ -692,12 +771,9 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
           pipelineDataSourceId: resolvedDsId,
           limit: 100,
         },
-        true
+        true,
       ).then((result) => {
-        const cols =
-          result?.allColumns && result.allColumns.length > 0
-            ? result.allColumns
-            : (result?.columns ?? []);
+        const cols = result?.allColumns && result.allColumns.length > 0 ? result.allColumns : (result?.columns ?? []);
         setInsertColumnSourceColumn(sourceColumn ?? cols[0]);
         setInsertColumnEditConfig(undefined);
         setInsertColumnModalOpen(true);
@@ -711,10 +787,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
   const handleEditInsertColumn = (config: InsertedColumnConfig) => {
     if (previewLoading || !previewData) {
-      loadPreview(
-        { node: previewNode, allNodes, pipelineDataSourceId: resolvedDsId, limit: 100 },
-        true
-      ).then(() => {
+      loadPreview({ node: previewNode, allNodes, pipelineDataSourceId: resolvedDsId, limit: 100 }, true).then(() => {
         setInsertColumnEditConfig(config);
         setInsertColumnModalOpen(true);
       });
@@ -727,7 +800,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const handleInsertColumn = (config: InsertedColumnConfig) => {
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
     const existingCols = (cfg.insertedColumns as InsertedColumnConfig[]) || [];
 
     const configWithId = { ...config, id: config.id || `ic_${Date.now()}_${Math.random().toString(36).slice(2)}` };
@@ -753,7 +826,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   const handleDeleteInsertColumn = (configId: string) => {
     if (!previewNode || !onNodeUpdate) return;
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
     const existingCols = (cfg.insertedColumns as InsertedColumnConfig[]) || [];
     const newCols = existingCols.filter((c) => c.id !== configId);
     const newCfg = { ...cfg, insertedColumns: newCols };
@@ -775,12 +848,10 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
     if (oldName === newName) return;
 
     const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-    const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+    const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
     const prevRenames = (cfg.columnRenames as Record<string, string>) || {};
 
-    const conflictColumn = previewData?.columns.find(
-      col => col !== oldName && col === newName
-    );
+    const conflictColumn = previewData?.columns.find((col) => col !== oldName && col === newName);
     if (conflictColumn) {
       message.error(`列名 "${newName}" 已存在，请使用其他名称`);
       return;
@@ -812,7 +883,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
       cancelText: '取消',
       onOk: () => {
         const pn = previewNode.data.pipelineNode as Record<string, unknown>;
-        const cfg = { ...(pn.config as Record<string, unknown> || {}) };
+        const cfg = { ...((pn.config as Record<string, unknown>) || {}) };
         const outputKeys = (cfg.outputColumnKeys as string[]) || [];
         const newOutputKeys = outputKeys.filter((k) => k !== columnKey);
         const newCfg = { ...cfg, outputColumnKeys: newOutputKeys };
@@ -866,10 +937,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
   if (!previewNode) {
     return (
       <div className="pipeline-canvas-preview pipeline-canvas-preview--empty">
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="单击节点查看数据预览；双击节点打开配置"
-        />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="单击节点查看数据预览；双击节点打开配置" />
       </div>
     );
   }
@@ -992,11 +1060,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
 
           {columnCatalog.length > 0 && (
             <Tooltip title="插入新列">
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() => handleOpenInsertColumn(columnCatalog[0])}
-              >
+              <Button size="small" icon={<PlusOutlined />} onClick={() => handleOpenInsertColumn(columnCatalog[0])}>
                 插入列
               </Button>
             </Tooltip>
@@ -1014,7 +1078,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
                   pipelineDataSourceId: resolvedDsId,
                   limit: 100,
                 },
-                true
+                true,
               )
             }
           >
@@ -1023,9 +1087,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
         </div>
       </div>
 
-      {previewError && (
-        <Alert type="error" message={previewError} showIcon style={{ margin: '8px 12px' }} />
-      )}
+      {previewError && <Alert type="error" message={previewError} showIcon style={{ margin: '8px 12px' }} />}
 
       {showLoading && (
         <div className="pipeline-canvas-preview-loading">
@@ -1056,9 +1118,7 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             compact={false}
             striped
             displayColumnKeys={
-              visibleColumnKeys.length
-                ? visibleColumnKeys.filter((c) => dataCols.includes(c))
-                : undefined
+              visibleColumnKeys.length ? visibleColumnKeys.filter((c) => dataCols.includes(c)) : undefined
             }
             columnFormatOverrides={previewColumnFormats}
             onColumnFormatChange={onNodeUpdate ? handlePreviewColumnFormatChange : undefined}
@@ -1066,21 +1126,24 @@ export const PipelineCanvasPreviewPanel: React.FC<PipelineCanvasPreviewPanelProp
             onDeleteColumn={onNodeUpdate ? handleDeleteColumn : undefined}
             onRenameColumn={onNodeUpdate ? handleRenameColumn : undefined}
             columnRenames={columnRenames}
-            insertedColumns={(pipelineNode?.config as Record<string, unknown>)?.insertedColumns as InsertedColumnConfig[] | undefined}
+            insertedColumns={
+              (pipelineNode?.config as Record<string, unknown>)?.insertedColumns as InsertedColumnConfig[] | undefined
+            }
             onEditInsertColumn={onNodeUpdate ? handleEditInsertColumn : undefined}
           />
         </div>
       )}
 
-      {showNoData && (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />
-      )}
+      {showNoData && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据" />}
 
       <InsertColumnModal
         visible={insertColumnModalOpen}
         columns={columnCatalog}
         editConfig={insertColumnEditConfig}
-        onCancel={() => { setInsertColumnModalOpen(false); setInsertColumnEditConfig(undefined); }}
+        onCancel={() => {
+          setInsertColumnModalOpen(false);
+          setInsertColumnEditConfig(undefined);
+        }}
         onConfirm={handleInsertColumn}
         onDelete={handleDeleteInsertColumn}
       />

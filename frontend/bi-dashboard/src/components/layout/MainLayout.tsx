@@ -1,7 +1,17 @@
 /* 文件路径: e:\bi-dashboard\frontend\bi-dashboard\src\components\layout\MainLayout.tsx */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined, MoreOutlined, CrownOutlined, TeamOutlined, UserOutlined, LockOutlined, LogoutOutlined } from '@ant-design/icons';
+import {
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  PlusOutlined,
+  MoreOutlined,
+  CrownOutlined,
+  TeamOutlined,
+  UserOutlined,
+  LockOutlined,
+  LogoutOutlined,
+} from '@ant-design/icons';
 import { Modal, Form, Input, message, Popconfirm, Popover, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,7 +63,9 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   const [avatarOption, setAvatarOption] = useState<string | null>(() => {
     try {
       return localStorage.getItem(getAvatarKey(user?.id)) || null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   });
   const [passwordForm] = Form.useForm();
 
@@ -93,7 +105,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   // 加载报表页列表
   useEffect(() => {
     if (!user?.id) return;
-    
+
     const loadReportPages = async () => {
       try {
         const pages = await ReportPageService.getUserReportPages();
@@ -106,7 +118,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         console.error('加载报表页列表失败:', error);
       }
     };
-    
+
     loadReportPages();
   }, [user?.id, location.pathname]);
 
@@ -120,7 +132,14 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         { key: 'avatar', icon: <UserOutlined />, label: '换头像', onClick: () => setAvatarModalVisible(true) },
         { key: 'password', icon: <LockOutlined />, label: '改密码', onClick: () => setPasswordModalVisible(true) },
         { type: 'divider' },
-        { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { void handleLogout(); } },
+        {
+          key: 'logout',
+          icon: <LogoutOutlined />,
+          label: '退出登录',
+          onClick: () => {
+            void handleLogout();
+          },
+        },
       ]
     : [];
 
@@ -210,11 +229,11 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     try {
       await ReportPageService.deleteReportPage(pageId);
       message.success(`报表页"${pageName}"已删除`);
-      
+
       // 刷新报表页列表
       const pages = await ReportPageService.getUserReportPages();
       setReportPages(pages);
-      
+
       // 如果删除的是当前页面，优先导航到剩余报表页中的第一个；如果没有报表页则回到仪表盘
       if (isReportPageActive(pageId)) {
         if (pages.length > 0) {
@@ -235,35 +254,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   }, [location.pathname, reportPages, navigate]);
 
-  const pageTitle = useMemo(() => {
-    if (location.pathname.startsWith('/reports/')) {
-      const pageId = location.pathname.split('/')[2];
-      const page = reportPages.find(p => p.id.toString() === pageId);
-      return page ? page.name : '报表中心';
-    }
-    
-    switch (location.pathname) {
-      case '/dashboard':
-        return '仪表盘';
-      case '/reports':
-        return '报表中心';
-      case '/charts-management':
-        return '图表管理';
-      case '/datasources':
-        return '数据源管理';
-      case '/pipeline-test':
-        return '管道测试';
-      case '/analytics':
-        return '数据分析';
-      case '/data-chain':
-        return '数据链管理';
-      case '/settings':
-        return '系统设置';
-      default:
-        return '';
-    }
-  }, [location.pathname, reportPages]);
-
   return (
     <div className="main-layout">
       {/* 侧边栏 */}
@@ -273,14 +263,14 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           <button
             type="button"
             className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed(v => !v)}
+            onClick={() => setSidebarCollapsed((v) => !v)}
             aria-label={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
             title={sidebarCollapsed ? '展开导航栏' : '收起导航栏'}
           >
             {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
           </button>
         </div>
-        
+
         <nav className="nav-menu">
           <div className="nav-item-group">
             {sidebarCollapsed ? (
@@ -290,11 +280,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                   <div className="nav-popover-content">
                     <div className="nav-popover-header">
                       <span>报表页</span>
-                      <button
-                        className="nav-popover-add-btn"
-                        onClick={handleAddReportPage}
-                        title="添加报表页"
-                      >
+                      <button className="nav-popover-add-btn" onClick={handleAddReportPage} title="添加报表页">
                         <PlusOutlined style={{ fontSize: '12px' }} />
                       </button>
                     </div>
@@ -302,7 +288,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                       {reportPages.length === 0 ? (
                         <div className="nav-popover-empty">暂无报表页</div>
                       ) : (
-                        reportPages.map(page => (
+                        reportPages.map((page) => (
                           <div
                             key={page.id}
                             className={`nav-popover-item ${isReportPageActive(page.id) ? 'active' : ''}`}
@@ -350,8 +336,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                 mouseEnterDelay={0.1}
                 mouseLeaveDelay={0.1}
               >
-                <div 
-                  className={`nav-item ${(isActive('/reports') || location.pathname.match(/^\/reports\/\d+$/)) ? 'active' : ''}`}
+                <div
+                  className={`nav-item ${isActive('/reports') || location.pathname.match(/^\/reports\/\d+$/) ? 'active' : ''}`}
                 >
                   <span className="icon">📈</span>
                   <span className="nav-text">报表</span>
@@ -360,24 +346,20 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             ) : (
               // 展开状态：保持原有行为
               <>
-                <div 
-                  className={`nav-item ${(isActive('/reports') || location.pathname.match(/^\/reports\/\d+$/)) ? 'active' : ''}`}
+                <div
+                  className={`nav-item ${isActive('/reports') || location.pathname.match(/^\/reports\/\d+$/) ? 'active' : ''}`}
                   onClick={handleReportToggle}
                   style={{ cursor: 'pointer' }}
                 >
                   <span className="icon">📈</span>
                   <span className="nav-text">报表</span>
-                  <span 
-                    className="nav-add-btn" 
-                    onClick={handleAddReportPage}
-                    title="添加报表页"
-                  >
+                  <span className="nav-add-btn" onClick={handleAddReportPage} title="添加报表页">
                     <PlusOutlined style={{ fontSize: '12px' }} />
                   </span>
                 </div>
                 {reportPagesExpanded && (
                   <div className="nav-submenu">
-                    {reportPages.map(page => (
+                    {reportPages.map((page) => (
                       <div
                         key={page.id}
                         className={`nav-subitem-wrapper ${isReportPageActive(page.id) ? 'active' : ''}`}
@@ -422,36 +404,19 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               </>
             )}
           </div>
-          
-          <Link 
-            to="/dashboard" 
-            className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}
-          >
+
+          <Link to="/dashboard" className={`nav-item ${isActive('/dashboard') ? 'active' : ''}`}>
             <span className="icon">📊</span>
             <span className="nav-text">仪表盘</span>
           </Link>
-          
+
           {/* 添加图表管理导航项 */}
-          <Link 
-            to="/charts-management" 
-            className={`nav-item ${isActive('/charts-management') ? 'active' : ''}`}
-          >
+          <Link to="/charts-management" className={`nav-item ${isActive('/charts-management') ? 'active' : ''}`}>
             <span className="icon">📉</span>
             <span className="nav-text">图表管理</span>
           </Link>
-          
-          {/* 管道测试 - 仅管理员可见，放在图表管理下面 */}
-          {isAdmin && (
-            <Link
-              to="/pipeline-test"
-              className={`nav-item ${isActive('/pipeline-test') ? 'active' : ''}`}
-            >
-              <span className="icon">🔧</span>
-              <span className="nav-text">管道测试</span>
-            </Link>
-          )}
         </nav>
-        
+
         <div className="sidebar-footer">
           <div className="user-info">
             <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="topRight" disabled={!user}>
@@ -482,13 +447,21 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                 <span className="icon">👥</span>
                 <span className="nav-text">用户管理</span>
               </Link>
-              
+
               <Link
                 to="/datasources"
                 className={`nav-item nav-item-bottom ${isActive('/datasources') ? 'active' : ''}`}
               >
                 <span className="icon">🗄</span>
                 <span className="nav-text">数据源管理</span>
+              </Link>
+
+              <Link
+                to="/pipeline-test"
+                className={`nav-item nav-item-bottom ${isActive('/pipeline-test') ? 'active' : ''}`}
+              >
+                <span className="icon">🔧</span>
+                <span className="nav-text">管道测试</span>
               </Link>
             </>
           )}
@@ -502,20 +475,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
 
       {/* 主内容区域 */}
       <main className="main-content">
-        <header className="top-bar">
-          <div className="top-bar-left">
-            <div className="page-title">{pageTitle}</div>
-          </div>
-          <div className="user-actions">
-            <button className="notification-btn">
-              🔔
-            </button>
-          </div>
-        </header>
-        
-        <div className="content-wrapper">
-          {children}
-        </div>
+        <div className="content-wrapper">{children}</div>
       </main>
 
       {/* 添加报表页对话框 */}
@@ -527,30 +487,14 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         okText="创建"
         cancelText="取消"
       >
-        <Form
-          form={form}
-          layout="vertical"
-        >
-          <Form.Item
-            name="name"
-            label="报表页名称"
-            rules={[{ required: true, message: '请输入报表页名称' }]}
-          >
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label="报表页名称" rules={[{ required: true, message: '请输入报表页名称' }]}>
             <Input placeholder="请输入报表页名称" />
           </Form.Item>
-          <Form.Item
-            name="description"
-            label="描述"
-          >
-            <Input.TextArea 
-              placeholder="请输入描述（可选）" 
-              rows={3}
-            />
+          <Form.Item name="description" label="描述">
+            <Input.TextArea placeholder="请输入描述（可选）" rows={3} />
           </Form.Item>
-          <Form.Item
-            name="icon"
-            label="图标"
-          >
+          <Form.Item name="icon" label="图标">
             <Input placeholder="请输入图标（可选，例如：📄）" />
           </Form.Item>
         </Form>
@@ -561,7 +505,10 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         title="修改密码"
         open={passwordModalVisible}
         onOk={handlePasswordSubmit}
-        onCancel={() => { setPasswordModalVisible(false); passwordForm.resetFields(); }}
+        onCancel={() => {
+          setPasswordModalVisible(false);
+          passwordForm.resetFields();
+        }}
         okText="确认修改"
         cancelText="取消"
         destroyOnClose
@@ -570,10 +517,21 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           <Form.Item name="old_password" label="原密码" rules={[{ required: true, message: '请输入原密码' }]}>
             <Input.Password placeholder="请输入原密码" autoComplete="current-password" />
           </Form.Item>
-          <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '至少 6 位' }]}>
+          <Form.Item
+            name="new_password"
+            label="新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '至少 6 位' },
+            ]}
+          >
             <Input.Password placeholder="请输入新密码" autoComplete="new-password" />
           </Form.Item>
-          <Form.Item name="new_password_confirm" label="确认新密码" rules={[{ required: true, message: '请再次输入新密码' }]}>
+          <Form.Item
+            name="new_password_confirm"
+            label="确认新密码"
+            rules={[{ required: true, message: '请再次输入新密码' }]}
+          >
             <Input.Password placeholder="请再次输入新密码" autoComplete="new-password" />
           </Form.Item>
         </Form>
@@ -594,7 +552,14 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               type="button"
               className={`user-avatar-emoji-option ${avatarOption === preset ? 'selected' : ''}`}
               onClick={() => handleAvatarSelect(preset)}
-              style={{ fontSize: 28, padding: 8, border: avatarOption === preset ? '2px solid #1890ff' : '1px solid #d9d9d9', borderRadius: 8, background: 'var(--theme-background)', cursor: 'pointer' }}
+              style={{
+                fontSize: 28,
+                padding: 8,
+                border: avatarOption === preset ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                borderRadius: 8,
+                background: 'var(--theme-background)',
+                cursor: 'pointer',
+              }}
               aria-label={`选择头像 ${preset}`}
             >
               {preset}

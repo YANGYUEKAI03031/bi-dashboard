@@ -2,6 +2,7 @@
 
 每分钟执行一次 poll_pipeline_triggers()，由 TriggerScheduler 内部判断各 trigger 的轮询间隔条件。
 """
+
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler

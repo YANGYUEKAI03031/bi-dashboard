@@ -26,7 +26,9 @@ export interface MergeConfig {
  * DFS 检测环，返回环中的节点 ID 列表，无环返回 null
  */
 export function detectCycle(nodes: GraphNode[], edges: GraphEdge[]): string[] | null {
-  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
   const color: Record<string, number> = {};
   const parent: Record<string, string | null> = {};
   let cycleNodes: string[] = [];
@@ -38,9 +40,7 @@ export function detectCycle(nodes: GraphNode[], edges: GraphEdge[]): string[] | 
 
   function dfs(nodeId: string): boolean {
     color[nodeId] = GRAY;
-    const neighbors = edges
-      .filter(e => e.source === nodeId)
-      .map(e => e.target);
+    const neighbors = edges.filter((e) => e.source === nodeId).map((e) => e.target);
     for (const neighbor of neighbors) {
       if (color[neighbor] === GRAY) {
         let curr: string | null = nodeId;
@@ -73,7 +73,7 @@ export function detectCycle(nodes: GraphNode[], edges: GraphEdge[]): string[] | 
  * Kahn 算法拓扑排序，返回节点 ID 顺序数组
  */
 export function topologicalSort(nodes: GraphNode[], edges: GraphEdge[]): string[] {
-  const allIds = new Set(nodes.map(n => n.id));
+  const allIds = new Set(nodes.map((n) => n.id));
   const inDegree: Record<string, number> = {};
   const adjacency: Record<string, string[]> = {};
 
@@ -113,7 +113,8 @@ export function topologicalSort(nodes: GraphNode[], edges: GraphEdge[]): string[
 export function buildEdgesFromUpstream(nodes: GraphNode[]): GraphEdge[] {
   const edges: GraphEdge[] = [];
   for (const node of nodes) {
-    const upstream = (node.data.pipelineNode as Record<string, unknown> | undefined)?.upstream as string[] | undefined || [];
+    const upstream =
+      ((node.data.pipelineNode as Record<string, unknown> | undefined)?.upstream as string[] | undefined) || [];
     for (const upId of upstream) {
       edges.push({
         id: `${upId}-${node.id}`,
@@ -138,7 +139,7 @@ const PASSTHROUGH_UPSTREAM_SQL_PLACEHOLDER = 'SELECT * FROM {prev_table}';
  */
 export function nodesToPipelineNodes(
   nodes: GraphNode[],
-  positions?: Record<string, { x: number; y: number }>
+  positions?: Record<string, { x: number; y: number }>,
 ): Array<Record<string, unknown>> {
   return nodes.map((node, idx) => {
     const raw = node.data.pipelineNode as Record<string, unknown>;
@@ -160,7 +161,7 @@ export function nodesToPipelineNodes(
       pn.sql = buildJoinPersistedSql(
         String(cfg.joinType ?? 'inner'),
         (cfg.joinKeys as Array<{ leftCol?: string; rightCol?: string }>) || [],
-        (cfg.symmetricUnionPlan as SymmetricUnionPlanRow[] | undefined) || undefined
+        (cfg.symmetricUnionPlan as SymmetricUnionPlanRow[] | undefined) || undefined,
       );
     }
     if (nodeType === 'merge') {
@@ -173,7 +174,7 @@ export function nodesToPipelineNodes(
         pn.sql = buildMergePersistedSql(
           mtCfg === 'union' ? 'union' : 'union_all',
           ups.length,
-          Array.isArray(plan) && plan.length > 0 ? plan : undefined
+          Array.isArray(plan) && plan.length > 0 ? plan : undefined,
         );
       }
     }
@@ -186,14 +187,14 @@ export function nodesToPipelineNodes(
  */
 export function pipelineNodesToNodes(
   pipelineNodes: Array<Record<string, unknown>>,
-  positions?: Record<string, { x: number; y: number }>
+  positions?: Record<string, { x: number; y: number }>,
 ): GraphNode[] {
   return pipelineNodes.map((node, i) => {
     const id = (node.id as string) || `node_${i}`;
     return {
       id,
       type: 'pipelineNode',
-      position: positions?.[id] ?? ((node.position as { x: number; y: number }) ?? { x: 0, y: 0 }),
+      position: positions?.[id] ?? (node.position as { x: number; y: number }) ?? { x: 0, y: 0 },
       data: { pipelineNode: node },
     };
   });
@@ -202,12 +203,8 @@ export function pipelineNodesToNodes(
 /**
  * 自动布局：DAG 按层级从上到下排列
  */
-export function autoLayoutNodes(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  direction: 'TB' | 'LR' = 'TB'
-): GraphNode[] {
-  const allIds = new Set(nodes.map(n => n.id));
+export function autoLayoutNodes(nodes: GraphNode[], edges: GraphEdge[], direction: 'TB' | 'LR' = 'TB'): GraphNode[] {
+  const allIds = new Set(nodes.map((n) => n.id));
   const inDegree: Record<string, number> = {};
   const adjacency: Record<string, string[]> = {};
 
@@ -264,13 +261,14 @@ export function autoLayoutNodes(
   for (const [l, ids] of Object.entries(layerCount)) {
     const layerIdx = parseInt(l);
     ids.forEach((id, i) => {
-      const node = nodes.find(n => n.id === id);
+      const node = nodes.find((n) => n.id === id);
       if (node) {
         result.push({
           ...node,
-          position: direction === 'TB'
-            ? { x: i * (nodeWidth + gapX), y: layerIdx * (nodeHeight + gapY) }
-            : { x: layerIdx * (nodeWidth + gapX), y: i * (nodeHeight + gapY) },
+          position:
+            direction === 'TB'
+              ? { x: i * (nodeWidth + gapX), y: layerIdx * (nodeHeight + gapY) }
+              : { x: layerIdx * (nodeWidth + gapX), y: i * (nodeHeight + gapY) },
         });
       }
     });

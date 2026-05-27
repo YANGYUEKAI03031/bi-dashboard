@@ -14,7 +14,9 @@
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease, flex-basis 0.3s ease;
+  transition:
+    width 0.3s ease,
+    flex-basis 0.3s ease;
   overflow: hidden;
 }
 
@@ -44,11 +46,13 @@
   padding: 4px;
   color: #94a3b8;
   border-radius: 4px;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 
 .collapse-btn:hover {
-  color: #6366F1;
+  color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
@@ -70,7 +74,9 @@
   border-radius: 8px;
   margin-bottom: 4px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .tag-header:hover {
@@ -86,7 +92,7 @@
 }
 
 .tag-name.active {
-  color: #6366F1;
+  color: #6366f1;
   font-weight: 600;
 }
 
@@ -99,11 +105,13 @@
   justify-content: center;
   color: #94a3b8;
   border-radius: 4px;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 
 .add-btn:hover {
-  color: #6366F1;
+  color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
 }
 
@@ -112,20 +120,23 @@
   margin-left: 12px;
   border-left: 2px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
   border-radius: 0 4px 4px 0;
   color: #94a3b8;
 }
 
 .dashboard-item:hover {
   background: rgba(99, 102, 241, 0.06);
-  border-left-color: #6366F1;
+  border-left-color: #6366f1;
   color: #e2e8f0;
 }
 
 .dashboard-item.active {
   background: rgba(99, 102, 241, 0.1);
-  border-left-color: #6366F1;
+  border-left-color: #6366f1;
 }
 
 .dashboard-item.active span {

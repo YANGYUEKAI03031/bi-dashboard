@@ -21,7 +21,7 @@ import {
   LinesChart,
   PictorialBarChart,
   ThemeRiverChart as ThemeRiver,
-  CustomChart
+  CustomChart,
 } from 'echarts/charts';
 import {
   GridComponent,
@@ -36,7 +36,7 @@ import {
   GraphicComponent,
   MarkLineComponent,
   MarkPointComponent,
-  MarkAreaComponent
+  MarkAreaComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import ReactECharts from 'echarts-for-react';
@@ -86,7 +86,7 @@ echarts.use([
   MarkLineComponent,
   MarkPointComponent,
   MarkAreaComponent,
-  CanvasRenderer
+  CanvasRenderer,
 ]);
 
 export interface ChartConfig {
@@ -149,7 +149,7 @@ const aggregateDataByX = (
   data: any[],
   xField: string,
   yFields: string[],
-  method: 'count' | 'sum' | 'avg' | 'mode' | 'median'
+  method: 'count' | 'sum' | 'avg' | 'mode' | 'median',
 ) => {
   if (!Array.isArray(data) || data.length === 0 || !xField || !yFields?.length) {
     return data || [];
@@ -157,7 +157,7 @@ const aggregateDataByX = (
 
   const groups = new Map<string, { xValue: any; rows: any[] }>();
 
-  data.forEach(row => {
+  data.forEach((row) => {
     if (!row || typeof row !== 'object') return;
     const rawX = (row as any)[xField];
     const key = String(rawX);
@@ -170,9 +170,7 @@ const aggregateDataByX = (
   });
 
   const aggregateField = (rows: any[], field: string) => {
-    const values = rows
-      .map(r => (r as any)[field])
-      .filter(v => v !== null && v !== undefined);
+    const values = rows.map((r) => (r as any)[field]).filter((v) => v !== null && v !== undefined);
 
     if (values.length === 0) return null;
 
@@ -181,22 +179,18 @@ const aggregateDataByX = (
         // 计数：使用行数，更符合直觉
         return rows.length;
       case 'sum': {
-        const nums = values
-          .map(v => (typeof v === 'number' ? v : Number(v)))
-          .filter(v => !Number.isNaN(v));
+        const nums = values.map((v) => (typeof v === 'number' ? v : Number(v))).filter((v) => !Number.isNaN(v));
         if (!nums.length) return null;
         return nums.reduce((acc, v) => acc + v, 0);
       }
       case 'avg': {
-        const nums = values
-          .map(v => (typeof v === 'number' ? v : Number(v)))
-          .filter(v => !Number.isNaN(v));
+        const nums = values.map((v) => (typeof v === 'number' ? v : Number(v))).filter((v) => !Number.isNaN(v));
         if (!nums.length) return null;
         return nums.reduce((acc, v) => acc + v, 0) / nums.length;
       }
       case 'mode': {
         const freq = new Map<string, { value: any; count: number }>();
-        values.forEach(v => {
+        values.forEach((v) => {
           const key = String(v);
           const rec = freq.get(key);
           if (rec) {
@@ -206,7 +200,7 @@ const aggregateDataByX = (
           }
         });
         let best: { value: any; count: number } | null = null;
-        freq.forEach(rec => {
+        freq.forEach((rec) => {
           if (!best || rec.count > best.count) {
             best = rec;
           }
@@ -215,8 +209,8 @@ const aggregateDataByX = (
       }
       case 'median': {
         const nums = values
-          .map(v => (typeof v === 'number' ? v : Number(v)))
-          .filter(v => !Number.isNaN(v))
+          .map((v) => (typeof v === 'number' ? v : Number(v)))
+          .filter((v) => !Number.isNaN(v))
           .sort((a, b) => a - b);
         if (!nums.length) return null;
         const mid = Math.floor(nums.length / 2);
@@ -231,9 +225,9 @@ const aggregateDataByX = (
   };
 
   const result: any[] = [];
-  groups.forEach(group => {
+  groups.forEach((group) => {
     const record: any = { [xField]: group.xValue };
-    yFields.forEach(field => {
+    yFields.forEach((field) => {
       record[field] = aggregateField(group.rows, field);
     });
     result.push(record);
@@ -249,7 +243,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   onEvents,
   minHeight,
   onXAxisClick,
-  selectedXValue
+  selectedXValue,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReactECharts>(null);
@@ -274,7 +268,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   // 通过变更 key 强制重新挂载 ECharts 实例，避免 ECharts 在“隐藏/尺寸不正确”的状态下初始化
   // 带来的坐标系偏移等问题。
   const chartKey = `${containerSize.width}x${containerSize.height}`;
-  
+
   // 监听容器大小变化
   useEffect(() => {
     const updateSize = () => {
@@ -282,8 +276,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         const rect = containerRef.current.getBoundingClientRect();
         const nextWidth = Math.round(rect.width);
         const nextHeight = Math.round(rect.height);
-        setContainerSize(prev =>
-          prev.width === nextWidth && prev.height === nextHeight ? prev : { width: nextWidth, height: nextHeight }
+        setContainerSize((prev) =>
+          prev.width === nextWidth && prev.height === nextHeight ? prev : { width: nextWidth, height: nextHeight },
         );
         // Only mark ready once we have a real size; after that, just resize the chart.
         if (!isReady && rect.width > 0 && rect.height > 0) {
@@ -300,14 +294,14 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(updateSize);
     };
-    
+
     scheduleUpdate();
     const resizeObserver = new ResizeObserver(scheduleUpdate);
     const containerEl = containerRef.current;
     if (containerEl) {
       resizeObserver.observe(containerEl);
     }
-    
+
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       if (containerEl) {
@@ -315,7 +309,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       }
     };
   }, [isReady]);
-  
+
   const option = useMemo(() => {
     const containerHeight = containerSize.height;
     const containerWidth = containerSize.width;
@@ -326,7 +320,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
 
     // 处理xAxis数据 - 使用配置的xField
     const sourceData = Array.isArray(data) ? data : [];
-    const xField = config.xField || (Object.keys(sourceData[0] || {})[0]) || '';
+    const xField = config.xField || Object.keys(sourceData[0] || {})[0] || '';
 
     // 按图表类型判断是否“明细型图表”（默认不按 X 聚合）
     const chartType = (config.type || '').toLowerCase();
@@ -339,20 +333,15 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     // - 优先使用调用方显式传入的 x_group_by_enabled
     // - 否则：明细型图表默认 false，其它图表默认 true
     const xGroupByEnabled =
-      typeof config.x_group_by_enabled === 'boolean'
-        ? config.x_group_by_enabled
-        : !isDetailChartType;
+      typeof config.x_group_by_enabled === 'boolean' ? config.x_group_by_enabled : !isDetailChartType;
 
     // 先确定“用于绘图的 Y 字段列表”（优先使用传入的 yFields，其次用 series.field，最后自动识别数值列）
-    let effectiveYFields = (config.yFields || config.series.map(s => s.field) || []).filter(Boolean);
+    let effectiveYFields = (config.yFields || config.series.map((s) => s.field) || []).filter(Boolean);
     if (effectiveYFields.length === 0 && sourceData.length > 0 && sourceData[0] && typeof sourceData[0] === 'object') {
       const firstItem = sourceData[0];
-      const numericFields = Object.keys(firstItem).filter(key => {
+      const numericFields = Object.keys(firstItem).filter((key) => {
         const value = (firstItem as any)[key];
-        return (
-          typeof value === 'number' ||
-          (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value))
-        );
+        return typeof value === 'number' || (typeof value === 'string' && /^-?\d+\.?\d*$/.test(value));
       });
       if (numericFields.length > 0) {
         effectiveYFields = numericFields;
@@ -399,10 +388,10 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         });
       }
     }
-    
-    const xAxisData = sortedData.map(item => {
+
+    const xAxisData = sortedData.map((item) => {
       if (!item) return '';
-      
+
       // 支持多种数据格式
       if (typeof item === 'object' && item !== null) {
         // 对象格式：直接访问字段
@@ -441,7 +430,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           return String(firstValue);
         }
       }
-      
+
       // 基本类型
       return String(item);
     });
@@ -476,36 +465,38 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const effectiveXAxisNameGap = compact ? Math.min(xAxisNameGap, 22) : xAxisNameGap;
 
     // 判断是否需要显示图例
-    const legendShowExplicit =
-      !!config.legend && Object.prototype.hasOwnProperty.call(config.legend, 'show');
+    const legendShowExplicit = !!config.legend && Object.prototype.hasOwnProperty.call(config.legend, 'show');
     const defaultLegendShow = legendShowExplicit
       ? config.legend?.show !== false
-      : (yFields.length > 1 && (config.legend?.show !== false));
+      : yFields.length > 1 && config.legend?.show !== false;
 
     // 图例配置：移动到顶部，避免占用底部空间，让图表在卡片内更居中
     // 计算图例的 top 位置：如果有标题，图例应该在标题下方
     const titleHeightForLegend = showTitle ? (compact ? 32 : 40) : 0;
-    const legendTopOffset = titleHeightForLegend > 0 
-      ? titleHeightForLegend + (compact ? 8 : 12) // 标题下方留出间距
-      : (compact ? 12 : 16); // 没有标题时，从顶部开始
-    
+    const legendTopOffset =
+      titleHeightForLegend > 0
+        ? titleHeightForLegend + (compact ? 8 : 12) // 标题下方留出间距
+        : compact
+          ? 12
+          : 16; // 没有标题时，从顶部开始
+
     const defaultLegendOption: any = {
-      data: yFields.map(field => field),
+      data: yFields.map((field) => field),
       show: defaultLegendShow,
       textStyle: {
         fontSize: compact ? 10 : 12,
-        color: '#94A3B8'
+        color: '#94A3B8',
       },
       itemGap: compact ? 12 : 18,
       itemWidth: 14,
       itemHeight: 14,
       left: 'center',
       top: legendTopOffset,
-      orient: 'horizontal'
+      orient: 'horizontal',
     };
     const legendOption: any = {
       ...defaultLegendOption,
-      ...(config.legend ?? {})
+      ...(config.legend ?? {}),
     };
 
     // 为底部只保留最小必要间距，不再额外预留大块空白，避免图表区域整体被“顶”到上方
@@ -519,7 +510,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
      * - 当画布特别窄时，适当收紧左右留白，避免图表被挤得太小。
      */
     const isVeryNarrowCanvas = containerWidth > 0 && containerWidth < 480;
-    const baseSidePadding = isVeryNarrowCanvas ? (compact ? 10 : 12) : (compact ? 14 : 18);
+    const baseSidePadding = isVeryNarrowCanvas ? (compact ? 10 : 12) : compact ? 14 : 18;
 
     /**
      * 统一网格策略：使用固定边距而非动态计算
@@ -535,10 +526,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     const legendIsVisible = !!legendOption.show;
     const estimatedLegendHeight = legendIsVisible ? (compact ? 28 : 32) : 0;
     const baseTopPadding = compact ? 8 : 12;
-    const gridTop =
-      baseTopPadding +
-      estimatedTitleHeight +
-      (estimatedLegendHeight > 0 ? estimatedLegendHeight + 6 : 0);
+    const gridTop = baseTopPadding + estimatedTitleHeight + (estimatedLegendHeight > 0 ? estimatedLegendHeight + 6 : 0);
 
     const defaultGridOption: any = {
       left: gridLeft,
@@ -547,7 +535,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       // 为标题和顶部图例预留足够空间，避免文字进入绘图区
       top: gridTop,
       // 默认设置为 false，避免 ECharts 自动调整 grid 区域导致居中失效
-      containLabel: false
+      containLabel: false,
     };
     // 确保用户传入的 config.grid 不会覆盖我们的 left/right 设置（除非用户明确指定）
     const gridOption: any = {
@@ -555,7 +543,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
       ...(config.grid ?? {}),
       // 如果用户没有明确指定 left/right，使用我们的居中设置
       ...(config.grid?.left === undefined ? { left: gridLeft } : {}),
-      ...(config.grid?.right === undefined ? { right: gridRight } : {})
+      ...(config.grid?.right === undefined ? { right: gridRight } : {}),
     };
 
     const baseOption: any = {
@@ -569,11 +557,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             textStyle: {
               fontSize: 18,
               fontWeight: 'bold',
-              color: '#E2E8F0'
+              color: '#E2E8F0',
             },
             padding: [10, 15, 4, 15],
             textAlign: 'center',
-            itemGap: 0
+            itemGap: 0,
           }
         : { show: false },
       tooltip: config.tooltip || {
@@ -584,23 +572,23 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         borderRadius: 8,
         textStyle: {
           color: '#E2E8F0',
-          fontSize: 12
+          fontSize: 12,
         },
         axisPointer: {
           type: 'cross',
           crossStyle: {
             color: '#6366F1',
-            opacity: 0.3
+            opacity: 0.3,
           },
           lineStyle: {
             type: 'dashed',
             width: 1,
             color: '#6366F1',
-            opacity: 0.5
-          }
+            opacity: 0.5,
+          },
         },
         padding: [12, 16],
-        extraCssText: 'backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.3);'
+        extraCssText: 'backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.3);',
       },
       legend: legendOption,
       grid: gridOption,
@@ -618,19 +606,19 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           color: '#94A3B8',
           padding: [8, 0, 0, 0],
           align: 'center',
-          ...(config.xAxis?.nameTextStyle || {})
+          ...(config.xAxis?.nameTextStyle || {}),
         },
         axisLine: {
           lineStyle: {
             color: '#334155',
-            width: 1
-          }
+            width: 1,
+          },
         },
         axisTick: {
-          show: false
+          show: false,
         },
         splitLine: {
-          show: false
+          show: false,
         },
         // 对于日期数据保持原样；对长文本默认“换行展示全量”，避免总是显示不全
         axisLabel: (() => {
@@ -656,8 +644,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               highlight: {
                 color: '#818CF8',
                 fontWeight: 'bold',
-                fontSize: effectiveAxisLabelFontSize + 1
-              }
+                fontSize: effectiveAxisLabelFontSize + 1,
+              },
             },
             ...axisLabelFromConfig,
             // 用户自定义 formatter 优先
@@ -673,9 +661,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             },
             rotate: axisLabelFromConfig.rotate ?? 0,
             // 始终启用点击事件
-            triggerEvent: true
+            triggerEvent: true,
           };
-        })()
+        })(),
       },
       yAxis: {
         ...config.yAxis,
@@ -684,34 +672,34 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         nameTextStyle: {
           fontSize: 12,
           color: '#94A3B8',
-          padding: [0, 0, 8, 0]
+          padding: [0, 0, 8, 0],
         },
         axisLine: {
           show: true,
           lineStyle: {
             color: '#334155',
-            width: 1
-          }
+            width: 1,
+          },
         },
         axisTick: {
-          show: false
+          show: false,
         },
         splitLine: {
           show: true,
           lineStyle: {
             color: '#1E293B',
             type: 'dashed',
-            width: 0.5
-          }
+            width: 0.5,
+          },
         },
         axisLabel: {
           fontSize: 11,
-          color: '#94A3B8'
-        }
+          color: '#94A3B8',
+        },
       },
       animation: true,
       animationDuration: 750,
-      animationEasing: 'cubicOut'
+      animationEasing: 'cubicOut',
     };
 
     // 根据图表类型调整配置
@@ -724,7 +712,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         const maxBarWidth = isMultiBarSeries ? 20 : 36;
         const dynamicBarWidth = Math.min(
           maxBarWidth,
-          Math.max(minBarWidth, Math.floor(containerWidth / dataPointCount / seriesCount * 0.7))
+          Math.max(minBarWidth, Math.floor((containerWidth / dataPointCount / seriesCount) * 0.7)),
         );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
@@ -734,12 +722,11 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             const name = item[xField];
             const isSelected = selectedNormalized && normalizeLinkValue(String(name ?? '')) === selectedNormalized;
             const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
-            if (process.env.NODE_ENV === 'development' && selectedNormalized) {
-              console.log(`[ChartFactory] BAR #${i} name=${name} isSelected=${isSelected} opacity=${opacity}`);
-            }
             return typeof val === 'object' && val !== null && !Array.isArray(val)
               ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
-              : opacity != null ? { value: val, itemStyle: { opacity } } : val;
+              : opacity != null
+                ? { value: val, itemStyle: { opacity } }
+                : val;
           }),
           // 当有多个 Y 轴字段（多系列）时，不固定百分比宽度，只限制最大像素宽度并设置合理的间距，
           // 避免一组类目下柱子总宽度超过可用带宽而出现“折叠/重叠”。
@@ -757,9 +744,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' }
-              ]
-            }
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' },
+              ],
+            },
           },
           emphasis: {
             focus: 'self',
@@ -770,21 +757,23 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               shadowColor: 'rgba(99, 102, 241, 0.4)',
               borderColor: '#fff',
               borderWidth: 2,
-              opacity: 1
-            }
+              opacity: 1,
+            },
           },
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
+          ...(config.colorField
+            ? {
+                encode: { x: config.xField, y: field },
+              }
+            : {}),
         }));
         break;
       }
-        
+
       case 'line':
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'line',
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item) => item[field] || 0),
           smooth: true,
           symbol: 'none',
           showSymbol: false,
@@ -800,19 +789,21 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             itemStyle: {
               shadowBlur: 16,
               shadowColor: colorPalette[index % colorPalette.length] + '60',
-            }
+            },
           },
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
+          ...(config.colorField
+            ? {
+                encode: { x: config.xField, y: field },
+              }
+            : {}),
         }));
         break;
-        
+
       case 'area':
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'line',
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item) => item[field] || 0),
           smooth: true,
           symbol: 'none',
           showSymbol: false,
@@ -831,127 +822,133 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] + 'CC' },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + '08' }
-              ]
-            }
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '08' },
+              ],
+            },
           },
           emphasis: {
             focus: 'series',
             lineStyle: { width: 3.5 },
           },
-          ...(config.colorField ? {
-            encode: { x: config.xField, y: field }
-          } : {})
+          ...(config.colorField
+            ? {
+                encode: { x: config.xField, y: field },
+              }
+            : {}),
         }));
         break;
-        
+
       case 'pie':
         baseOption.tooltip = {
-          trigger: 'item'
+          trigger: 'item',
         };
         baseOption.legend = {
-          top: 'bottom'
+          top: 'bottom',
         };
         delete baseOption.xAxis;
         delete baseOption.yAxis;
-        
+
         if (yFields.length > 0) {
           const fieldValue = yFields[0]; // 饼图通常只需要一个数值字段
-          baseOption.series = [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            center: ['50%', '50%'],
-            data: sortedData.map((item, index) => {
-              const name = item[xField] || `数据${index + 1}`;
-              const isSelected = selectedNormalized && (normalizeLinkValue(String(name)) === selectedNormalized || normalizeLinkValue(String(String(name).split(':')[0]?.trim() || '')) === selectedNormalized);
-              const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
-              if (process.env.NODE_ENV === 'development' && selectedNormalized) {
-                console.log(`[ChartFactory] PIE #${index} name=${name} isSelected=${isSelected} opacity=${opacity}`);
-              }
-              return {
-                name,
-                value: item[fieldValue] || 0,
-                itemStyle: {
-                  borderRadius: 6,
-                  borderColor: '#fff',
-                  borderWidth: 2,
-                  ...(opacity != null ? { opacity } : {})
-                }
-              };
-            }),
-            label: {
-              show: true,
-              formatter: '{b}: {c} ({d}%)',
-              fontSize: 11,
-              color: '#94A3B8'
-            },
-            labelLine: {
-              show: true,
-              lineStyle: {
-                color: '#475569'
-              }
-            },
-            emphasis: {
-              focus: 'self',
-              itemStyle: {
-                shadowBlur: 20,
-                shadowOffsetX: 0,
-                shadowOffsetY: 0,
-                shadowColor: 'rgba(99, 102, 241, 0.4)'
-              },
+          baseOption.series = [
+            {
+              type: 'pie',
+              radius: ['40%', '70%'],
+              center: ['50%', '50%'],
+              data: sortedData.map((item, index) => {
+                const name = item[xField] || `数据${index + 1}`;
+                const isSelected =
+                  selectedNormalized &&
+                  (normalizeLinkValue(String(name)) === selectedNormalized ||
+                    normalizeLinkValue(String(String(name).split(':')[0]?.trim() || '')) === selectedNormalized);
+                const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
+                return {
+                  name,
+                  value: item[fieldValue] || 0,
+                  itemStyle: {
+                    borderRadius: 6,
+                    borderColor: '#fff',
+                    borderWidth: 2,
+                    ...(opacity != null ? { opacity } : {}),
+                  },
+                };
+              }),
               label: {
-                fontSize: 13,
-                fontWeight: 'bold'
-              }
+                show: true,
+                formatter: '{b}: {c} ({d}%)',
+                fontSize: 11,
+                color: '#94A3B8',
+              },
+              labelLine: {
+                show: true,
+                lineStyle: {
+                  color: '#475569',
+                },
+              },
+              emphasis: {
+                focus: 'self',
+                itemStyle: {
+                  shadowBlur: 20,
+                  shadowOffsetX: 0,
+                  shadowOffsetY: 0,
+                  shadowColor: 'rgba(99, 102, 241, 0.4)',
+                },
+                label: {
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                },
+              },
+              animationType: 'scale',
+              animationEasing: 'elasticOut',
+              animationDelay: function (idx: number) {
+                return idx * 50;
+              },
             },
-            animationType: 'scale',
-            animationEasing: 'elasticOut',
-            animationDelay: function (idx: number) {
-              return idx * 50;
-            }
-          }];
+          ];
         }
         break;
-        
+
       case 'scatter':
         baseOption.xAxis.type = 'value';
         baseOption.yAxis.type = 'value';
         if (yFields.length >= 2) {
-          baseOption.series = [{
-            name: '散点图',
-            type: 'scatter',
-            data: sortedData.map(item => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
-            symbolSize: function(data: number[]) {
-              return Math.sqrt(data[0] + data[1]) * 2 + 8;
-            },
-            itemStyle: {
-              color: colorPalette[0],
-              opacity: 0.7,
-              borderColor: '#fff',
-              borderWidth: 1
-            },
-            emphasis: {
+          baseOption.series = [
+            {
+              name: '散点图',
+              type: 'scatter',
+              data: sortedData.map((item) => [item[yFields[0]] || 0, item[yFields[1]] || 0]),
+              symbolSize: function (data: number[]) {
+                return Math.sqrt(data[0] + data[1]) * 2 + 8;
+              },
               itemStyle: {
-                opacity: 1,
-                shadowBlur: 16,
-                shadowColor: 'rgba(99, 102, 241, 0.4)'
-              }
-            }
-          }];
+                color: colorPalette[0],
+                opacity: 0.7,
+                borderColor: '#fff',
+                borderWidth: 1,
+              },
+              emphasis: {
+                itemStyle: {
+                  opacity: 1,
+                  shadowBlur: 16,
+                  shadowColor: 'rgba(99, 102, 241, 0.4)',
+                },
+              },
+            },
+          ];
           // 移除不必要的轴配置
           delete baseOption.xAxis.data;
           delete baseOption.xAxis.name;
           delete baseOption.yAxis.name;
         }
         break;
-        
+
       case 'radar':
         // 雷达图配置
-        const indicator = yFields.map(field => ({
+        const indicator = yFields.map((field) => ({
           name: field,
-          max: Math.max(...data.map(item => item[field] || 0)) * 1.1
+          max: Math.max(...data.map((item) => item[field] || 0)) * 1.1,
         }));
-        
+
         baseOption.radar = {
           indicator: indicator,
           shape: 'polygon',
@@ -960,90 +957,96 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           axisName: {
             color: '#94A3B8',
             fontSize: 12,
-            fontWeight: 'normal'
+            fontWeight: 'normal',
           },
           splitArea: {
             show: true,
             areaStyle: {
-              color: ['rgba(99, 102, 241, 0.03)', 'rgba(99, 102, 241, 0.06)']
-            }
+              color: ['rgba(99, 102, 241, 0.03)', 'rgba(99, 102, 241, 0.06)'],
+            },
           },
           splitLine: {
             lineStyle: {
               color: '#334155',
-              width: 1
-            }
+              width: 1,
+            },
           },
           axisLine: {
             lineStyle: {
               color: '#334155',
-              width: 1
-            }
-          }
+              width: 1,
+            },
+          },
         };
-        
-        baseOption.series = [{
-          type: 'radar',
-          data: [{
-            value: yFields.map(field => data[0]?.[field] || 0),
-            name: '数据',
-            areaStyle: {
-              color: colorPalette[0] + '40'
-            },
-            lineStyle: {
-              width: 2.5,
-              color: colorPalette[0]
-            },
-            itemStyle: {
-              color: colorPalette[0],
-              borderWidth: 2,
-              borderColor: '#fff'
-            },
-            emphasis: {
-              areaStyle: {
-                color: colorPalette[0] + '60'
-              }
-            }
-          }]
-        }];
-        
+
+        baseOption.series = [
+          {
+            type: 'radar',
+            data: [
+              {
+                value: yFields.map((field) => data[0]?.[field] || 0),
+                name: '数据',
+                areaStyle: {
+                  color: colorPalette[0] + '40',
+                },
+                lineStyle: {
+                  width: 2.5,
+                  color: colorPalette[0],
+                },
+                itemStyle: {
+                  color: colorPalette[0],
+                  borderWidth: 2,
+                  borderColor: '#fff',
+                },
+                emphasis: {
+                  areaStyle: {
+                    color: colorPalette[0] + '60',
+                  },
+                },
+              },
+            ],
+          },
+        ];
+
         // 删除坐标轴配置
         delete baseOption.xAxis;
         delete baseOption.yAxis;
         break;
-        
+
       case 'boxplot':
         // 箱线图需要特殊的数据格式
-        baseOption.series = [{
-          name: '箱线图',
-          type: 'boxplot',
-          data: sortedData.map((item, index) => {
-            // 箱线图需要5个值：[min, Q1, median, Q3, max]
-            const values = yFields.map(field => item[field] || 0).sort((a, b) => a - b);
-            if (values.length >= 5) {
-              return values.slice(0, 5);
-            } else {
-              // 如果数据不足5个，补充数据
-              const median = values[Math.floor(values.length / 2)] || 0;
-              const q1 = values[Math.floor(values.length / 4)] || median;
-              const q3 = values[Math.floor(values.length * 3 / 4)] || median;
-              const min = Math.min(...values) || 0;
-              const max = Math.max(...values) || 0;
-              return [min, q1, median, q3, max];
-            }
-          })
-        }];
-        
+        baseOption.series = [
+          {
+            name: '箱线图',
+            type: 'boxplot',
+            data: sortedData.map((item, index) => {
+              // 箱线图需要5个值：[min, Q1, median, Q3, max]
+              const values = yFields.map((field) => item[field] || 0).sort((a, b) => a - b);
+              if (values.length >= 5) {
+                return values.slice(0, 5);
+              } else {
+                // 如果数据不足5个，补充数据
+                const median = values[Math.floor(values.length / 2)] || 0;
+                const q1 = values[Math.floor(values.length / 4)] || median;
+                const q3 = values[Math.floor((values.length * 3) / 4)] || median;
+                const min = Math.min(...values) || 0;
+                const max = Math.max(...values) || 0;
+                return [min, q1, median, q3, max];
+              }
+            }),
+          },
+        ];
+
         baseOption.xAxis = {
           type: 'category',
-          data: data.map((_, index) => `组${index + 1}`)
+          data: data.map((_, index) => `组${index + 1}`),
         };
-        
+
         baseOption.yAxis = {
-          type: 'value'
+          type: 'value',
         };
         break;
-        
+
       case 'stacked_bar':
         // 堆积柱形图
         const stackedDataPointCount = xAxisData.length;
@@ -1052,13 +1055,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         const stackedMaxBarWidth = 36;
         const stackedDynamicBarWidth = Math.min(
           stackedMaxBarWidth,
-          Math.max(stackedMinBarWidth, Math.floor(containerWidth / stackedDataPointCount / stackedSeriesCount * 0.7))
+          Math.max(stackedMinBarWidth, Math.floor((containerWidth / stackedDataPointCount / stackedSeriesCount) * 0.7)),
         );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
           stack: '总量',
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item) => item[field] || 0),
           barWidth: stackedDynamicBarWidth,
           barMaxWidth: stackedMaxBarWidth,
           barCategoryGap: '15%',
@@ -1077,25 +1080,25 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] },
                 // Keep stacked bars opaque so lower stacks don't "show through" and look overlapped.
-                { offset: 1, color: colorPalette[index % colorPalette.length] }
-              ]
-            }
+                { offset: 1, color: colorPalette[index % colorPalette.length] },
+              ],
+            },
           },
           emphasis: {
             itemStyle: {
               shadowBlur: 20,
               shadowOffsetX: 0,
               shadowOffsetY: 4,
-              shadowColor: 'rgba(99, 102, 241, 0.4)'
-            }
-          }
+              shadowColor: 'rgba(99, 102, 241, 0.4)',
+            },
+          },
         }));
         break;
 
       case 'bar_line': {
         // 分组柱 + 折线 + 双 Y 轴（与常见 BI「柱线组合」一致，非统计箱须图）
         const yList = yFields || [];
-        const configuredLines = (config.line_y_fields || []).filter(f => yList.includes(f));
+        const configuredLines = (config.line_y_fields || []).filter((f) => yList.includes(f));
         let lineFieldSet: Set<string>;
         if (configuredLines.length > 0) {
           lineFieldSet = new Set(configuredLines);
@@ -1106,17 +1109,17 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         } else {
           lineFieldSet = new Set();
         }
-        const barFields = yList.filter(f => !lineFieldSet.has(f));
-        const lineFields = yList.filter(f => lineFieldSet.has(f));
+        const barFields = yList.filter((f) => !lineFieldSet.has(f));
+        const lineFields = yList.filter((f) => lineFieldSet.has(f));
         const effectiveBarFields = barFields.length > 0 ? barFields : yList.length ? [yList[0]] : [];
         const lineCandidates = lineFields.length > 0 ? lineFields : yList.slice(effectiveBarFields.length);
-        const effectiveLineFields = lineCandidates.filter(f => !effectiveBarFields.includes(f));
+        const effectiveLineFields = lineCandidates.filter((f) => !effectiveBarFields.includes(f));
 
         const isMultiBarSeries = effectiveBarFields.length > 1;
         const barLineDataPointCount = xAxisData.length;
         const barLineDynamicBarWidth = Math.min(
           36,
-          Math.max(8, Math.floor(containerWidth / barLineDataPointCount * 0.7))
+          Math.max(8, Math.floor((containerWidth / barLineDataPointCount) * 0.7)),
         );
         baseOption.yAxis = [
           {
@@ -1127,7 +1130,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             axisLine: { show: true, lineStyle: { color: '#334155', width: 1 } },
             axisTick: { show: false },
             splitLine: { show: true, lineStyle: { color: '#1E293B', type: 'dashed', width: 0.5 } },
-            axisLabel: { fontSize: 11, color: '#94A3B8' }
+            axisLabel: { fontSize: 11, color: '#94A3B8' },
           },
           {
             type: 'value',
@@ -1137,14 +1140,13 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             axisLine: { show: true, lineStyle: { color: '#334155', width: 1 } },
             axisTick: { show: false },
             splitLine: { show: false },
-            axisLabel: { fontSize: 11, color: '#94A3B8' }
-          }
+            axisLabel: { fontSize: 11, color: '#94A3B8' },
+          },
         ];
         baseOption.grid = {
           ...gridOption,
           right:
-            (typeof gridOption.right === 'number' ? gridOption.right : 0) +
-            (effectiveLineFields.length > 0 ? 48 : 0)
+            (typeof gridOption.right === 'number' ? gridOption.right : 0) + (effectiveLineFields.length > 0 ? 48 : 0),
         };
 
         const barSeries = effectiveBarFields.map((field, index) => ({
@@ -1158,7 +1160,9 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             const opacity = selectedNormalized ? (isSelected ? 1 : 0.35) : undefined;
             return typeof val === 'object' && val !== null && !Array.isArray(val)
               ? { ...(val as any), itemStyle: opacity != null ? { opacity } : undefined }
-              : opacity != null ? { value: val, itemStyle: { opacity } } : val;
+              : opacity != null
+                ? { value: val, itemStyle: { opacity } }
+                : val;
           }),
           barWidth: isMultiBarSeries ? 20 : barLineDynamicBarWidth,
           barMaxWidth: isMultiBarSeries ? 20 : 36,
@@ -1174,18 +1178,27 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' }
-              ]
-            }
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' },
+              ],
+            },
           },
-          emphasis: { focus: 'self' as const, itemStyle: { shadowBlur: 20, shadowOffsetY: 4, shadowColor: 'rgba(99, 102, 241, 0.4)', borderColor: '#fff', borderWidth: 2 } }
+          emphasis: {
+            focus: 'self' as const,
+            itemStyle: {
+              shadowBlur: 20,
+              shadowOffsetY: 4,
+              shadowColor: 'rgba(99, 102, 241, 0.4)',
+              borderColor: '#fff',
+              borderWidth: 2,
+            },
+          },
         }));
 
         const lineSeries = effectiveLineFields.map((field, index) => ({
           name: field,
           type: 'line' as const,
           yAxisIndex: 1,
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item) => item[field] || 0),
           smooth: true,
           symbol: 'circle',
           symbolSize: 6,
@@ -1196,19 +1209,19 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
             shadowBlur: 8,
             shadowColor: colorPalette[(effectiveBarFields.length + index) % colorPalette.length] + '40',
           },
-          emphasis: { focus: 'self' as const, lineStyle: { width: 3.5 } }
+          emphasis: { focus: 'self' as const, lineStyle: { width: 3.5 } },
         }));
 
         baseOption.series = [...barSeries, ...lineSeries];
         break;
       }
-        
+
       case 'waterfall':
         // 瀑布图 - 需要计算累积值
         const waterfallDataPointCount = xAxisData.length;
         const waterfallDynamicBarWidth = Math.min(
           36,
-          Math.max(8, Math.floor(containerWidth / waterfallDataPointCount * 0.7))
+          Math.max(8, Math.floor((containerWidth / waterfallDataPointCount) * 0.7)),
         );
         let cumulative = 0;
         const waterfallData = sortedData.map((item, index) => {
@@ -1218,134 +1231,138 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           return {
             name: item[xField] || `项目${index + 1}`,
             value: value,
-            cumulative: result
+            cumulative: result,
           };
         });
-        
-        baseOption.series = [{
-          name: '瀑布图',
-          type: 'bar',
-          data: waterfallData.map(item => ({
-            value: item.value,
-            itemStyle: {
-              borderRadius: [4, 4, 0, 0],
-              color: {
-                type: 'linear',
-                x: 0,
-                y: 0,
-                x2: 0,
-                y2: 1,
-                colorStops: [
-                  { offset: 0, color: item.value >= 0 ? '#6366F1' : '#EF4444' },
-                  { offset: 1, color: (item.value >= 0 ? '#6366F1' : '#EF4444') + 'CC' }
-                ]
-              }
-            }
-          })),
-          barWidth: waterfallDynamicBarWidth,
-          barMaxWidth: 36,
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 20,
-              shadowOffsetX: 0,
-              shadowOffsetY: 4,
-              shadowColor: 'rgba(99, 102, 241, 0.4)'
-            }
-          }
-        }];
+
+        baseOption.series = [
+          {
+            name: '瀑布图',
+            type: 'bar',
+            data: waterfallData.map((item) => ({
+              value: item.value,
+              itemStyle: {
+                borderRadius: [4, 4, 0, 0],
+                color: {
+                  type: 'linear',
+                  x: 0,
+                  y: 0,
+                  x2: 0,
+                  y2: 1,
+                  colorStops: [
+                    { offset: 0, color: item.value >= 0 ? '#6366F1' : '#EF4444' },
+                    { offset: 1, color: (item.value >= 0 ? '#6366F1' : '#EF4444') + 'CC' },
+                  ],
+                },
+              },
+            })),
+            barWidth: waterfallDynamicBarWidth,
+            barMaxWidth: 36,
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 20,
+                shadowOffsetX: 0,
+                shadowOffsetY: 4,
+                shadowColor: 'rgba(99, 102, 241, 0.4)',
+              },
+            },
+          },
+        ];
 
         // 添加辅助线显示累计值
         baseOption.series.push({
           name: '累计值',
           type: 'line',
-          data: waterfallData.map(item => item.cumulative),
+          data: waterfallData.map((item) => item.cumulative),
           symbol: 'none',
           showSymbol: false,
           lineStyle: {
             type: 'dashed',
             width: 1.5,
-            color: '#475569'
+            color: '#475569',
           },
-          itemStyle: { color: '#475569' }
+          itemStyle: { color: '#475569' },
         });
         break;
-        
+
       case 'funnel':
         // 漏斗图
-        const maxFunnelValue = Math.max(...sortedData.map(item => item[yFields[0]] || 0));
-        baseOption.series = [{
-          name: '漏斗图',
-          type: 'funnel',
-          left: '10%',
-          top: 60,
-          bottom: 60,
-          width: '80%',
-          min: 0,
-          max: maxFunnelValue,
-          minSize: '0%',
-          maxSize: '100%',
-          sort: 'descending',
-          gap: 3,
-          label: {
-            show: true,
-            position: 'inside',
-            fontSize: 12,
-            color: '#fff',
-            fontWeight: 'bold',
-            formatter: '{b}\n{c} ({d}%)'
-          },
-          labelLine: {
-            show: true,
-            length: 15,
-            lineStyle: {
-              width: 1,
-              type: 'solid',
-              color: '#475569'
-            }
-          },
-          itemStyle: {
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            borderWidth: 1,
-            borderRadius: 4
-          },
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 20,
-              shadowOffsetX: 0,
-              shadowOffsetY: 0,
-              shadowColor: 'rgba(99, 102, 241, 0.4)'
-            },
+        const maxFunnelValue = Math.max(...sortedData.map((item) => item[yFields[0]] || 0));
+        baseOption.series = [
+          {
+            name: '漏斗图',
+            type: 'funnel',
+            left: '10%',
+            top: 60,
+            bottom: 60,
+            width: '80%',
+            min: 0,
+            max: maxFunnelValue,
+            minSize: '0%',
+            maxSize: '100%',
+            sort: 'descending',
+            gap: 3,
             label: {
-              fontSize: 14
-            }
-          },
-          data: sortedData.map((item, index) => ({
-            name: item[xField] || `阶段${index + 1}`,
-            value: item[yFields[0]] || 0,
+              show: true,
+              position: 'inside',
+              fontSize: 12,
+              color: '#fff',
+              fontWeight: 'bold',
+              formatter: '{b}\n{c} ({d}%)',
+            },
+            labelLine: {
+              show: true,
+              length: 15,
+              lineStyle: {
+                width: 1,
+                type: 'solid',
+                color: '#475569',
+              },
+            },
             itemStyle: {
-              color: {
-                type: 'linear',
-                x: 0,
-                y: 0,
-                x2: 1,
-                y2: 0,
-                colorStops: [
-                  { offset: 0, color: colorPalette[index % colorPalette.length] },
-                  { offset: 1, color: colorPalette[index % colorPalette.length] + 'CC' }
-                ]
-              }
-            }
-          }))
-        }];
-        
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1,
+              borderRadius: 4,
+            },
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 20,
+                shadowOffsetX: 0,
+                shadowOffsetY: 0,
+                shadowColor: 'rgba(99, 102, 241, 0.4)',
+              },
+              label: {
+                fontSize: 14,
+              },
+            },
+            data: sortedData.map((item, index) => ({
+              name: item[xField] || `阶段${index + 1}`,
+              value: item[yFields[0]] || 0,
+              itemStyle: {
+                color: {
+                  type: 'linear',
+                  x: 0,
+                  y: 0,
+                  x2: 1,
+                  y2: 0,
+                  colorStops: [
+                    { offset: 0, color: colorPalette[index % colorPalette.length] },
+                    { offset: 1, color: colorPalette[index % colorPalette.length] + 'CC' },
+                  ],
+                },
+              },
+            })),
+          },
+        ];
+
         // 删除坐标轴配置
         delete baseOption.xAxis;
         delete baseOption.yAxis;
         break;
-        
+
       case 'heatmap':
         // 热力图需要特殊的二维数据格式
-        const maxValue = Math.max(...data.map(item => Math.max(...yFields.map(field => item[field] || 0))));
+        const maxValue = Math.max(...data.map((item) => Math.max(...yFields.map((field) => item[field] || 0))));
         baseOption.visualMap = {
           min: 0,
           max: maxValue,
@@ -1354,62 +1371,76 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           left: 'center',
           bottom: '15%',
           inRange: {
-            color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffcc', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+            color: [
+              '#313695',
+              '#4575b4',
+              '#74add1',
+              '#abd9e9',
+              '#e0f3f8',
+              '#ffffcc',
+              '#fee090',
+              '#fdae61',
+              '#f46d43',
+              '#d73027',
+              '#a50026',
+            ],
           },
           textStyle: {
             color: '#94A3B8',
-            fontSize: 11
+            fontSize: 11,
           },
           itemWidth: 15,
-          itemHeight: 150
+          itemHeight: 150,
         };
-        baseOption.series = [{
-          name: '热力图',
-          type: 'heatmap',
-          data: sortedData.map((item, rowIndex) => 
-            yFields.map((field, colIndex) => [colIndex, rowIndex, item[field] || 0])
-          ).flat(),
-          label: {
-            show: true,
-            fontSize: 10,
-            color: '#94A3B8'
-          },
-          itemStyle: {
-            borderColor: '#fff',
-            borderWidth: 1
-          },
-          emphasis: {
+        baseOption.series = [
+          {
+            name: '热力图',
+            type: 'heatmap',
+            data: sortedData
+              .map((item, rowIndex) => yFields.map((field, colIndex) => [colIndex, rowIndex, item[field] || 0]))
+              .flat(),
+            label: {
+              show: true,
+              fontSize: 10,
+              color: '#94A3B8',
+            },
             itemStyle: {
-              shadowBlur: 16,
-              shadowColor: 'rgba(99, 102, 241, 0.4)',
-              borderWidth: 2
-            }
-          }
-        }];
+              borderColor: '#fff',
+              borderWidth: 1,
+            },
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 16,
+                shadowColor: 'rgba(99, 102, 241, 0.4)',
+                borderWidth: 2,
+              },
+            },
+          },
+        ];
         baseOption.xAxis = {
           type: 'category',
           data: yFields,
           splitArea: {
-            show: true
+            show: true,
           },
           axisLabel: {
             fontSize: 11,
-            color: '#94A3B8'
-          }
+            color: '#94A3B8',
+          },
         };
         baseOption.yAxis = {
           type: 'category',
           data: xAxisData,
           splitArea: {
-            show: true
+            show: true,
           },
           axisLabel: {
             fontSize: 11,
-            color: '#94A3B8'
-          }
+            color: '#94A3B8',
+          },
         };
         break;
-        
+
       default:
         // 默认使用柱状图
         const isMultiDefaultBarSeries = yFields.length > 1;
@@ -1419,12 +1450,12 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         const defaultMaxBarWidth = isMultiDefaultBarSeries ? 20 : 36;
         const defaultDynamicBarWidth = Math.min(
           defaultMaxBarWidth,
-          Math.max(defaultMinBarWidth, Math.floor(containerWidth / defaultDataPointCount / defaultSeriesCount * 0.7))
+          Math.max(defaultMinBarWidth, Math.floor((containerWidth / defaultDataPointCount / defaultSeriesCount) * 0.7)),
         );
         baseOption.series = yFields.map((field, index) => ({
           name: field,
           type: 'bar',
-          data: sortedData.map(item => item[field] || 0),
+          data: sortedData.map((item) => item[field] || 0),
           barWidth: defaultDynamicBarWidth,
           barMaxWidth: defaultMaxBarWidth,
           barGap: isMultiDefaultBarSeries ? '10%' : '20%',
@@ -1439,18 +1470,18 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
               y2: 1,
               colorStops: [
                 { offset: 0, color: colorPalette[index % colorPalette.length] },
-                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' }
-              ]
-            }
+                { offset: 1, color: colorPalette[index % colorPalette.length] + '80' },
+              ],
+            },
           },
           emphasis: {
             itemStyle: {
               shadowBlur: 20,
               shadowOffsetX: 0,
               shadowOffsetY: 4,
-              shadowColor: 'rgba(99, 102, 241, 0.4)'
-            }
-          }
+              shadowColor: 'rgba(99, 102, 241, 0.4)',
+            },
+          },
         }));
     }
 
@@ -1464,8 +1495,8 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
           { gt: 100, color: colorPalette[1] },
           { gt: 200, color: colorPalette[2] },
           { gt: 300, color: colorPalette[3] },
-          { gt: 400, color: colorPalette[4] }
-        ]
+          { gt: 400, color: colorPalette[4] },
+        ],
       };
     }
 
@@ -1476,88 +1507,85 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const optionRef = useRef<any>(null);
   optionRef.current = option;
 
-  const applySelection = useCallback((value: any) => {
-    if ((config.type || '').toLowerCase() === 'metric') return;
-    const instance = chartRef.current?.getEchartsInstance?.();
-    if (!instance) return;
+  const applySelection = useCallback(
+    (value: any) => {
+      if ((config.type || '').toLowerCase() === 'metric') return;
+      const instance = chartRef.current?.getEchartsInstance?.();
+      if (!instance) return;
 
-    const normalized = value == null ? '' : normalizeLinkValue(value);
+      const normalized = value == null ? '' : normalizeLinkValue(value);
 
-    try {
-      const opt: any = instance.getOption?.() || {};
-      const chartType = (config.type || '').toLowerCase();
+      try {
+        const opt: any = instance.getOption?.() || {};
+        const chartType = (config.type || '').toLowerCase();
 
-      // 取消筛选：清除所有高亮/变暗
-      if (!normalized) {
-        try {
-          instance.dispatchAction({ type: 'hideTip' } as any);
-        } catch {
-          // ignore
+        // 取消筛选：清除所有高亮/变暗
+        if (!normalized) {
+          try {
+            instance.dispatchAction({ type: 'hideTip' } as any);
+          } catch {
+            // ignore
+          }
+          // 清除所有高亮/变暗
+          instance.dispatchAction({ type: 'downplay' } as any);
+          // 用最新 option 强制同步 setOption，立即恢复所有项的不透明度
+          // 先 clear 再 setOption，彻底清除旧的 opacity 状态
+          const newOption = optionRef.current;
+          if (newOption) {
+            instance.clear();
+            instance.setOption(newOption, { notMerge: true, lazyUpdate: false });
+          }
+          return;
         }
-        // 清除所有高亮/变暗
-        instance.dispatchAction({ type: 'downplay' } as any);
-        // 用最新 option 强制同步 setOption，立即恢复所有项的不透明度
-        // 先 clear 再 setOption，彻底清除旧的 opacity 状态
-        const newOption = optionRef.current;
-        if (newOption) {
-          instance.clear();
-          instance.setOption(newOption, { notMerge: true, lazyUpdate: false });
-        }
-        return;
-      }
 
-      if (chartType === 'pie') {
-        const series0 = opt.series?.[0];
-        const arr = (series0?.data || []) as any[];
-        const idx = arr.findIndex((d: any) => {
-          const name = d?.name;
-          if (name == null) return false;
-          const s = String(name).trim();
-          if (normalizeLinkValue(s) === normalized) return true;
-          // 饼图 label 可能是 "邓玉梅: 125324 (7%)"，用冒号前一段或前缀匹配
-          const beforeColon = s.split(':')[0].trim();
-          return normalizeLinkValue(beforeColon) === normalized || s.startsWith(normalized);
+        if (chartType === 'pie') {
+          const series0 = opt.series?.[0];
+          const arr = (series0?.data || []) as any[];
+          const idx = arr.findIndex((d: any) => {
+            const name = d?.name;
+            if (name == null) return false;
+            const s = String(name).trim();
+            if (normalizeLinkValue(s) === normalized) return true;
+            // 饼图 label 可能是 "邓玉梅: 125324 (7%)"，用冒号前一段或前缀匹配
+            const beforeColon = s.split(':')[0].trim();
+            return normalizeLinkValue(beforeColon) === normalized || s.startsWith(normalized);
+          });
+          if (idx >= 0) {
+            // 先downplay全部，再highlight选中的
+            instance.dispatchAction({ type: 'downplay', seriesIndex: 0 } as any);
+            instance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx } as any);
+          }
+          return;
+        }
+
+        // category charts (bar/line/area/stacked_bar etc.)
+        const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
+        const xAxisData = (xAxis?.data || []) as any[];
+        const selectedDataIndex = xAxisData.findIndex((x: any) => {
+          const v = normalizeLinkValue(x);
+          if (v === normalized) return true;
+          const sx = String(x ?? '').trim();
+          return sx === normalized || sx.startsWith(normalized) || normalized.startsWith(sx);
         });
-        if (idx >= 0) {
-          // 先downplay全部，再highlight选中的
-          instance.dispatchAction({ type: 'downplay', seriesIndex: 0 } as any);
-          instance.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx } as any);
-        }
-        return;
-      }
+        if (selectedDataIndex < 0) return;
 
-      // category charts (bar/line/area/stacked_bar etc.)
-      const xAxis = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
-      const xAxisData = (xAxis?.data || []) as any[];
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[ChartFactory] applySelection - xAxisData:', xAxisData, 'searching normalized:', normalized);
+        const seriesArr = (opt.series || []) as any[];
+        const dataLen = xAxisData.length;
+        // 先对所有数据项 downplay（柱子变暗），再只对选中的 highlight（柱子高亮）
+        seriesArr.forEach((_: any, seriesIndex: number) => {
+          for (let i = 0; i < dataLen; i++) {
+            instance.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: i } as any);
+          }
+        });
+        seriesArr.forEach((_: any, seriesIndex: number) => {
+          instance.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: selectedDataIndex } as any);
+        });
+      } catch {
+        // ignore highlight failures
       }
-      const selectedDataIndex = xAxisData.findIndex((x: any) => {
-        const v = normalizeLinkValue(x);
-        if (v === normalized) return true;
-        const sx = String(x ?? '').trim();
-        return sx === normalized || sx.startsWith(normalized) || normalized.startsWith(sx);
-      });
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[ChartFactory] applySelection - matched index:', selectedDataIndex);
-      }
-      if (selectedDataIndex < 0) return;
-
-      const seriesArr = (opt.series || []) as any[];
-      const dataLen = xAxisData.length;
-      // 先对所有数据项 downplay（柱子变暗），再只对选中的 highlight（柱子高亮）
-      seriesArr.forEach((_: any, seriesIndex: number) => {
-        for (let i = 0; i < dataLen; i++) {
-          instance.dispatchAction({ type: 'downplay', seriesIndex, dataIndex: i } as any);
-        }
-      });
-      seriesArr.forEach((_: any, seriesIndex: number) => {
-        instance.dispatchAction({ type: 'highlight', seriesIndex, dataIndex: selectedDataIndex } as any);
-      });
-    } catch {
-      // ignore highlight failures
-    }
-  }, [config.type]);
+    },
+    [config.type],
+  );
 
   // 外部联动选中值变化时，更新高亮/变暗状态
   useEffect(() => {
@@ -1576,13 +1604,12 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   // When parent controls height via percentages (e.g. dashboard cards), a large default minHeight
   // can cause ECharts to be clipped (overflow hidden) instead of adapting to the smaller container.
   const styleHeight = style?.height;
-  const defaultMinHeight =
-    typeof styleHeight === 'string' && styleHeight.trim().endsWith('%') ? 0 : 280;
+  const defaultMinHeight = typeof styleHeight === 'string' && styleHeight.trim().endsWith('%') ? 0 : 280;
   const resolvedMinHeight =
-    (minHeight ??
-      config.minHeight ??
-      (typeof style.minHeight === 'number' ? style.minHeight : undefined) ??
-      defaultMinHeight);
+    minHeight ??
+    config.minHeight ??
+    (typeof style.minHeight === 'number' ? style.minHeight : undefined) ??
+    defaultMinHeight;
 
   // 记录 mousedown 时的位置（使用 ZRender 坐标系，更适合 canvas 内事件）
   const mouseDownZrPos = useRef<{ x: number; y: number } | null>(null);
@@ -1635,18 +1662,6 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
         clickSource += ` -> name`;
       }
     }
-    // 打印点击信息
-    if (process.env.NODE_ENV === 'development' && value != null) {
-      console.log('[ChartFactory] 点击事件:', {
-        chartType: config.type,
-        chartName: config.title,
-        clickSource,
-        rawValue: value,
-        normalized: normalizeLinkValue(value),
-        paramsDataIndex: params.dataIndex,
-        paramsName: params.name,
-      });
-    }
     if (value != null) {
       const normalized = normalizeLinkValue(value);
       const currentNormalized = selectedXValue != null ? normalizeLinkValue(selectedXValue) : '';
@@ -1685,7 +1700,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
   const mergedEvents = {
     ...(onEvents || {}),
     click: handleChartClick,
-    globalout: handleGlobalOut
+    globalout: handleGlobalOut,
   };
 
   // 绑定 ZRender mousedown/mouseup：记录并清理按下位置（同一坐标系）
@@ -1726,8 +1741,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
     if (!isMetricChart) return null;
     const rows = Array.isArray(data) ? data : [];
     const valueField = (config.yFields && config.yFields[0]) || '';
-    const decimals =
-      typeof config.metric_decimals === 'number' ? config.metric_decimals : 2;
+    const decimals = typeof config.metric_decimals === 'number' ? config.metric_decimals : 2;
     const expr = parseMetricFilterExpr(config.metric_filter_expr);
     const rules = getEffectiveMetricFilterRules({
       metric_filters: config.metric_filters,
@@ -1812,9 +1826,7 @@ export const ChartFactory: React.FC<ChartFactoryProps> = ({
                   {metricDisplay.text}
                 </span>
                 {metricDisplay.unit ? (
-                  <span style={{ fontSize: 14, color: '#818CF8', fontWeight: 500 }}>
-                    {metricDisplay.unit}
-                  </span>
+                  <span style={{ fontSize: 14, color: '#818CF8', fontWeight: 500 }}>{metricDisplay.unit}</span>
                 ) : null}
               </div>
               {metricDisplay.label ? (

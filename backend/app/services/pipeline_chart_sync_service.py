@@ -15,17 +15,17 @@
 - 将图表编辑器格式的 visualization_settings 映射回 pipeline chart 节点的 config 格式。
 - 只更新节点的 config，nodes 数组中的其他节点不受影响。
 """
+
 import json
 import logging
-import re
-from app.core.time_utils import utc_now
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.visualization import VisualizationCard
+from app.core.time_utils import utc_now
 from app.models.pipeline import DataPipeline
+from app.models.visualization import VisualizationCard
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 QUERY_PLACEHOLDER = "__PIPELINE_EXECUTION_QUERY__"
 
 
-def _chart_type_to_standard(chart_type: Optional[str]) -> str:
+def _chart_type_to_standard(chart_type: str | None) -> str:
     """将 pipeline chart 图表类型映射为 visualization_cards 标准类型。"""
     if not chart_type:
         return "bar"
@@ -64,7 +64,7 @@ def _chart_type_to_standard(chart_type: Optional[str]) -> str:
     return mapping.get(ct, "bar")
 
 
-def _build_visualization_settings(node_config: Dict[str, Any]) -> Dict[str, Any]:
+def _build_visualization_settings(node_config: dict[str, Any]) -> dict[str, Any]:
     """
     从 chart 节点的 config 构建 visualization_settings。
     映射 pipeline ChartNodeConfig -> visualization_settings 格式。
@@ -120,8 +120,8 @@ def _build_dataset_query(
     pipeline_id: int,
     node_id: str,
     data_source_id: int,
-    upstream_step_table: Optional[str] = None,
-) -> Dict[str, Any]:
+    upstream_step_table: str | None = None,
+) -> dict[str, Any]:
     """
     构建 dataset_query（类 Metabase 格式）。
 
@@ -135,27 +135,21 @@ def _build_dataset_query(
         # 占位符：执行时动态替换为最新 execution 的结果表
         query_sql = QUERY_PLACEHOLDER
 
-    return {
-        "type": "native",
-        "database": data_source_id,
-        "native": {
-            "query": query_sql
-        }
-    }
+    return {"type": "native", "database": data_source_id, "native": {"query": query_sql}}
 
 
 def _extract_output_table_from_pipeline(
-    nodes: List[Dict[str, Any]],
+    nodes: list[dict[str, Any]],
     chart_node_id: str,
-) -> Optional[str]:
+) -> str | None:
     """
     从 chart 节点向上追溯，如果存在 output 上游节点，返回其目标表名。
     否则返回 None（使用占位符）。
     """
-    node_map: Dict[str, Dict[str, Any]] = {n.get("id", ""): n for n in nodes}
+    node_map: dict[str, dict[str, Any]] = {n.get("id", ""): n for n in nodes}
     visited = set()
 
-    def find_output(node_id: str) -> Optional[str]:
+    def find_output(node_id: str) -> str | None:
         if node_id in visited:
             return None
         visited.add(node_id)
@@ -166,7 +160,7 @@ def _extract_output_table_from_pipeline(
             cfg = node.get("config") or {}
             target = cfg.get("targetTable", "").strip()
             return target if target else None
-        for up_id in (node.get("upstream") or []):
+        for up_id in node.get("upstream") or []:
             result = find_output(up_id)
             if result:
                 return result
@@ -185,9 +179,9 @@ class PipelineChartSyncService:
     async def sync_pipeline_charts(
         self,
         pipeline_id: int,
-        nodes: List[Dict[str, Any]],
-        user_id: Optional[int] = None,
-    ) -> Tuple[int, List[Dict[str, Any]]]:
+        nodes: list[dict[str, Any]],
+        user_id: int | None = None,
+    ) -> tuple[int, list[dict[str, Any]]]:
         """
         将管道中的所有 chart 节点同步到 visualization_cards。
 
@@ -261,16 +255,18 @@ class PipelineChartSyncService:
                 f"node_config.chartType={node_config.get('chartType')}, "
                 f"pipeline_id={pipeline_id}, node={node_id})"
             )
-            synced.append({
-                "id": chart.id,
-                "name": chart.name,
-                "node_id": node_id,
-                "action": action,
-            })
+            synced.append(
+                {
+                    "id": chart.id,
+                    "name": chart.name,
+                    "node_id": node_id,
+                    "action": action,
+                }
+            )
 
         return len(synced), synced
 
-    async def _find_existing(self, pipeline_id: int, focus_node_id: str) -> Optional[VisualizationCard]:
+    async def _find_existing(self, pipeline_id: int, focus_node_id: str) -> VisualizationCard | None:
         """根据 pipeline_id + focus_node_id 查找已存在的 chart。"""
         stmt = select(VisualizationCard).where(
             and_(
@@ -286,8 +282,8 @@ class PipelineChartSyncService:
         self,
         chart: VisualizationCard,
         name: str,
-        viz_settings: Dict[str, Any],
-        dataset_query: Dict[str, Any],
+        viz_settings: dict[str, Any],
+        dataset_query: dict[str, Any],
         chart_type: str,
     ) -> VisualizationCard:
         """更新已存在的 chart 记录。"""
@@ -307,8 +303,8 @@ class PipelineChartSyncService:
         self,
         name: str,
         chart_type: str,
-        viz_settings: Dict[str, Any],
-        dataset_query: Dict[str, Any],
+        viz_settings: dict[str, Any],
+        dataset_query: dict[str, Any],
         data_source_id: int,
         creator_id: int,
         pipeline_id: int,
@@ -342,8 +338,8 @@ class PipelineChartSyncService:
     # ================================================================
 
     def _visualization_settings_to_node_config(
-        viz_settings: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        viz_settings: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         将图表编辑器的 visualization_settings 格式映射回 pipeline chart 节点的 config 格式。
 
@@ -360,7 +356,7 @@ class PipelineChartSyncService:
         - sort_order -> sortOrder
         - chartType -> chartType
         """
-        cfg: Dict[str, Any] = {}
+        cfg: dict[str, Any] = {}
 
         # chartType
         chart_type = viz_settings.get("chartType")
@@ -447,7 +443,7 @@ class PipelineChartSyncService:
     async def sync_chart_to_pipeline(
         self,
         chart: VisualizationCard,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         将图表编辑器的配置反向同步到关联的管道节点。
 
@@ -461,9 +457,7 @@ class PipelineChartSyncService:
         focus_node_id = getattr(chart, "focus_node_id", None)
 
         if not pipeline_id or not focus_node_id:
-            logger.info(
-                f"图表 {chart.id} 无 pipeline_id 或 focus_node_id，跳过反向同步"
-            )
+            logger.info(f"图表 {chart.id} 无 pipeline_id 或 focus_node_id，跳过反向同步")
             return False, "图表未关联到管道节点"
 
         # 解析 visualization_settings
@@ -504,9 +498,7 @@ class PipelineChartSyncService:
                 break
 
         if target_idx < 0:
-            logger.warning(
-                f"管道 {pipeline_id} 中未找到 chart 节点 {focus_node_id}"
-            )
+            logger.warning(f"管道 {pipeline_id} 中未找到 chart 节点 {focus_node_id}")
             return False, f"管道中未找到对应的图表节点 {focus_node_id}"
 
         # 更新节点的 config（只更新 config，不改变其他字段）
@@ -521,8 +513,5 @@ class PipelineChartSyncService:
         pipeline.updated_at = utc_now()
         await self.db.commit()
 
-        logger.info(
-            f"图表 {chart.id} 反向同步到管道 {pipeline_id} 节点 {focus_node_id} 完成"
-        )
+        logger.info(f"图表 {chart.id} 反向同步到管道 {pipeline_id} 节点 {focus_node_id} 完成")
         return True, "同步成功"
-

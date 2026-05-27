@@ -3,10 +3,7 @@
  * Drag-and-drop style two-panel column selector.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import {
-  Input, Button, Divider, Tag, Typography,
-  Alert, Checkbox,
-} from 'antd';
+import { Input, Button, Divider, Tag, Typography, Alert, Checkbox } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 import { GraphNode } from '../../../utils/graphUtils';
 import { PipelineNode } from '../../../services/pipelineService';
@@ -47,19 +44,20 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
   // 获取上游节点和数据源 ID
   const upstreamNode = upstreamNodes[0];
   const upstreamPn = upstreamNode?.data.pipelineNode as PipelineNode | undefined;
-  const upstreamDsId = upstreamPn
-    ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null)
-    : undefined;
+  const upstreamDsId = upstreamPn ? resolvePreviewDataSourceId(upstreamPn, pipelineDataSourceId ?? null) : undefined;
 
   const { previewData, previewLoading, loadPreview, clearPreview } = useNodePreview(); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // 签名用于检测上游变化
   const nodesSignature = useMemo(
-    () => JSON.stringify(allNodes.map(n => ({
-      id: n.id,
-      pn: (n.data.pipelineNode as PipelineNode),
-    }))),
-    [allNodes]
+    () =>
+      JSON.stringify(
+        allNodes.map((n) => ({
+          id: n.id,
+          pn: n.data.pipelineNode as PipelineNode,
+        })),
+      ),
+    [allNodes],
   );
 
   // 加载上游预览（获取全列信息，用于列选择器）
@@ -72,12 +70,15 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
     if (key === loadKeyRef.current) return;
     loadKeyRef.current = key;
     clearPreview();
-    loadPreview({
-      node: upstreamNode,
-      allNodes,
-      pipelineDataSourceId: upstreamDsId,
-      limit: 50,
-    }, true);
+    loadPreview(
+      {
+        node: upstreamNode,
+        allNodes,
+        pipelineDataSourceId: upstreamDsId,
+        limit: 50,
+      },
+      true,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upstreamNode?.id, nodesSignature, upstreamDsId, loadPreview, clearPreview]);
 
@@ -103,22 +104,27 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
 
     if (savedMappings.length > 0) {
       // 使用已保存的映射，但要与最新的 allColumns 合并（可能有新列或删除了旧列）
-      const savedFromSet = new Set(savedMappings.map(m => m.from));
-      const newCols = allColumns.filter(c => !savedFromSet.has(c.name));
-      setMappings([...savedMappings, ...newCols.map(c => ({
-        from: c.name,
-        to: c.name,
-        checked: false,
-        type: c.type,
-      }))]);
+      const savedFromSet = new Set(savedMappings.map((m) => m.from));
+      const newCols = allColumns.filter((c) => !savedFromSet.has(c.name));
+      setMappings([
+        ...savedMappings,
+        ...newCols.map((c) => ({
+          from: c.name,
+          to: c.name,
+          checked: false,
+          type: c.type,
+        })),
+      ]);
     } else {
       // 没有保存的映射，初始化为全选
-      setMappings(allColumns.map(c => ({
-        from: c.name,
-        to: c.name,
-        checked: true,
-        type: c.type,
-      })));
+      setMappings(
+        allColumns.map((c) => ({
+          from: c.name,
+          to: c.name,
+          checked: true,
+          type: c.type,
+        })),
+      );
     }
   }, [allColumns, savedMappings]);
 
@@ -133,7 +139,7 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
         ...pn,
         config: {
           ...config,
-          selectedColumns: newMappings.filter(m => m.checked),
+          selectedColumns: newMappings.filter((m) => m.checked),
         },
       },
     };
@@ -141,29 +147,25 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
   };
 
   const toggleColumn = (colName: string, checked: boolean) => {
-    const newMappings = mappings.map(m =>
-      m.from === colName ? { ...m, checked } : m
-    );
+    const newMappings = mappings.map((m) => (m.from === colName ? { ...m, checked } : m));
     setMappings(newMappings);
     updateConfig(newMappings);
   };
 
   const renameColumn = (from: string, to: string) => {
-    const newMappings = mappings.map(m =>
-      m.from === from ? { ...m, to } : m
-    );
+    const newMappings = mappings.map((m) => (m.from === from ? { ...m, to } : m));
     setMappings(newMappings);
     updateConfig(newMappings);
   };
 
   const selectAll = () => {
-    const newMappings = mappings.map(m => ({ ...m, checked: true }));
+    const newMappings = mappings.map((m) => ({ ...m, checked: true }));
     setMappings(newMappings);
     updateConfig(newMappings);
   };
 
   const deselectAll = () => {
-    const newMappings = mappings.map(m => ({ ...m, checked: false }));
+    const newMappings = mappings.map((m) => ({ ...m, checked: false }));
     setMappings(newMappings);
     updateConfig(newMappings);
   };
@@ -180,8 +182,8 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
     );
   }
 
-  const selectedCount = mappings.filter(m => m.checked).length;
-  const checkedMappings = mappings.filter(m => m.checked);
+  const selectedCount = mappings.filter((m) => m.checked).length;
+  const checkedMappings = mappings.filter((m) => m.checked);
 
   return (
     <div>
@@ -197,25 +199,27 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
 
       {/* Quick actions */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <Button size="small" onClick={selectAll} disabled={readOnly}>全选</Button>
-        <Button size="small" onClick={deselectAll} disabled={readOnly}>全不选</Button>
-        <Button
-          size="small"
-          type={showRename ? 'primary' : 'default'}
-          onClick={() => setShowRename(!showRename)}
-        >
+        <Button size="small" onClick={selectAll} disabled={readOnly}>
+          全选
+        </Button>
+        <Button size="small" onClick={deselectAll} disabled={readOnly}>
+          全不选
+        </Button>
+        <Button size="small" type={showRename ? 'primary' : 'default'} onClick={() => setShowRename(!showRename)}>
           {showRename ? '隐藏重命名' : '显示重命名'}
         </Button>
       </div>
 
       {/* Column list */}
-      <div style={{
-        border: '1px solid #f0f0f0',
-        borderRadius: 6,
-        maxHeight: 300,
-        overflowY: 'auto',
-        background: '#fafafa',
-      }}>
+      <div
+        style={{
+          border: '1px solid #f0f0f0',
+          borderRadius: 6,
+          maxHeight: 300,
+          overflowY: 'auto',
+          background: '#fafafa',
+        }}
+      >
         {mappings.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -223,7 +227,7 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
             </Text>
           </div>
         )}
-        {mappings.map(col => {
+        {mappings.map((col) => {
           const typeInfo = getDataTypeInfo(col.type);
           return (
             <div
@@ -245,16 +249,18 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
               />
 
               {/* Type chip */}
-              <Tag style={{
-                background: typeInfo.bg,
-                color: typeInfo.text,
-                border: 'none',
-                fontSize: 9,
-                padding: '0 3px',
-                lineHeight: '14px',
-                minWidth: 24,
-                textAlign: 'center',
-              }}>
+              <Tag
+                style={{
+                  background: typeInfo.bg,
+                  color: typeInfo.text,
+                  border: 'none',
+                  fontSize: 9,
+                  padding: '0 3px',
+                  lineHeight: '14px',
+                  minWidth: 24,
+                  textAlign: 'center',
+                }}
+              >
                 {typeInfo.label}
               </Tag>
 
@@ -274,7 +280,9 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
               {/* Rename arrow */}
               {showRename && col.checked && (
                 <>
-                  <Text type="secondary" style={{ fontSize: 11 }}>→</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    →
+                  </Text>
                   <Input
                     size="small"
                     value={col.to}
@@ -299,27 +307,31 @@ export const ColumnSelectConfig: React.FC<ColumnSelectConfigProps> = ({
       <Divider style={{ margin: '12px 0 8px' }} />
 
       {/* SQL preview */}
-      <Text type="secondary" style={{ fontSize: 11 }}>生成的查询：</Text>
-      <div style={{
-        marginTop: 4,
-        padding: '6px 10px',
-        background: '#f5f7fa',
-        borderRadius: 4,
-        fontFamily: 'monospace',
-        fontSize: 11,
-        color: '#595959',
-        minHeight: 28,
-      }}>
+      <Text type="secondary" style={{ fontSize: 11 }}>
+        生成的查询：
+      </Text>
+      <div
+        style={{
+          marginTop: 4,
+          padding: '6px 10px',
+          background: '#f5f7fa',
+          borderRadius: 4,
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: '#595959',
+          minHeight: 28,
+        }}
+      >
         {checkedMappings.length === 0 ? (
           <span style={{ color: '#bfbfbf' }}>（请选择至少一列）</span>
         ) : (
           <span>
-            SELECT {checkedMappings.map(m =>
-              m.from === m.to
-                ? `\`${m.from}\``
-                : `\`${m.from}\` AS \`${m.to}\``
-            ).join(', ')}
-            <br />FROM upstream
+            SELECT{' '}
+            {checkedMappings
+              .map((m) => (m.from === m.to ? `\`${m.from}\`` : `\`${m.from}\` AS \`${m.to}\``))
+              .join(', ')}
+            <br />
+            FROM upstream
           </span>
         )}
       </div>

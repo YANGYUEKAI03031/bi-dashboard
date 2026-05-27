@@ -109,11 +109,11 @@ export class PermissionService {
   static async grantReportPagePermission(
     reportPageId: number,
     targetUserId: number,
-    canEdit: boolean = false
+    canEdit: boolean = false,
   ): Promise<{ message: string; can_edit: boolean }> {
     try {
       return await ApiClient.post<{ message: string; can_edit: boolean }>(
-        `/permissions/report-pages/${reportPageId}/grant?target_user_id=${targetUserId}&can_edit=${canEdit}`
+        `/permissions/report-pages/${reportPageId}/grant?target_user_id=${targetUserId}&can_edit=${canEdit}`,
       );
     } catch (error) {
       if (error instanceof ApiError) {

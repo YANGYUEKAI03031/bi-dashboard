@@ -11,8 +11,7 @@ export interface UnionColumnPlanRow {
   cols: Array<string | null | undefined>;
 }
 
-const NULL_SQL =
-  'CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci';
+const NULL_SQL = 'CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci';
 
 function escIdent(name: string): string {
   return `\`${String(name).replace(/`/g, '``')}\``;
@@ -22,7 +21,7 @@ function escIdent(name: string): string {
 export function buildMergePersistedSql(
   mergeType: 'union' | 'union_all',
   upstreamCount: number,
-  plan: UnionColumnPlanRow[] | null | undefined
+  plan: UnionColumnPlanRow[] | null | undefined,
 ): string {
   const op = mergeType === 'union' ? 'UNION' : 'UNION ALL';
   const branches: string[] = [];
@@ -33,12 +32,8 @@ export function buildMergePersistedSql(
       for (const row of plan) {
         const out = String(row.out || '').trim();
         if (!out) continue;
-        const raw =
-          row.cols && i < row.cols.length ? row.cols[i] : undefined;
-        const src =
-          raw !== null && raw !== undefined && String(raw).trim()
-            ? String(raw).trim()
-            : null;
+        const raw = row.cols && i < row.cols.length ? row.cols[i] : undefined;
+        const src = raw !== null && raw !== undefined && String(raw).trim() ? String(raw).trim() : null;
         if (src) {
           parts.push(`${escIdent(src)} AS ${escIdent(out)}`);
         } else {
@@ -48,7 +43,7 @@ export function buildMergePersistedSql(
       branches.push(
         parts.length > 0
           ? `SELECT ${parts.join(', ')} FROM {upstream_table_${i}}`
-          : `SELECT * FROM {upstream_table_${i}}`
+          : `SELECT * FROM {upstream_table_${i}}`,
       );
     } else {
       branches.push(`SELECT * FROM {upstream_table_${i}}`);
@@ -59,7 +54,9 @@ export function buildMergePersistedSql(
 
 /** 传给后端的 merge_type 字符串 */
 export function mergeTypeConfigToBackend(configMergeType: string | undefined): string {
-  const s = String(configMergeType || 'union_all').toLowerCase().trim();
+  const s = String(configMergeType || 'union_all')
+    .toLowerCase()
+    .trim();
   if (s === 'union') return 'union';
   return 'union all';
 }
