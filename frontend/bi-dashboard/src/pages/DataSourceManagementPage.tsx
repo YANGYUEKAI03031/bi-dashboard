@@ -190,15 +190,8 @@ export const DataSourceManagementPage: React.FC = () => {
   return (
     <div className="dashboard-page">
       <div className="page-header">
-        <div
-          className="header-content"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Typography.Title level={3} style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+        <div className="header-content">
+          <Typography.Title level={3} className="page-title">
             数据源管理
           </Typography.Title>
           <Space>

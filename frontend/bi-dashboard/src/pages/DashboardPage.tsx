@@ -1,7 +1,7 @@
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
 // frontend/bi-dashboard/src/pages/DashboardPage.tsx
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input, Select, Empty } from 'antd';
+import { Row, Col, Card, Button, Space, message, Spin, Modal, Form, Input, Select, Empty, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DragOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthService } from '../services/authService';
@@ -12,6 +12,8 @@ import './DashboardPage.css';
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+
+const { Title } = Typography;
 
 // 添加拖拽相关的CSS类
 const gridStyles = `
@@ -827,15 +829,10 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="dashboard-page">
       <div className="page-header">
-        <div
-          className="header-content"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <h1>仪表盘</h1>
+        <div className="header-content">
+          <Title level={3} className="page-title">
+            仪表盘
+          </Title>
           <Space>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
               新建仪表盘

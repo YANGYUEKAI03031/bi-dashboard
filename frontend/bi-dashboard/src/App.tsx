@@ -173,7 +173,7 @@ function App() {
             }
           />
 
-          {/* 管道测试路由 - 仅管理员 */}
+          {/* 管道管理路由 - 仅管理员 */}
           <Route
             path="/pipeline-test"
             element={

@@ -36,6 +36,7 @@ import { PipelineService, PipelineResponse, ExecutionResponse, PipelineNode } fr
 import { DataSourceService } from '../services/dataSourceService';
 import { PipelineFlowEditor, PipelineFlowEditorHandle } from '../components/pipeline/PipelineFlowEditor';
 import { getFirstSourceDataSourceId, hydrateSourceNodesWithPipelineDataSource } from '../utils/pipelineDataSourceUtils';
+import './DashboardPage.css';
 
 /**
  * 从节点列表中提取第一个启用了自动触发的源节点配置
@@ -363,26 +364,32 @@ export const PipelineTestPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={3} style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
-          数据管道测试
-        </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingPipelineId(null);
-            form.resetFields();
-            setEditorNodes([]);
-            setCreateModalVisible(true);
-          }}
-        >
-          创建管道
-        </Button>
+    <div className="dashboard-page">
+      <div className="page-header">
+        <div className="header-content">
+          <Title level={3} className="page-title">
+            数据管道
+          </Title>
+          <Space>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingPipelineId(null);
+                form.resetFields();
+                setEditorNodes([]);
+                setCreateModalVisible(true);
+              }}
+            >
+              创建管道
+            </Button>
+          </Space>
+        </div>
       </div>
-      <Card>
-        <Table
+
+      <div className="dashboard-content">
+        <Card>
+          <Table
           columns={pipelineColumns}
           dataSource={pipelines}
           rowKey="id"
@@ -390,6 +397,7 @@ export const PipelineTestPage: React.FC = () => {
           pagination={{ pageSize: 10 }}
         />
       </Card>
+      </div>
 
       {/* 创建/编辑管道弹窗 */}
       <Modal

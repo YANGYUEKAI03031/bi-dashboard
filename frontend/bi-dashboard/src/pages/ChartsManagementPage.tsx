@@ -18,14 +18,14 @@ import { DataSourceService } from '../services/dataSourceService';
 import { EyeOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
-import './ChartsManagementPage.css';
+import './DashboardPage.css';
 // 添加ChartFactory导入
 import { ChartFactory } from '../components/charts/ChartFactory';
 // 添加AuthService导入
 import { AuthService } from '../services/authService';
 import { API_BASE_URL } from '../config/apiBaseUrl';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { Option } = Select;
 const { Search } = Input;
 
@@ -634,17 +634,14 @@ export const ChartsManagementPage: React.FC = () => {
   }, [isAuthenticated, user]);
 
   return (
-    <div className="charts-management-page">
+    <div className="dashboard-page">
       {/* 页面头部 */}
       <div className="page-header">
         <div className="header-content">
-          <div>
-            <Title level={2} className="header-title">
-              图表管理
-            </Title>
-            <Text type="secondary">管理和维护您的所有可视化图表</Text>
-          </div>
-          <div className="header-actions">
+          <Title level={3} className="page-title">
+            图表管理
+          </Title>
+          <Space>
             <Search
               placeholder="搜索图表名称或类型"
               allowClear
@@ -662,13 +659,12 @@ export const ChartsManagementPage: React.FC = () => {
             >
               创建新图表
             </Button>
-          </div>
+          </Space>
         </div>
       </div>
 
       {/* 图表列表区域 */}
-      <div className="chart-list-panel">
-        <div className="chart-table-container">
+      <div className="dashboard-content">
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px' }}>
               <Spin size="large" />
@@ -692,7 +688,6 @@ export const ChartsManagementPage: React.FC = () => {
               bordered={false}
             />
           )}
-        </div>
       </div>
 
       {/* 编辑模态框 */}

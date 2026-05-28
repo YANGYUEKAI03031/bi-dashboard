@@ -461,7 +461,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                 className={`nav-item nav-item-bottom ${isActive('/pipeline-test') ? 'active' : ''}`}
               >
                 <span className="icon">🔧</span>
-                <span className="nav-text">管道测试</span>
+                <span className="nav-text">管道管理</span>
               </Link>
             </>
           )}

@@ -5,6 +5,7 @@ import { Table, Tag, Button, message, Modal, Select, Space, Typography, Form, In
 import { UserOutlined, CrownOutlined, TeamOutlined, ReloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { PermissionService, UserInfo, UserRole } from '../services/permissionService';
 import { useAuth } from '../contexts/AuthContext';
+import './DashboardPage.css';
 
 const { Title, Text } = Typography;
 
@@ -292,22 +293,26 @@ export const UserManagementPage: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={3} style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
-          用户权限管理
-        </Title>
-        <Space>
-          <Button type="primary" onClick={openCreateModal}>
-            新增用户
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadUsers} loading={loading}>
-            刷新
-          </Button>
-        </Space>
+    <div className="dashboard-page">
+      <div className="page-header">
+        <div className="header-content">
+          <Title level={3} className="page-title">
+            用户权限管理
+          </Title>
+          <Space>
+            <Button type="primary" onClick={openCreateModal}>
+              新增用户
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={loadUsers} loading={loading}>
+              刷新
+            </Button>
+          </Space>
+        </div>
       </div>
 
-      <Table columns={columns} dataSource={users} rowKey="user_id" loading={loading} pagination={{ pageSize: 10 }} />
+      <div className="dashboard-content">
+        <Table columns={columns} dataSource={users} rowKey="user_id" loading={loading} pagination={{ pageSize: 10 }} />
+      </div>
 
       {/* 设置角色弹窗 */}
       <Modal
