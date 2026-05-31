@@ -129,10 +129,10 @@ async def general_exception_handler(request: Request, exc: Exception):
         )
 
 
-# 配置CORS - 允许所有来源（内网部署使用）
+# 配置CORS - 使用 settings 中的配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

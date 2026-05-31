@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     PROJECT_VERSION: str = "1.0.0"
     DEBUG: bool = False  # 生产环境默认关闭
 
+    # 环境模式: local / production
+    ENVIRONMENT: str = "local"
+
+    @property
+    def IS_PRODUCTION(self) -> bool:
+        return self.ENVIRONMENT.lower() == "production"
+
     # 图表查询配置
     CHART_QUERY_LIMIT: int = 10000  # 单次图表查询最大行数
 

@@ -3,17 +3,15 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 创建优化的异步引擎
+# 创建优化的异步引擎（使用 AsyncAdaptedQueuePool 支持异步）
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DB_ECHO,
-    poolclass=QueuePool,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
