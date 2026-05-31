@@ -4,10 +4,21 @@
    设计理念：暖奶油背景 + 玻璃态卡片 + 蓝色品牌强调
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.charts-management-page {
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  width: 100%;
   background: var(--theme-background);
-  min-height: 100vh;
+  overflow: hidden;
+}
+
+.dashboard-content {
+  flex: 1;
+  padding: var(--space-2xl);
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 /* ── 页面头部 ── */
@@ -23,14 +34,17 @@
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  line-height: 1;
 }
 
+/* ── 页面头部标题 ── */
 .header-title {
-  font-size: 24px;
+  margin: 0;
+  font-size: 20px;
   font-weight: 600;
   color: var(--theme-text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  letter-spacing: -0.3px;
+  line-height: 1.4;
 }
 
 .header-actions {

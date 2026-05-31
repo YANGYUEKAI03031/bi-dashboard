@@ -26,6 +26,7 @@
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  line-height: 1;
 }
 
 .dashboard-content {
@@ -36,8 +37,8 @@
   box-sizing: border-box;
 }
 
-/* ── 页面标题统一样式 ── */
-.page-title {
+/* ── 页面头部标题 ── */
+.header-title {
   margin: 0;
   font-size: 20px;
   font-weight: 600;

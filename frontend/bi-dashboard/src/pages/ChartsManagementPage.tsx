@@ -18,7 +18,7 @@ import { DataSourceService } from '../services/dataSourceService';
 import { EyeOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { ChartService } from '../services/chartService';
-import './DashboardPage.css';
+import './ChartsManagementPage.css';
 // 添加ChartFactory导入
 import { ChartFactory } from '../components/charts/ChartFactory';
 // 添加AuthService导入
@@ -635,10 +635,9 @@ export const ChartsManagementPage: React.FC = () => {
 
   return (
     <div className="dashboard-page">
-      {/* 页面头部 */}
       <div className="page-header">
         <div className="header-content">
-          <Title level={3} className="page-title">
+          <Title level={3} className="header-title">
             图表管理
           </Title>
           <Space>
@@ -663,7 +662,6 @@ export const ChartsManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 图表列表区域 */}
       <div className="dashboard-content">
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px' }}>

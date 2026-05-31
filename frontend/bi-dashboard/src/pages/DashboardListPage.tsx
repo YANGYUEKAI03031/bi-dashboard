@@ -1,12 +1,14 @@
 // src/pages/DashboardListPage.tsx
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Space, message, Table, Popconfirm, Modal, Form, Input } from 'antd';
+import { Card, Button, Space, message, Table, Popconfirm, Modal, Form, Input, Typography } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthService } from '../services/authService';
 import { DashboardService } from '../services/dashboardService';
 import './DashboardPage.css';
+
+const { Title } = Typography;
 
 interface Dashboard {
   id: number;
@@ -153,7 +155,9 @@ export const DashboardListPage: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          <h1>仪表盘</h1>
+          <Title level={3} className="header-title">
+            仪表盘
+          </Title>
           <Space>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateClick}>
               新建仪表盘

@@ -830,7 +830,7 @@ export const DashboardPage: React.FC = () => {
     <div className="dashboard-page">
       <div className="page-header">
         <div className="header-content">
-          <Title level={3} className="page-title">
+          <Title level={3} className="header-title">
             仪表盘
           </Title>
           <Space>
